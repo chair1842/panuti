@@ -50,11 +50,11 @@ $(ARCHDIR)/crtn.o \
 .PHONY: all clean install install-headers install-kernel
 .SUFFIXES: .o .c .S
 
-all: panuti.kernel
+all: panuti_kern
 
-panuti.kernel: $(OBJS) $(ARCHDIR)/linker.ld
+panuti_kern: $(OBJS) $(ARCHDIR)/linker.ld
 	$(CC) -T $(ARCHDIR)/linker.ld -o $@ $(CFLAGS) $(LINK_LIST)
-	grub-file --is-x86-multiboot panuti.kernel
+	grub-file --is-x86-multiboot panuti_kern
 
 $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 	OBJ=`$(CC) $(CFLAGS) $(LDFLAGS) -print-file-name=$(@F)` && cp "$$OBJ" $@
@@ -66,7 +66,7 @@ $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
 clean:
-	rm -f panuti.kernel
+	rm -f panuti_kern
 	rm -f $(OBJS) *.o */*.o */*/*.o
 	rm -f $(OBJS:.o=.d) *.d */*.d */*/*.d
 
@@ -76,8 +76,8 @@ install-headers:
 	mkdir -p $(DESTDIR)$(INCLUDEDIR)
 	cp -R --preserve=timestamps include/. $(DESTDIR)$(INCLUDEDIR)/.
 
-install-kernel: panuti.kernel
+install-kernel: panuti_kern
 	mkdir -p $(DESTDIR)$(BOOTDIR)
-	cp panuti.kernel $(DESTDIR)$(BOOTDIR)
+	cp panuti_kern $(DESTDIR)$(BOOTDIR)
 
 -include $(OBJS:.o=.d)
