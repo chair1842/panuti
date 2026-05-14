@@ -50,15 +50,18 @@ _start:
 	jmp *%eax
 
 high_mem:
+	/* now in high memory, safe to use virtual addresses */
 	movl $stack_top, %esp
 
 	/* remove identity mapping */
 	movl $0, boot_page_dir
-
-	/* flush TLB */
 	movl %cr3, %eax
 	movl %eax, %cr3
 
 	call _init
 	call kernel_main
+
+	cli
+1:  hlt
+	jmp 1b
 .size _start, . - _start
