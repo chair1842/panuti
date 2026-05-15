@@ -57,7 +57,7 @@ high_mem:
 	call gdt_init
 
 	/* remove identity mapping */
-	/* this is broken so we wont do this until it is fixed*/
+	/* this is broken (will triple fault) so we wont do this until it is fixed */
 	# movl $0, boot_page_dir
 	# movl %cr3, %eax
 	# movl %eax, %cr3
