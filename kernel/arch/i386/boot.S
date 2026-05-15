@@ -58,7 +58,10 @@ high_mem:
 	movl %cr3, %eax
 	movl %eax, %cr3
 
+	/* initialize GDT */
 	call gdt_init
+
+	/* initialize IDT */
 
 	call _init
 	call kernel_main
