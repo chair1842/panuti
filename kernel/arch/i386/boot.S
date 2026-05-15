@@ -53,15 +53,16 @@ high_mem:
 	/* now in high memory, safe to use virtual addresses */
 	movl $stack_top, %esp
 
-	/* remove identity mapping */
-	movl $0, boot_page_dir
-	movl %cr3, %eax
-	movl %eax, %cr3
-
 	/* initialize GDT */
 	call gdt_init
 
 	/* initialize IDT */
+
+	/* remove identity mapping */
+	/* this is broken so we wont do this until it is fixed*/
+	# movl $0, boot_page_dir
+	# movl %cr3, %eax
+	# movl %eax, %cr3
 
 	call _init
 	call kernel_main
