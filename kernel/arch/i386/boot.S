@@ -56,8 +56,6 @@ high_mem:
 	/* initialize GDT */
 	call gdt_init
 
-	/* initialize IDT */
-
 	/* remove identity mapping */
 	/* this is broken so we wont do this until it is fixed*/
 	# movl $0, boot_page_dir
