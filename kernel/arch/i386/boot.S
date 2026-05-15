@@ -32,6 +32,12 @@ _start:
 	orl $0x10, %eax
 	movl %eax, %cr4
 
+	/* zero out boot_page_dir */
+	movl $PHYS(boot_page_dir), %edi
+	movl $1024, %ecx
+	xorl %eax, %eax
+	rep stosl
+
 	/* set up bootstrap page directory */
 	movl $(0x00000000 | 0x83), PHYS(boot_page_dir)
 	movl $(0x00000000 | 0x83), PHYS(boot_page_dir) + 768 * 4
@@ -55,12 +61,6 @@ high_mem:
 
 	/* initialize GDT */
 	call gdt_init
-
-	/* remove identity mapping */
-	/* this is broken (will triple fault) so we wont do this until it is fixed */
-	# movl $0, boot_page_dir
-	# movl %cr3, %eax
-	# movl %eax, %cr3
 
 	call _init
 	call kernel_main

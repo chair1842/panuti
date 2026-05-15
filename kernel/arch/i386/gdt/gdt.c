@@ -2,11 +2,11 @@
 
 #include "gdt.h"
 
-static struct gdt_entry gdt[GDT_ENTRIES];
+static gdtEntry_t gdt[GDT_ENTRIES];
 
-void gdt_entry_helper(struct gdt_entry *entry, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags);
+void gdt_entry_helper(gdtEntry_t *entry, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags);
 
-void gdt_entry_helper(struct gdt_entry* entry, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags) {
+void gdt_entry_helper(gdtEntry_t* entry, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags) {
 	entry->low_limit = limit & 0xFFFF;
 	entry->low_base = base & 0xFFFF;
 	entry->mid_base = (base >> 16) & 0xFF;
@@ -29,8 +29,8 @@ void gdt_init() {
 	// not yet (。_。)
 
 	// pass the limit and base to the assembly function to load the GDT
-	struct gdtr gdtr = {
-		.limit = (sizeof(struct gdt_entry) * GDT_ENTRIES) - 1,
+	gdtr_t gdtr = {
+		.limit = (sizeof(gdtEntry_t) * GDT_ENTRIES) - 1,
 		.base = (uint32_t)gdt
 	};
 	gdt_load(&gdtr);
