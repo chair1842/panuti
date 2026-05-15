@@ -4,7 +4,7 @@ gdt_load:
     lgdt (%eax)
     ret
 
-; shwoosh, taken from osdev.wiki
+# shwoosh, taken from osdev.wiki
 .global gdt_reload_segments
 gdt_reload_segments:
     ljmp $0x08, $.reload_cs
