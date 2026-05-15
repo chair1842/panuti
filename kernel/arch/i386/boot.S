@@ -58,6 +58,8 @@ high_mem:
 	movl %cr3, %eax
 	movl %eax, %cr3
 
+	call gdt_init
+
 	call _init
 	call kernel_main
 
