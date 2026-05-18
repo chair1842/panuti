@@ -23,30 +23,47 @@ stack_top:
 boot_page_dir:
 .skip 4096
 
+.align 4096
+boot_page_table:
+.skip 4096
+
 .section .text
 .global _start
 .type _start, @function
 _start:
-	/* enable PSE (4MB pages) by setting bit 4 of cr4 */
-	movl %cr4, %eax
-	orl $0x10, %eax
-	movl %eax, %cr4
-
-	/* zero out boot_page_dir */
+	/* zero out page directory */
 	movl $PHYS(boot_page_dir), %edi
 	movl $1024, %ecx
 	xorl %eax, %eax
 	rep stosl
 
-	/* set up bootstrap page directory */
-	movl $(0x00000000 | 0x83), PHYS(boot_page_dir)
-	movl $(0x00000000 | 0x83), PHYS(boot_page_dir) + 768 * 4
+	/* zero out page table */
+	movl $PHYS(boot_page_table), %edi
+	movl $1024, %ecx
+	xorl %eax, %eax
+	rep stosl
 
-	/* load physical address of page directory into cr3 */
+	/* fill boot_page_table: map 4MB starting at physical 0 */
+	movl $PHYS(boot_page_table), %edi
+	movl $0x00000003, %eax  /* physical 0, present+writable */
+	movl $1024, %ecx
+.fill_table:
+	movl %eax, (%edi)
+	addl $4096, %eax        /* next 4KB page */
+	addl $4, %edi           /* next entry */
+	loop .fill_table
+
+	/* point entry 0 (identity map) and entry 768 (upper half) at boot_page_table */
+	movl $PHYS(boot_page_table), %eax
+	orl $0x03, %eax
+	movl %eax, PHYS(boot_page_dir)
+	movl %eax, PHYS(boot_page_dir) + 768 * 4
+
+	/* load cr3 */
 	movl $PHYS(boot_page_dir), %eax
 	movl %eax, %cr3
 
-	/* enable paging by setting bit 31 of cr0 */
+	/* enable paging */
 	movl %cr0, %eax
 	orl $0x80000000, %eax
 	movl %eax, %cr0
