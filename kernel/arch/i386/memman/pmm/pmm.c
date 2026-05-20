@@ -70,3 +70,21 @@ void pmm_init(multiboot_info_t* mbi) {
 		pmm_setp(page);
 	}
 }
+
+uint32_t pmm_allocp(void) {
+	for (uint32_t page = 0; page < PMM_BITMAP_SIZE * 8; page++) {
+		if (pmm_bitmap[page / 8] & (1 << (page % 8))) {
+			// this page is free. mark it as used and return its address.
+			pmm_setp(page);
+			return page * PMM_PAGE_SIZE;
+		}
+	}
+	// no free pages found. return 0 to indicate failure.
+	return 0;
+}
+
+void pmm_freep(uint32_t address) {
+	// mark the page at the given address as free.
+	uint32_t page = address / PMM_PAGE_SIZE;
+	pmm_clrp(page);
+}

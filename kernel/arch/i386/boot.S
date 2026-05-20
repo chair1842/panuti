@@ -82,12 +82,13 @@ high_mem:
 	/* initialize GDT */
 	call gdt_init
 
+	call _init
+
 	/* initialize the PMM */
 	push %esi
 	call pmm_init
-	pop %esi
+	add $4, %esp
 
-	call _init
 	call kernel_main
 
 	cli
