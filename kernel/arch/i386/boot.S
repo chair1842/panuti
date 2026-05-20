@@ -31,6 +31,9 @@ boot_page_table:
 .global _start
 .type _start, @function
 _start:
+	/* copy multiboot info pointer from ebx to esi for safe-keeping*/
+	movl %ebx, %esi
+
 	/* zero out page directory */
 	movl $PHYS(boot_page_dir), %edi
 	movl $1024, %ecx
@@ -78,6 +81,11 @@ high_mem:
 
 	/* initialize GDT */
 	call gdt_init
+
+	/* initialize the PMM */
+	push %esi
+	call pmm_init
+	pop %esi
 
 	call _init
 	call kernel_main
