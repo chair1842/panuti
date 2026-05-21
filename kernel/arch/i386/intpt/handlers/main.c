@@ -16,6 +16,6 @@ void isr_handler(registers_t* regs) {
         abort();
     }
     if (regs->vector >= 32 && regs->vector <= 47) {
-        pic_eoi(regs->vector);
+        pic_send_eoi(regs->vector);
     }
 }
