@@ -91,6 +91,9 @@ high_mem:
 
 	call pic_init
 
+	call idt_init
+
+	call kearly
 	call kernel_main
 
 	cli
