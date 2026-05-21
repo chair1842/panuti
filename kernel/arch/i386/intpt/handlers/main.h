@@ -11,6 +11,9 @@ struct registers {
     uint32_t eip, cs, eflags, useresp, ss;
 };
 
+typedef void (*isr_handler_t)(registers_t*);
+
+void register_handler(uint8_t vector, isr_handler_t handler);
 void isr_handler(registers_t* regs);
 
 #endif

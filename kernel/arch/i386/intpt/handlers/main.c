@@ -2,8 +2,6 @@
 #include <stdlib.h>
 #include "../pic/pic.h"
 
-typedef void (*isr_handler_t)(registers_t*);
-
 static isr_handler_t isr_handlers[256];
 
 void register_handler(uint8_t vector, isr_handler_t handler) {
