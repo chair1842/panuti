@@ -89,6 +89,8 @@ high_mem:
 	call pmm_init
 	add $4, %esp
 
+	call pic_init
+
 	call kernel_main
 
 	cli
