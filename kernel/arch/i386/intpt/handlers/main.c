@@ -12,9 +12,12 @@ void isr_handler(registers_t* regs) {
 	isr_handler_t handler = isr_handlers[regs->vector];
     if (handler) {
         handler(regs);
-    } else {
+    } else if (regs->vector < 32) {
         abort();
     }
+	
+	// unhandled irqs get ignored at the party.
+
     if (regs->vector >= 32 && regs->vector <= 47) {
         pic_send_eoi(regs->vector);
     }
