@@ -1,0 +1,23 @@
+#include "main.h"
+#include <stdlib.h>
+#include "../pic/pic.h"
+
+typedef void (*isr_handler_t)(registers_t*);
+
+static isr_handler_t isr_handlers[256];
+
+void register_handler(uint8_t vector, isr_handler_t handler) {
+	isr_handlers[vector] = handler;
+}
+
+void isr_handler(registers_t* regs) {
+	isr_handler_t handler = isr_handlers[regs->vector];
+    if (handler) {
+        handler(regs);
+    } else {
+        abort();
+    }
+    if (regs->vector >= 32 && regs->vector <= 47) {
+        pic_eoi(regs->vector);
+    }
+}
