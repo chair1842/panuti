@@ -1,6 +1,6 @@
 #include "handlers.h"
 
-static void page_fault_handler(registers_t* regs) {
+void page_fault_handler(registers_t* regs) {
 	uint32_t cr2;
 	__asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
 
