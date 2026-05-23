@@ -20,10 +20,12 @@ stack_bottom:
 stack_top:
 
 .align 4096
+.global boot_page_dir
 boot_page_dir:
 .skip 4096
 
 .align 4096
+.global boot_page_table
 boot_page_table:
 .skip 4096
 
@@ -92,6 +94,8 @@ high_mem:
 	call pic_init
 
 	call idt_init
+
+	call vmm_init
 
 	call kearly
 	call kernel_main
