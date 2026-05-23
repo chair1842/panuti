@@ -92,10 +92,10 @@ high_mem:
 	add $4, %esp
 
 	call pic_init
-
 	call idt_init
 
 	call vmm_init
+	call vmalloc_init
 
 	call kearly
 	call kernel_main
