@@ -91,9 +91,11 @@ high_mem:
 	call pmm_init
 	add $4, %esp
 
+	/* initialize interrupts */
 	call pic_init
 	call idt_init
 
+	/* initialize virtual memory management */
 	call vmm_init
 	call vmalloc_init
 
