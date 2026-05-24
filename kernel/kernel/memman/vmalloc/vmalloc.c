@@ -1,6 +1,6 @@
-#include "vmalloc.h"
+#include <kernel/memman/vmalloc.h>
 #include <stdint.h>
-#include <kernel/memman.h>
+#include <kernel/memman/memman.h>
 
 #define PAGE_ALIGN_UP(addr) (((addr) + 0xFFF) & ~0xFFF)
 
