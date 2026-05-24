@@ -17,6 +17,7 @@
 .align 16
 stack_bottom:
 .skip 16384
+.global stack_top
 stack_top:
 
 .align 4096
@@ -94,6 +95,8 @@ high_mem:
 	/* initialize interrupts */
 	call pic_init
 	call idt_init
+
+	call tss_init
 
 	/* initialize virtual memory management */
 	call vmm_init

@@ -1,4 +1,4 @@
-#define GDT_ENTRIES 5
+#define GDT_ENTRIES 6
 
 #include "gdt.h"
 
@@ -13,6 +13,10 @@ void gdt_entry_helper(gdtEntry_t* entry, uint32_t base, uint32_t limit, uint8_t 
 	entry->access = access;
 	entry->hi_limit_n_flags = ((limit >> 16) & 0x0F) | (flags << 4);
 	entry->hi_base = (base >> 24) & 0xFF;
+}
+
+void gdt_set_entry(uint8_t index, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags) {
+	gdt_entry_helper(&gdt[index], base, limit, access, flags);
 }
 
 void gdt_init() {

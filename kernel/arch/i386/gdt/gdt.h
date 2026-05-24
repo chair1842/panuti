@@ -22,5 +22,6 @@ struct gdtr {
 void gdt_init();
 void gdt_load(gdtr_t* gdtr);
 void gdt_reload_segments();
+void gdt_set_entry(uint8_t index, uint32_t base, uint32_t limit, uint8_t access, uint8_t flags);
 
 #endif
