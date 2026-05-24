@@ -1,7 +1,6 @@
 #include "vmalloc.h"
 #include <stdint.h>
-#include "../vmm/vmm.h"
-#include "../pmm/pmm.h"
+#include <kernel/memman.h>
 
 #define PAGE_ALIGN_UP(addr) (((addr) + 0xFFF) & ~0xFFF)
 
@@ -16,7 +15,7 @@ void vmalloc_init(void) {
 }
 
 void* vmalloc_pg(void) {
-	uint32_t phys = pmm_allocp();
+	uint32_t phys = memman_alloc_frame();
 	if (phys == 0) {
 		return 0;
 	}
@@ -24,17 +23,17 @@ void* vmalloc_pg(void) {
 	uint32_t virt = vmalloc_next;
 	vmalloc_next += 4096;
 
-	vmm_map(virt, phys, PAGE_PRESENT | PAGE_RW);
+	memman_map(virt, phys, PAGE_PRESENT | PAGE_RW);
 	return (void*)virt;
 }
 
 void vmalloc_free(void* addr) {
 	uint32_t virt = (uint32_t)addr;
-	uint32_t phys = vmm_get_phys(virt);
+	uint32_t phys = memman_get_phys(virt);
 	if (phys == 0) {
 		return;
 	}
 
-	vmm_unmap(virt);
-	pmm_freep(phys);
+	memman_unmap(virt);
+	memman_free_frame(phys);
 }
