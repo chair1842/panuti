@@ -41,7 +41,7 @@ static uint8_t* slab_obj(slab_t* slab, uint32_t index) {
 }
 
 static slab_t* slab_create(uint32_t obj_size) {
-	slab_t* slab = (slab_t*)vmalloc_page();
+	slab_t* slab = (slab_t*)vmalloc_pg();
 	if (!slab) {
 		return NULL;
 	}

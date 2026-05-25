@@ -31,7 +31,7 @@ KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
 kernel/kernel.o \
 kernel/memman/slab/slab.o \
-kernel/memman/vmm/vmm.o \
+kernel/memman/vmalloc/vmalloc.o \
 
 OBJS=\
 $(ARCHDIR)/crti.o \
