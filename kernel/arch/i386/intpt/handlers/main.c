@@ -4,7 +4,7 @@
 
 static isr_handler_t isr_handlers[256];
 
-void register_handler(uint8_t vector, isr_handler_t handler) {
+void register_idt_handler(uint8_t vector, isr_handler_t handler) {
 	isr_handlers[vector] = handler;
 }
 
