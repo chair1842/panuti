@@ -1,3 +1,4 @@
+.global sysentry_handler
 sysentry_handler:
 	push %ecx
 	push %edx
