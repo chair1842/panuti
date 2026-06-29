@@ -7,7 +7,6 @@
 
 #define PAGE_PRESENT 0x1
 #define PAGE_RW 0x2
-#define PAGE_USER 0x4
 
 extern uint32_t boot_page_dir[1024];
 extern uint32_t boot_page_table[1024];
@@ -36,10 +35,7 @@ void vmm_map(uint32_t virt_addr, uint32_t phys_addr, uint32_t flags) {
 		uint32_t* pgtable_virt = (uint32_t*)(KERNEL_PH_V(pgtable_phys));
 		memset(pgtable_virt, 0, 4096);
 
-		uint32_t pde_flags = PAGE_PRESENT | PAGE_RW;
-		if (flags & PAGE_USER) pde_flags |= PAGE_USER;
-
-		boot_page_dir[pde_i] = pgtable_phys | pde_flags;
+		boot_page_dir[pde_i] = pgtable_phys | PAGE_PRESENT | PAGE_RW;
 	}
 
 	uint32_t* table = pte_get_table(boot_page_dir[pde_i]);

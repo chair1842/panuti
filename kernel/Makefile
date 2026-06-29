@@ -32,9 +32,6 @@ $(KERNEL_ARCH_OBJS) \
 kernel/kernel.o \
 kernel/memman/slab/slab.o \
 kernel/memman/vmalloc/vmalloc.o \
-kernel/syscalls/syscall_handler.o \
-kernel/syscalls/handlers/sys_vga.o \
-kernel/syscalls/handlers/sys_exit.o \
 
 OBJS=\
 $(ARCHDIR)/crti.o \

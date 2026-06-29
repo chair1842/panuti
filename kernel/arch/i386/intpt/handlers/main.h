@@ -13,7 +13,7 @@ struct registers {
 
 typedef void (*isr_handler_t)(registers_t*);
 
-void register_idt_handler(uint8_t vector, isr_handler_t handler);
+void register_handler(uint8_t vector, isr_handler_t handler);
 void isr_handler(registers_t* regs);
 
 #endif
