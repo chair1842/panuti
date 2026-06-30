@@ -11,9 +11,10 @@ void kpanic_impl(const char *file, int line, const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
 
-	terminal_fsetcolor(FG_COLOR_PANIC, FG_COLOR_PANIC); 
+	terminal_fsetcolor(FG_COLOR_PANIC, BG_COLOR_PANIC); 
 
-	printf("[PANIC] SYSTEM HALTED");
+	printf("[PANIC] SYSTEM HALTED\n");
+	printf("[PANIC] RESTART YOUR SYSTEM\n");
 	printf("[PANIC] %s:%d: ", file, line);
 	vprintf(fmt, args);
 	va_end(args);
