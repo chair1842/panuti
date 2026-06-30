@@ -20,7 +20,7 @@ static int serial_is_transmit_fifo_empty(uint16_t base) {
 	return inb(SERIAL_LINE_STATUS_PORT(base)) & 0x20;
 }
 
-void serial_init() {
+void serial_init(void) {
 	uint16_t base = SERIAL_COM1_BASE;
 
 	outb(SERIAL_LINE_COMMAND_PORT(base), SERIAL_LINE_ENABLE_DLAB);

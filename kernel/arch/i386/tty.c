@@ -77,3 +77,16 @@ void terminal_scroll(void) {
 		terminal_buffer[index] = vga_entry(' ', terminal_color);
 	}
 }
+
+void terminal_fsetcolor(enum ansi_color fg_color, enum ansi_color bg_color) {
+	terminal_color = vga_entry_color((enum vga_color)fg_color, (enum vga_color)bg_color);
+}
+
+void terminal_clear(void) {
+	for (size_t y = 0; y < VGA_HEIGHT; y++) {
+		for (size_t x = 0; x < VGA_WIDTH; x++) {
+			const size_t index = y * VGA_WIDTH + x;
+			terminal_buffer[index] = vga_entry(' ', terminal_color);
+		}
+	}
+}

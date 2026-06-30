@@ -2,3 +2,5 @@
 isodir
 sysroot
 qemu.log
+compile_commands.json
+.vscode
