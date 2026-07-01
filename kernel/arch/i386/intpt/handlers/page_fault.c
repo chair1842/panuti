@@ -20,5 +20,5 @@ void page_fault_handler(registers_t* regs) {
 	if (ifetch)   printf("  instruction fetch\n");
 	printf("  eip=0x%08x  error=0x%02x\n", regs->eip, regs->error);
 
-	abort();
+	kpanic("page fault\n");
 }

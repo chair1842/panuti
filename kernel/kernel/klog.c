@@ -19,8 +19,15 @@ void klog(enum klog_level level, const char *fmt, ...) {
 	va_list args;
 	va_start(args, fmt);
 	void (*out)(char, void*) = (level == KLOG_INFO) ? out_serial : out_both;
+	
 	if (level == KLOG_WARN) {
 		terminal_fsetcolor(ANSI_COLOR_LIGHT_MAGENTA, ANSI_COLOR_BLACK);
+	}
+
+	if (level == KLOG_INFO) {
+		fctprintf(out, NULL, "[INFO] ");
+	} else {
+		fctprintf(out, NULL, "[WARN] ");
 	}
 	
 	vfctprintf(out, NULL, fmt, args);

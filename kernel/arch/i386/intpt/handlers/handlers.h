@@ -2,7 +2,7 @@
 #define ARCH_I386_INTPT_HANDLERS_H
 
 #include "main.h"
-#include <stdlib.h>
+#include <kernel/kpanic.h>
 #include <stdio.h>
 
 void page_fault_handler(registers_t* regs);

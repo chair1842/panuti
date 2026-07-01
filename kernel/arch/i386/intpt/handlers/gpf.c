@@ -17,5 +17,5 @@ void gpf_handler(registers_t* regs) {
 	printf("  esi=0x%08x  edi=0x%08x  ebp=0x%08x\n",
 		regs->esi, regs->edi, regs->ebp);
 
-	abort();
+	kpanic("general protection fault\n");
 }
