@@ -1,6 +1,5 @@
 // slab.c
 #include "kernel/klog.h"
-#include "kernel/tty.h"
 #include <kernel/memman/slab.h>
 #include <kernel/memman/vmalloc.h>
 #include <string.h>
@@ -10,18 +9,18 @@
 
 typedef struct slab slab_t;
 struct slab {
-	uint32_t magic;
-	uint32_t obj_size;
-	uint32_t free;      // index of first free object, -1 if none
-	uint32_t used;
-	uint32_t capacity;
-	struct slab* next;
+	uint32_t magic = 0;
+	uint32_t obj_size = 0;
+	uint32_t free = 0;      // index of first free object, -1 if none
+	uint32_t used = 0;
+	uint32_t capacity = 0;
+	struct slab* next = NULL;
 };
 
 typedef struct kmallocCache kmallocCache_t;
 struct kmallocCache{
-	uint32_t obj_size;
-	slab_t* slabs;
+	uint32_t obj_size = 0;
+	slab_t* slabs = NULL;
 };
 
 static kmallocCache_t caches[] = {
