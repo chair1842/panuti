@@ -12,6 +12,9 @@ static uint32_t vmalloc_next;
 
 void vmalloc_init(void) {
 	vmalloc_next = PAGE_ALIGN_UP((uint32_t)&_kernel_end);
+	if (vmalloc_next == 0) {
+		vmalloc_next = 4096;
+	}
 }
 
 void* vmalloc_pg(void) {

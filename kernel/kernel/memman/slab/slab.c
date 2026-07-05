@@ -1,7 +1,10 @@
 // slab.c
+#include "kernel/klog.h"
+#include "kernel/tty.h"
 #include <kernel/memman/slab.h>
 #include <kernel/memman/vmalloc.h>
 #include <string.h>
+#include <kernel/kpanic.h>
 
 #define SLAB_MAGIC 0xBABEBAB1 // ha, babe baby eating dead beef
 
@@ -42,7 +45,9 @@ static uint8_t* slab_obj(slab_t* slab, uint32_t index) {
 
 static slab_t* slab_create(uint32_t obj_size) {
 	slab_t* slab = (slab_t*)vmalloc_pg();
+	klog(KLOG_INFO, "slab_create: vmalloc_pg returned\n");
 	if (!slab) {
+		kpanic("slab_create: vmalloc_pg returned NULL\n");
 		return NULL;
 	}
 
@@ -81,6 +86,14 @@ void* kmalloc(uint32_t size, uint32_t align) {
 
 	if (align == 0) {
 		align = 1;
+	}
+	
+	if (size > 2048) {
+		if (size > 4096) {
+			return NULL;
+		}
+		
+		return vmalloc_pg();
 	}
 
 	kmallocCache_t* cache = cache_for(size, align);
