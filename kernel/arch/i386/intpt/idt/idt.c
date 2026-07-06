@@ -6,17 +6,17 @@
 
 typedef struct idtEntry idtEntry_t;
 struct idtEntry {
-	uint16_t base_low = 0;    // lower 16 bits of handler address
-	uint16_t selector = 0;    // kernel code segment selector
-	uint8_t  zero = 0;        // always 0
-	uint8_t  flags = 0;       // type and attributes
-	uint16_t base_high = 0;   // upper 16 bits of handler address
+	uint16_t base_low;    // lower 16 bits of handler address
+	uint16_t selector;    // kernel code segment selector
+	uint8_t  zero;        // always 0
+	uint8_t  flags;       // type and attributes
+	uint16_t base_high;   // upper 16 bits of handler address
 } __attribute__((packed));
 
 typedef struct idtr idtr_t;
 struct idtr {
-	uint16_t limit = 0;
-	uint32_t base = 0;
+	uint16_t limit;
+	uint32_t base;
 } __attribute__((packed));
 
 

@@ -5,18 +5,18 @@
 
 typedef struct gdtEntry gdtEntry_t;
 struct gdtEntry {
-	uint16_t low_limit = 0;
-	uint16_t low_base = 0;
-	uint8_t mid_base = 0;
-	uint8_t access = 0;
-	uint8_t hi_limit_n_flags = 0; // 4 bits for high limit, 4 bits for flags
-	uint8_t hi_base = 0;
+	uint16_t low_limit;
+	uint16_t low_base;
+	uint8_t mid_base;
+	uint8_t access;
+	uint8_t hi_limit_n_flags; // 4 bits for high limit, 4 bits for flags
+	uint8_t hi_base;
 } __attribute__((packed));
 
 typedef struct gdtr gdtr_t;
 struct gdtr {
-	uint16_t limit = 0;
-	uint32_t base = 0;
+	uint16_t limit;
+	uint32_t base;
 } __attribute__((packed));
 
 void gdt_init();
