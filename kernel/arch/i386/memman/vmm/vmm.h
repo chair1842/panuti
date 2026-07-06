@@ -7,5 +7,7 @@ void vmm_init(void);
 void vmm_map(uint32_t virt_addr, uint32_t phys_addr, uint32_t flags);
 void vmm_unmap(uint32_t virt_addr);
 uint32_t vmm_get_phys(uint32_t virt_addr);
+void* vmm_create_page_dir(void);
+void* vmm_get_kernel_page_dir(void);
 
 #endif

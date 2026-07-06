@@ -33,7 +33,8 @@ kernel/kernel.o \
 kernel/memman/slab/slab.o \
 kernel/memman/vmalloc/vmalloc.o \
 kernel/klog.o \
-kernel/kpanic.o 
+kernel/kpanic.o \
+kernel/sched/task.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

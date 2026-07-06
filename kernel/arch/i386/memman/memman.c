@@ -21,3 +21,11 @@ uint32_t memman_alloc_frame(void) {
 void memman_free_frame(uint32_t phys) {
 	pmm_freep(phys);
 }
+
+void* memman_get_kernel_addr_space(void) {
+	return vmm_get_kernel_page_dir();
+}
+
+void* memman_create_addr_space(void) {
+	return vmm_create_page_dir();
+}

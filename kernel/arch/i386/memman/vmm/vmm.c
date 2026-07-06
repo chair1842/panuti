@@ -73,3 +73,11 @@ uint32_t vmm_get_phys(uint32_t virt_addr) {
 
 	return table[pte_i] & ~0xFFF;
 }
+
+void* vmm_get_kernel_page_dir(void) {
+	return (void*)(KERNEL_PH_V(boot_page_dir[0]));
+}
+
+void* vmm_create_page_dir(void) {
+	return vmm_get_kernel_page_dir(); // todo : dont forget to change this when you need to.
+}
