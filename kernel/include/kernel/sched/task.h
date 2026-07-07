@@ -20,5 +20,7 @@ typedef struct task {
 } task_t;
 
 task_t* task_create(void (*entry)(void));
+void task_switch_to(task_t* old, task_t* new);
+void task_init_stack(task_t* t, void (*entry)(void));
 
 #endif
