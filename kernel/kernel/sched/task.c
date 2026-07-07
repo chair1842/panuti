@@ -2,6 +2,7 @@
 #include <kernel/memman/vmalloc.h>
 #include <kernel/memman/memman.h>
 #include <stdint.h>
+#include <kernel/sched/sched.h>
 
 #define MAX_TASKS 64 
 
@@ -16,6 +17,7 @@ task_t* task_create(void (*entry)(void)) {
 	t->addr_space = memman_create_addr_space();
 	
 	task_init_stack(t, entry);
+	sched_add(t);
 	
 	return t;
 }
