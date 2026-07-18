@@ -2,13 +2,16 @@
 #include "../../io.h"
 #include <stdint.h>
 #include "../../intpt/handlers/main.h"
+#include <kernel/sched/sched.h>
+#include <kernel/klog.h>
+#include "../../intpt/pic/pic.h"
 
 #define PIT_CHANNEL0 0x40
 #define PIT_COMMAND 0x43
 #define PIT_BASE_FREQ 1193182
 #define PIT_MODE 0x36 // channel 0, lowbyte/hibyte, square wave generator, binary
 
-#define PIT_IRQ_NO 32
+#define PIT_VECTOR 32
 
 static volatile uint64_t ticks = 0;
 
@@ -31,7 +34,7 @@ void pit_init(uint32_t freq) {
 	outb(PIT_CHANNEL0, divisor & 0xFF);	  // low byte
 	outb(PIT_CHANNEL0, divisor >> 8);		// high byte
 
-	register_handler(PIT_IRQ_NO, pit_handler);
+	register_handler(PIT_VECTOR, pit_handler);
 }
 
 uint64_t pit_get_ticks(void) {
@@ -39,5 +42,7 @@ uint64_t pit_get_ticks(void) {
 }
 
 void pit_handler(registers_t *reg) {
+	(void)reg;
 	ticks++;
+	sched_schedule();
 }

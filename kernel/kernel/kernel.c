@@ -6,16 +6,18 @@
 #include <kernel/klog.h>
 
 void a(void) {
+	asm volatile("sti");
 	while (1) {
 		klog(KLOG_INFO, "a\n");
-		sched_schedule();
+		for (volatile int i = 0; i < 100000000; i++);
 	}
 }
 
 void b(void) {
+	asm volatile("sti");
 	while (1) {
 		klog(KLOG_INFO, "b\n");
-		sched_schedule();
+		for (volatile int i = 0; i < 100000000; i++);
 	}
 }
 

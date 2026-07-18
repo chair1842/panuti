@@ -37,10 +37,15 @@ static kmallocCache_t caches[] = {
 };
 
 #define NUM_CACHES (sizeof(caches) / sizeof(caches[0]))
+#define PAGE_SIZE 4096
+
+static uint32_t align_up(uint32_t value, uint32_t alignment) {
+	return (value + alignment - 1) & ~(alignment - 1);
+}
 
 // hmm claudgpt generated code.
 static uint8_t* slab_obj(slab_t* slab, uint32_t index) {
-	return (uint8_t*)slab + sizeof(slab_t) + index * slab->obj_size;
+	return (uint8_t*)slab + align_up(sizeof(slab_t), slab->obj_size) + index * slab->obj_size;
 }
 
 static slab_t* slab_create(uint32_t obj_size) {
@@ -56,8 +61,8 @@ static slab_t* slab_create(uint32_t obj_size) {
 	slab->used = 0;
 	slab->next = NULL;
 
-	uint32_t header_size = sizeof(slab_t);
-	slab->capacity = (4096 - header_size) / obj_size;
+	uint32_t header_size = align_up(sizeof(slab_t), obj_size);
+	slab->capacity = (PAGE_SIZE - header_size) / obj_size;
 
 	for (uint32_t i = 0; i < slab->capacity - 1; i++) {
 		uint32_t* obj = (uint32_t*)slab_obj(slab, i);
@@ -133,10 +138,28 @@ void kfree(void* ptr) {
 	slab_t* slab = (slab_t*)((uint32_t)ptr & ~0xFFF);
 
 	if (slab->magic != SLAB_MAGIC) {
+		if (((uint32_t)ptr & (PAGE_SIZE - 1)) == 0) {
+			vmalloc_free(ptr);
+		}
 		return;
 	}
 
-	uint32_t index = ((uint8_t*)ptr - (uint8_t*)slab - sizeof(slab_t)) / slab->obj_size;
+	uint32_t offset = (uint8_t*)ptr - (uint8_t*)slab - align_up(sizeof(slab_t), slab->obj_size);
+	if (offset % slab->obj_size != 0) {
+		return;
+	}
+	uint32_t index = offset / slab->obj_size;
+	if (index >= slab->capacity || slab->used == 0) {
+		return;
+	}
+
+	for (uint32_t free_index = slab->free, count = 0;
+		 free_index != (uint32_t)-1 && count < slab->capacity;
+		 free_index = *(uint32_t*)slab_obj(slab, free_index), count++) {
+		if (free_index == index) {
+			return;
+		}
+	}
 
 	uint32_t* obj = (uint32_t*)ptr;
 	*obj = slab->free;

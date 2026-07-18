@@ -3,7 +3,7 @@
 #include <string.h>
 
 #define KERNEL_VIRT_OFFSET 0xC0000000
-#define KERNEL_PH_V(addr) ((addr) + KERNEL_VIRT_OFFSET) // physical to virtual
+#define RECURSIVE_TABLE_BASE 0xFFC00000
 
 #define PAGE_PRESENT 0x1
 #define PAGE_RW 0x2
@@ -11,9 +11,8 @@
 extern uint32_t boot_page_dir[1024];
 extern uint32_t boot_page_table[1024];
 
-static uint32_t* pte_get_table(uint32_t pde_entry) {
-	// strip flags, return virtual address of page table
-	return (uint32_t*)((pde_entry & ~0xFFF) + KERNEL_VIRT_OFFSET);
+static uint32_t* pte_get_table(uint32_t pde_i) {
+	return (uint32_t*)(RECURSIVE_TABLE_BASE + pde_i * 0x1000);
 }
 
 void vmm_init(void) {
@@ -32,13 +31,13 @@ void vmm_map(uint32_t virt_addr, uint32_t phys_addr, uint32_t flags) {
 			return;
 		}
 
-		uint32_t* pgtable_virt = (uint32_t*)(KERNEL_PH_V(pgtable_phys));
-		memset(pgtable_virt, 0, 4096);
-
 		boot_page_dir[pde_i] = pgtable_phys | PAGE_PRESENT | PAGE_RW;
+		uint32_t* pgtable_virt = pte_get_table(pde_i);
+		__asm__ __volatile__("invlpg (%0)" :: "r"(pgtable_virt) : "memory");
+		memset(pgtable_virt, 0, 4096);
 	}
 
-	uint32_t* table = pte_get_table(boot_page_dir[pde_i]);
+	uint32_t* table = pte_get_table(pde_i);
 	table[pte_i] = phys_addr | flags | PAGE_PRESENT;
 
 	__asm__ __volatile__("invlpg (%0)" :: "r"(virt_addr) : "memory");
@@ -52,7 +51,7 @@ void vmm_unmap(uint32_t virt_addr) {
 		return;
 	}
 
-	uint32_t* table = pte_get_table(boot_page_dir[pde_i]);
+	uint32_t* table = pte_get_table(pde_i);
 	table[pte_i] = 0;
 
 	__asm__ __volatile__("invlpg (%0)" :: "r"(virt_addr) : "memory");
@@ -66,7 +65,7 @@ uint32_t vmm_get_phys(uint32_t virt_addr) {
 		return 0;
 	}
 
-	uint32_t* table = pte_get_table(boot_page_dir[pde_i]);
+	uint32_t* table = pte_get_table(pde_i);
 	if (!(table[pte_i] & PAGE_PRESENT)) {
 		return 0;
 	}
@@ -75,7 +74,7 @@ uint32_t vmm_get_phys(uint32_t virt_addr) {
 }
 
 void* vmm_get_kernel_page_dir(void) {
-	return (void*)(KERNEL_PH_V(boot_page_dir[0]));
+	return boot_page_dir;
 }
 
 void* vmm_create_page_dir(void) {

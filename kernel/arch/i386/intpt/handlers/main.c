@@ -10,15 +10,15 @@ void register_handler(uint8_t vector, isr_handler_t handler) {
 
 void isr_handler(registers_t* regs) {
 	isr_handler_t handler = isr_handlers[regs->vector];
+
+    /* A handler may switch tasks, so acknowledge the IRQ before dispatching it. */
+    if (regs->vector >= 32 && regs->vector < 48) {
+        pic_send_eoi(regs->vector - 32);
+    }
+
     if (handler) {
         handler(regs);
     } else if (regs->vector < 32) {
         abort();
-    }
-	
-	// unhandled irqs get ignored at the party.
-
-    if (regs->vector >= 32 && regs->vector <= 47) {
-        pic_send_eoi(regs->vector);
     }
 }

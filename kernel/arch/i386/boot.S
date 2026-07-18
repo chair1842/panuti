@@ -65,6 +65,11 @@ _start:
 	movl %eax, PHYS(boot_page_dir)
 	movl %eax, PHYS(boot_page_dir) + 768 * 4
 
+	/* Recursively map the page directory so all page tables are addressable. */
+	movl $PHYS(boot_page_dir), %eax
+	orl $0x03, %eax
+	movl %eax, PHYS(boot_page_dir) + 1023 * 4
+
 	/* load cr3 */
 	movl $PHYS(boot_page_dir), %eax
 	movl %eax, %cr3

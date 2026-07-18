@@ -66,7 +66,7 @@ void pmm_init(multiboot_info_t* mbi) {
 	for (uint32_t page = LOWMEM_START / PMM_PAGE_SIZE; page < LOWMEM_END / PMM_PAGE_SIZE; page++) {
 		pmm_setp(page);
 	}
-	for (uint32_t page = KERNEL_START / PMM_PAGE_SIZE; page < KERNEL_END / PMM_PAGE_SIZE; page++) {
+	for (uint32_t page = KERNEL_START / PMM_PAGE_SIZE; page < (KERNEL_END + PMM_PAGE_SIZE - 1) / PMM_PAGE_SIZE; page++) {
 		pmm_setp(page);
 	}
 }
