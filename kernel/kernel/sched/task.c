@@ -5,7 +5,7 @@
 #include <stddef.h>
 #include <kernel/sched/sched.h>
 
-#define MAX_TASKS 64 
+#define MAX_TASKS 64
 
 static uint32_t next_pid = 1;
 static uint32_t task_count = 0;

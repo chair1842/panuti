@@ -38,6 +38,7 @@ void sched_schedule(void) {
 	if (prev != current) {
 		prev->state = TASK_READY;
 		current->state = TASK_RUNNING;
+		task_activate(current);
 		task_switch_to(prev, current);
 	}
 
@@ -51,6 +52,7 @@ void sched_init(void) {
 
 	current = ready_queue;
 	current->state = TASK_RUNNING;
+	task_activate(current);
 
 	sched_initialized = true;
 
