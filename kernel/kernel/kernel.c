@@ -1,31 +1,24 @@
-#include "kernel/sched/task.h"
+#include <kernel/sched/task.h>
 #include <stdio.h>
 
 #include <kernel/tty.h>
 #include <kernel/sched/sched.h>
 #include <kernel/klog.h>
+#include <kernel/memman/memman.h>
 
-void a(void) {
-	asm volatile("sti");
-	while (1) {
-		klog(KLOG_INFO, "a\n");
-		for (volatile int i = 0; i < 100000000; i++);
-	}
-}
-
-void b(void) {
-	asm volatile("sti");
-	while (1) {
-		klog(KLOG_INFO, "b\n");
-		for (volatile int i = 0; i < 100000000; i++);
-	}
-}
+extern void (*test_payload_install(addr_space_t addr_space))(void);
 
 void kernel_main(void) {
 	terminal_initialize();
 	printf("Panuti Kernel\n");
-	
-	task_create(a);
-	task_create(b);	
+
+	task_t* ut = task_create_user(NULL);
+	if (!ut) {
+		klog(KLOG_INFO, "failed to create user task\n");
+	} else {
+		void (*entry)(void) = test_payload_install(ut->addr_space);
+		task_init_user_stack(ut, entry, ut->user_stack);
+	}
+
 	sched_init();
 }

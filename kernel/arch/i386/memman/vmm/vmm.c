@@ -1,6 +1,7 @@
 #include "vmm.h"
 #include "../pmm/pmm.h"
 #include <string.h>
+#include <kernel/klog.h>
 
 #define KERNEL_VIRT_OFFSET 0xC0000000
 #define RECURSIVE_TABLE_BASE 0xFFC00000
@@ -153,11 +154,12 @@ uint32_t vmm_get_phys(uint32_t virt_addr) {
 }
 
 void* vmm_get_kernel_page_dir(void) {
-	return boot_page_dir;
+	return (void*)((uint32_t)boot_page_dir - KERNEL_VIRT_OFFSET);
 }
 
 void* vmm_create_page_dir(void) {
 	uint32_t page_dir_phys = pmm_allocp();
+	klog(KLOG_INFO, "new page dir phys = 0x%x\n", page_dir_phys);
 	if (page_dir_phys == 0) {
 		return NULL;
 	}
