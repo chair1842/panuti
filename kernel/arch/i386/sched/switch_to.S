@@ -10,7 +10,7 @@ task_switch_to:
 	movl %esp, (%eax) # old->esp = current esp
 
 	movl 24(%esp), %eax	# new task ptr
-	movl 8(%eax), %eax	# i386 address-space handle (physical page directory)
+	movl 12(%eax), %eax	# i386 address-space handle (physical page directory)
 	movl %eax, %cr3
 
 	movl 24(%esp), %eax	# new task ptr
