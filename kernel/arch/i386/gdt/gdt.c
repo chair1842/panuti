@@ -27,7 +27,6 @@ void gdt_init() {
 	gdt_entry_helper(&gdt[2], 0, 0xFFFFF, 0x92, 0x0C); // Data segment
 	gdt_entry_helper(&gdt[3], 0, 0xFFFFF, 0xFA, 0x0C); // User mode code segment
 	gdt_entry_helper(&gdt[4], 0, 0xFFFFF, 0xF2, 0x0C); // User mode data segment
-	// no tss segment yet, return to this later.
 
 	// and lo it is done
 	// not yet (。_。)
