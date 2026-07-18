@@ -15,12 +15,37 @@
 
 #define PAGE_PRESENT 0x1
 #define PAGE_RW 0x2
+#define PAGE_USER 0x4
 
 extern uint32_t boot_page_dir[1024];
 extern uint32_t boot_page_table[1024];
 
 static uint32_t* pte_get_table(uint32_t pde_i) {
 	return (uint32_t*)(RECURSIVE_TABLE_BASE + pde_i * 0x1000);
+}
+
+static uint32_t* current_page_dir(void) {
+	return (uint32_t*)(RECURSIVE_TABLE_BASE + RECURSIVE_PDE_INDEX * PAGE_SIZE);
+}
+
+static uint32_t read_cr3(void) {
+	uint32_t value;
+	__asm__ __volatile__("mov %%cr3, %0" : "=r"(value));
+	return value;
+}
+
+static void write_cr3(uint32_t value) {
+	__asm__ __volatile__("mov %0, %%cr3" :: "r"(value) : "memory");
+}
+
+static uint32_t irq_save_disable(void) {
+	uint32_t flags;
+	__asm__ __volatile__("pushf\n\tpop %0\n\tcli" : "=r"(flags) :: "memory");
+	return flags;
+}
+
+static void irq_restore(uint32_t flags) {
+	__asm__ __volatile__("push %0\n\tpopf" :: "r"(flags) : "memory", "cc");
 }
 
 void vmm_init(void) {
@@ -32,17 +57,21 @@ void vmm_init(void) {
 void vmm_map(uint32_t virt_addr, uint32_t phys_addr, uint32_t flags) {
 	uint32_t pde_i = virt_addr >> 22;
 	uint32_t pte_i = (virt_addr >> 12) & 0b1111111111;
+	uint32_t* page_dir = current_page_dir();
 
-	if (!(boot_page_dir[pde_i] & PAGE_PRESENT)) {
+	if (!(page_dir[pde_i] & PAGE_PRESENT)) {
 		uint32_t pgtable_phys = pmm_allocp();
 		if (pgtable_phys == 0) {
 			return;
 		}
 
-		boot_page_dir[pde_i] = pgtable_phys | PAGE_PRESENT | PAGE_RW;
+		page_dir[pde_i] = pgtable_phys | PAGE_PRESENT | PAGE_RW | (flags & PAGE_USER);
 		uint32_t* pgtable_virt = pte_get_table(pde_i);
 		__asm__ __volatile__("invlpg (%0)" :: "r"(pgtable_virt) : "memory");
 		memset(pgtable_virt, 0, 4096);
+	} else if (flags & PAGE_USER) {
+		/* User access requires permission at both paging levels. */
+		page_dir[pde_i] |= PAGE_USER;
 	}
 
 	uint32_t* table = pte_get_table(pde_i);
@@ -54,8 +83,9 @@ void vmm_map(uint32_t virt_addr, uint32_t phys_addr, uint32_t flags) {
 void vmm_unmap(uint32_t virt_addr) {
 	uint32_t pde_i = virt_addr >> 22;
 	uint32_t pte_i = (virt_addr >> 12) & 0b1111111111;
+	uint32_t* page_dir = current_page_dir();
 
-	if (!(boot_page_dir[pde_i] & PAGE_PRESENT)) {
+	if (!(page_dir[pde_i] & PAGE_PRESENT)) {
 		return;
 	}
 
@@ -65,11 +95,52 @@ void vmm_unmap(uint32_t virt_addr) {
 	__asm__ __volatile__("invlpg (%0)" :: "r"(virt_addr) : "memory");
 }
 
+void vmm_map_in(void* addr_space, uint32_t virt_addr, uint32_t phys_addr, uint32_t flags) {
+	uint32_t target_cr3 = (uint32_t)addr_space;
+	if (!target_cr3) {
+		return;
+	}
+
+	uint32_t saved_flags = irq_save_disable();
+	uint32_t saved_cr3 = read_cr3();
+
+	if (target_cr3 != saved_cr3) {
+		write_cr3(target_cr3);
+	}
+	vmm_map(virt_addr, phys_addr, flags);
+	if (target_cr3 != saved_cr3) {
+		write_cr3(saved_cr3);
+	}
+
+	irq_restore(saved_flags);
+}
+
+void vmm_unmap_in(void* addr_space, uint32_t virt_addr) {
+	uint32_t target_cr3 = (uint32_t)addr_space;
+	if (!target_cr3) {
+		return;
+	}
+
+	uint32_t saved_flags = irq_save_disable();
+	uint32_t saved_cr3 = read_cr3();
+
+	if (target_cr3 != saved_cr3) {
+		write_cr3(target_cr3);
+	}
+	vmm_unmap(virt_addr);
+	if (target_cr3 != saved_cr3) {
+		write_cr3(saved_cr3);
+	}
+
+	irq_restore(saved_flags);
+}
+
 uint32_t vmm_get_phys(uint32_t virt_addr) {
 	uint32_t pde_i = virt_addr >> 22;
 	uint32_t pte_i = (virt_addr >> 12) & 0b1111111111;
+	uint32_t* page_dir = current_page_dir();
 
-	if (!(boot_page_dir[pde_i] & PAGE_PRESENT)) {
+	if (!(page_dir[pde_i] & PAGE_PRESENT)) {
 		return 0;
 	}
 
@@ -101,8 +172,9 @@ void* vmm_create_page_dir(void) {
 	memset(page_dir, 0, PAGE_SIZE);
 
 	/* Every process shares the higher-half kernel mappings, never user space. */
+	uint32_t* active_page_dir = current_page_dir();
 	for (uint32_t i = KERNEL_PDE_START; i < RECURSIVE_PDE_INDEX; i++) {
-		page_dir[i] = boot_page_dir[i];
+		page_dir[i] = active_page_dir[i];
 	}
 
 	/* Make the recursive mapping refer to this directory, not the kernel one. */

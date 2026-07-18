@@ -10,6 +10,14 @@ void memman_unmap(uint32_t virt) {
 	vmm_unmap(virt);
 }
 
+void memman_map_in(addr_space_t addr_space, uint32_t virt, uint32_t phys, uint32_t flags) {
+	vmm_map_in(addr_space, virt, phys, flags);
+}
+
+void memman_unmap_in(addr_space_t addr_space, uint32_t virt) {
+	vmm_unmap_in(addr_space, virt);
+}
+
 uint32_t memman_get_phys(uint32_t virt) {
 	return vmm_get_phys(virt);
 }
