@@ -3,10 +3,7 @@
 #include "../syscall.h"
 #include <stdint.h>
 #include <panuti/errno.h>
-
-// define syscall nos
-#define SYSHANDLER_VGA 0
-#define SYSHANDLER_EXIT 1
+#include <panuti/syscall/syscallno.h>
 
 // put a char to the screen (temp)
 int32_t syshandler_vga(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
