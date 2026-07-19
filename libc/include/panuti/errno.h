@@ -1,0 +1,13 @@
+#ifndef _PANUTI_ERRNO_H
+#define _PANUTI_ERRNO_H
+
+#define PANUTIERRORCODE(code) ((code) + 0x80000000)
+
+// error codes first
+#define PANUTIERRNO_PLAINERR PANUTIERRORCODE(0)
+#define PANUTIERRNO_INVALIDSYSCALL PANUTIERRORCODE(1)
+
+// success codes
+#define PANUTIERRNO_PLAINSUCCESS 0
+
+#endif

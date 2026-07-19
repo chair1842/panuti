@@ -41,6 +41,7 @@ string/strlen.o \
 stdio/putchar_.o \
 stdio/printf_.o \
 stdio/vprintf.o \
+stdlib/errno.o \
 
 HOSTEDOBJS=\
 $(ARCH_HOSTEDOBJS) \

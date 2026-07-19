@@ -5,7 +5,12 @@
 #define TEMP_MAP_VIRT     0xC0500000
 
 static const uint8_t test_payload_code[] = {
-	0xEB, 0xFE  /* jmp $ */
+	0xB8, 0x01, 0x00, 0x00, 0x00,  /* mov eax, 1 (SYSHANDLER_EXIT) */
+	0x31, 0xDB,                     /* xor ebx, ebx (a1 = 0) */
+	0x89, 0xE1,                     /* mov ecx, esp */
+	0xBA, 0x10, 0x10, 0x00, 0xB0,  /* mov edx, 0xB0001010 */
+	0x0F, 0x34,                     /* sysenter */
+	0xEB, 0xFE                      /* jmp $ (should never reach) */
 };
 
 void (*test_payload_install(addr_space_t addr_space))(void) {

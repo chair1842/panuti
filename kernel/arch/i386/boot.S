@@ -89,6 +89,7 @@ high_mem:
 
 	/* initialize GDT */
 	call gdt_init
+	call sysenter_init
 
 	call _init
 
