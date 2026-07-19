@@ -16,6 +16,8 @@ extern uint32_t _kernel_end;
 // this bitmap handles 4GiB of memory, which i think is the max on i686.
 static uint8_t pmm_bitmap[PMM_BITMAP_SIZE];
 
+uint32_t init_module_phys_start = 0;
+uint32_t init_module_phys_end = 0;
 
 // set the bit for a page in the bitmap to 1, marking it free.
 void pmm_clrp(uint32_t page) {
@@ -68,6 +70,23 @@ void pmm_init(multiboot_info_t* mbi) {
 	}
 	for (uint32_t page = KERNEL_START / PMM_PAGE_SIZE; page < (KERNEL_END + PMM_PAGE_SIZE - 1) / PMM_PAGE_SIZE; page++) {
 		pmm_setp(page);
+	}
+
+	// reserve any multiboot modules (e.g. init.elf) so pmm_allocp() never hands out their frames.
+	uint8_t mods_imp = (mbi->flags >> 3) & 1;
+	if (mods_imp && mbi->mods_count > 0) {
+		multiboot_module_t* mods = (multiboot_module_t*)mbi->mods_addr;
+		for (uint32_t i = 0; i < mbi->mods_count; i++) {
+			uint32_t start_page = mods[i].mod_start / PMM_PAGE_SIZE;
+			uint32_t end_page = (mods[i].mod_end + PMM_PAGE_SIZE - 1) / PMM_PAGE_SIZE;
+			for (uint32_t page = start_page; page < end_page; page++) {
+				pmm_setp(page);
+			}
+		}
+
+		// stash the first module's location for the ELF loader to use later.
+		init_module_phys_start = mods[0].mod_start;
+		init_module_phys_end = mods[0].mod_end;
 	}
 }
 
