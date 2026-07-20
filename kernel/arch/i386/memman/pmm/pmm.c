@@ -54,6 +54,8 @@ void pmm_init(multiboot_info_t* mbi) {
 		uint32_t start_page = (uint32_t)(entry->addr / PMM_PAGE_SIZE);
 		uint32_t end_page = (uint32_t)(region_end / PMM_PAGE_SIZE);
 
+		// hiiiiiiii i am a comment
+		
 		if (entry->type == MULTIBOOT_MEMORY_AVAILABLE) {
 			// this is a free region of memory. mark all the pages in it as free.
 			for (uint32_t page = start_page; page < end_page; page++) {

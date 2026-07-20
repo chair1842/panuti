@@ -9,6 +9,9 @@ LIBS?=
 
 DESTDIR?=
 PREFIX?=/usr/local
+EXEC_PREFIX?=$(PREFIX)
+BOOTDIR?=$(EXEC_PREFIX)/boot
+INCLUDEDIR?=$(PREFIX)/include
 
 CFLAGS:=$(CFLAGS) -Wall -Wextra -Wa,--noexecstack
 CPPFLAGS:=$(CPPFLAGS) -I../libc/include
@@ -47,7 +50,7 @@ clean:
 install: install-pint
 
 install-pint: $(BINARY)
-	mkdir -p $(DESTDIR)$(PREFIX)/boot
-	cp $(BINARY) $(DESTDIR)$(PREFIX)/boot/$(BINARY)
+	mkdir -p $(DESTDIR)$(BOOTDIR)
+	cp $(BINARY) $(DESTDIR)$(BOOTDIR)/$(BINARY)
 
 -include $(OBJS:.o=.d)
