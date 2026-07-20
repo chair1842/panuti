@@ -37,7 +37,8 @@ kernel/kpanic.o \
 kernel/sched/task.o \
 kernel/sched/sched.o \
 kernel/elf/elf32.o \
-kernel/elf/elf.c
+kernel/elf/elf.o \
+kernel/memman/tempmap.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

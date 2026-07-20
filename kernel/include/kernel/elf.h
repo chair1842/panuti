@@ -27,5 +27,6 @@ typedef enum {
 } elf_result_t;
 
 elf_result_t elf32_parse(const void* data, size_t size, elf_loadable_segment_t* out_segs, int max_segs, int* out_nsegs, uint64_t* out_entry);
+int elf_load_segments(addr_space_t addr_space, const void* elf_data, const elf_loadable_segment_t* segs, int nsegs);
 
 #endif
