@@ -2,6 +2,7 @@
 #define _KERNEL_SCHED_TASK_H
 
 #include <stdint.h>
+#include <stddef.h>
 
 #define TASK_KERNEL_STACK_SIZE 4096
 
@@ -24,6 +25,7 @@ typedef struct task {
 
 task_t* task_create(void (*entry)(void));
 task_t* task_create_user(void (*entry)(void));
+task_t* task_create_frelf_user(const void* elf_data, size_t elf_size);
 void task_switch_to(task_t* old, task_t* new);
 void task_init_stack(task_t* t, void (*entry)(void));
 void task_init_user_stack(task_t* t, void (*entry)(void), uint32_t user_esp);
