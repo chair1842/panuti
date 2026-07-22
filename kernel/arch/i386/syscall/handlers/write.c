@@ -11,7 +11,7 @@ int32_t syshandler_write(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 
 	task_t* t = sched_current();
 	if (desc < 0 || desc >= MAX_HANDLES || t->handles[desc].type == HANDLE_NONE) {
-		return PANUTIERRORCODE(PANUTIERRNO_BADFD);
+		return PANUTIERRNO_BADFD;
 	}
 
 	// TODO: buf is an unvalidated user pointer.

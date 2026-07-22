@@ -9,6 +9,9 @@ int kernel_get_init_module(const void** out_data, size_t* out_size) {
 
 	uint32_t size = init_module_phys_end - init_module_phys_start;
 	const void* mapped = map_physical_temp(init_module_phys_start, size);
+	if (!mapped) {
+		return -1;
+	}
 
 	*out_data = mapped;
 	*out_size = size;

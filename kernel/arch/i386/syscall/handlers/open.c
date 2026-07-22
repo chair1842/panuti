@@ -14,13 +14,13 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 
 	registry_entry_t* e = registry_find(path);
 	if (!e) {
-		return PANUTIERRORCODE(PANUTIERRNO_NOTFOUND);
+		return PANUTIERRNO_NOTFOUND;
 	}
 
 	task_t* t = sched_current();
 	int desc = handle_alloc(t);
 	if (desc < 0) {
-		return PANUTIERRORCODE(PANUTIERRNO_NOFDS);
+		return PANUTIERRNO_NOFDS;
 	}
 
 	t->handles[desc].type = e->type;

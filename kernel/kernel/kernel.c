@@ -9,6 +9,11 @@
 #include "drivers/console/console.h"
 #include <kernel/memman/tempmap.h>
 
+void idle_task_entry(void) {
+	while (1) {
+	}
+}
+
 void kernel_main(void) {
 	terminal_initialize();
 	console_register();
@@ -32,6 +37,11 @@ void kernel_main(void) {
 		kpanic("failed to create pint test tasks\n");
 	}
 	klog(KLOG_INFO, "pint test tasks created, pid=%d and pid=%d\n", pint_task_1->pid, pint_task_2->pid);
+	
+	task_t* idle_task = task_create(idle_task_entry);
+	if (!idle_task) {
+		kpanic("failed to create idle task\n");
+	}
 
 	sched_init();
 }

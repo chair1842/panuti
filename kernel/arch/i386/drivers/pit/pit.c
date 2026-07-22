@@ -44,5 +44,6 @@ uint64_t pit_get_ticks(void) {
 void pit_handler(registers_t *reg) {
 	(void)reg;
 	ticks++;
+	klog(KLOG_INFO, "pit tick %llu\n", ticks);
 	sched_schedule();
 }
