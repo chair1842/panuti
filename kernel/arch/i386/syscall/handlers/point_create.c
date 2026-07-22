@@ -1,3 +1,4 @@
+#include "handlers.h"
 #include <stdint.h>
 #include <kernel/handle/point.h>
 #include <panuti/errno.h>

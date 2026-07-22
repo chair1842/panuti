@@ -1,3 +1,4 @@
+#include "handlers.h"
 #include <kernel/handle/handle.h>
 #include <kernel/handle/registry.h>
 #include <kernel/sched/sched.h>

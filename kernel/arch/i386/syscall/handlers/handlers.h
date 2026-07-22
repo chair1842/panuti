@@ -26,4 +26,7 @@ int32_t syshandler_close(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // create a point
 int32_t syshandler_point_create(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// get current PID
+int32_t syshandler_getpid(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

@@ -17,6 +17,7 @@ syscall_handler_t syscall_handlers[256] = {
 	[SYSHANDLER_ACTIVATE] = syshandler_activate,
 	[SYSHANDLER_CLOSE] = syshandler_close,
 	[SYSHANDLER_POINT_CREATE] = syshandler_point_create,
+	[SYSHANDLER_GETPID] = syshandler_getpid,
 };
 
 void sysenter_init(void) {

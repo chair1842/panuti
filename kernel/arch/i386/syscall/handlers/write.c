@@ -1,3 +1,4 @@
+#include "handlers.h"
 #include <kernel/handle/handle.h>
 #include <kernel/sched/sched.h>
 #include <panuti/errno.h>
