@@ -36,31 +36,22 @@ int elf_load_segments(addr_space_t addr_space, const void* elf_data, const elf_l
 			memman_map_in(addr_space, page_start + p * PAGE_SIZE, phys, map_flags);
 		}
 
-		// copy filesz bytes in, zero-fill the rest, page by page.
-		// NOTE: we must buffer each source page BEFORE mapping the
-		// destination, because map_physical_temp() shares the same
-		// virtual address (TEMP_MAP_BASE) as the elf_data mapping.
+		// copy filesz bytes in, zero-fill the rest, page by page
 		for (uint32_t p = 0; p < num_pages; p++) {
-			uint8_t src_buf[PAGE_SIZE];
+			void* dst = map_physical_temp(phys_frames[p], PAGE_SIZE);
 			uint32_t start = (p == 0) ? in_page_off : 0;
 
-			// read source data while elf_data is still mapped
-			for (uint32_t off = 0; off < PAGE_SIZE; off++) {
+			for (uint32_t off = start; off < PAGE_SIZE; off++) {
 				uint32_t seg_byte = (p * PAGE_SIZE + off) - in_page_off;
 				if (seg_byte >= memsz) {
 					break;
 				}
-
-				src_buf[off] = (seg_byte < filesz)
+				
+				((uint8_t*)dst)[off] = (seg_byte < filesz)
 					? ((const uint8_t*)elf_data)[offset + seg_byte]
 					: 0;
 			}
 
-			// now map destination and copy from buffer
-			void* dst = map_physical_temp(phys_frames[p], PAGE_SIZE);
-			for (uint32_t off = start; off < PAGE_SIZE; off++) {
-				((uint8_t*)dst)[off] = src_buf[off];
-			}
 			unmap_physical_temp(dst, PAGE_SIZE);
 		}
 	}

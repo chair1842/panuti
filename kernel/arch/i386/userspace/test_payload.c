@@ -1,5 +1,4 @@
 #include <stdint.h>
-#include <stddef.h>
 #include <kernel/memman/memman.h>
 
 #define TEST_PAYLOAD_VIRT 0xB0001000
@@ -16,9 +15,6 @@ static const uint8_t test_payload_code[] = {
 
 void (*test_payload_install(addr_space_t addr_space))(void) {
 	uint32_t phys = memman_alloc_frame();
-	if (!phys) {
-		return NULL;
-	}
 	memman_map_in(addr_space, TEST_PAYLOAD_VIRT, phys, MEMMAN_PRESENT | MEMMAN_USER);
 
 	memman_map_in(memman_get_kernel_addr_space(), TEMP_MAP_VIRT, phys, MEMMAN_PRESENT | MEMMAN_RW);

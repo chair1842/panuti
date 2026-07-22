@@ -41,11 +41,7 @@ void handle_free(task_t* t, int fd) {
 	if (fd < 0 || fd >= MAX_HANDLES) {
 		return;
 	}
-
-	if (t->handles[fd].ops && t->handles[fd].ops->close) {
-		t->handles[fd].ops->close(t->handles[fd].impl, t);
-	}
-
+	
 	t->handles[fd].type = HANDLE_NONE;
 	t->handles[fd].impl = NULL;
 	t->handles[fd].ops = NULL;

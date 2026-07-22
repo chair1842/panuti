@@ -1,7 +1,7 @@
 #include <kernel/handle/handle.h>
 #include <kernel/handle/registry.h>
 #include <kernel/tty.h>
-#include "console.h"
+#include "vga.h"
 
 static int vga_write(void* impl, const void* buf, size_t len) {
 	(void)impl;
@@ -20,6 +20,6 @@ static const handle_ops_t vga_file_ops = {
 	.close = op_not_supported_close,
 };
 
-void console_register(void) {
+void vga_register_console(void) {
 	registry_add("/dvc/console", HANDLE_FILE, NULL, &vga_file_ops);
 }

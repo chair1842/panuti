@@ -33,8 +33,4 @@ static inline int32_t panutisysf_point_create(const char* path) {
 	return panuti_syscall(SYSHANDLER_POINT_CREATE, (uint32_t)path, 0, 0, 0);
 }
 
-static inline int32_t panutisysf_getpid(void) {
-	return panuti_syscall(SYSHANDLER_GETPID, 0, 0, 0, 0);
-}
-
 #endif
