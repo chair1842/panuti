@@ -2,6 +2,7 @@
 #include <panuti/errno.h>
 #include "kernel/sched/sched.h"
 #include "kernel/sched/task.h"
+#include <kernel/klog.h>
 #include <stdint.h>
 
 int32_t syshandler_exit(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
@@ -11,6 +12,7 @@ int32_t syshandler_exit(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 
 	task_t* current = sched_current();
 	current->state = TASK_TERMINATED;
+	klog(KLOG_INFO, "task %d terminated\n", current->pid);
 	sched_schedule();
 
 	return PANUTIERRNO_PLAINSUCCESS;
