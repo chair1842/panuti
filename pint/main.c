@@ -1,9 +1,11 @@
 #include <panuti/syscall/syscallsf.h>
 
 int main(void) {
-	panutisysf_vga('P');
-	panutisysf_vga('I');
-	panutisysf_vga('N');
-	panutisysf_vga('T');
+	int fd = panutisysf_open("/dvc/console");
+	if (fd < 0) {
+		panutisysf_exit(1);
+	}
+	const char* msg = "PINT\n";
+	panutisysf_write(fd, msg, 5);
 	return 42;
 }

@@ -1,7 +1,8 @@
 #ifndef _PANUTI_SYSCALL_NO_H
 #define _PANUTI_SYSCALL_NO_H
 
-#define SYSHANDLER_VGA 0
+#define SYSHANDLER_WRITE 0
 #define SYSHANDLER_EXIT 1
+#define SYSHANDLER_OPEN 2
 
 #endif

@@ -10,8 +10,9 @@ extern uint32_t stack_top;
 
 // decoration!! Syscall dispatch table
 syscall_handler_t syscall_handlers[256] = {
-	[SYSHANDLER_VGA] = syshandler_vga,
+	[SYSHANDLER_WRITE] = syshandler_write,
 	[SYSHANDLER_EXIT] = syshandler_exit,
+	[SYSHANDLER_OPEN] = syshandler_open,
 };
 
 void sysenter_init(void) {

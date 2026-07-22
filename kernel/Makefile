@@ -38,7 +38,10 @@ kernel/sched/task.o \
 kernel/sched/sched.o \
 kernel/elf/elf32.o \
 kernel/elf/elf.o \
-kernel/memman/tempmap.o
+kernel/memman/tempmap.o \
+kernel/handle/handle.o \
+kernel/handle/registry.o \
+kernel/drivers/vga/vga.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

@@ -1,6 +1,6 @@
 // slab.h
-#ifndef KERNEL_MEMMAN_SLAB_H
-#define KERNEL_MEMMAN_SLAB_H
+#ifndef _KERNEL_MEMMAN_SLAB_H
+#define _KERNEL_MEMMAN_SLAB_H
 
 #include <stdint.h>
 

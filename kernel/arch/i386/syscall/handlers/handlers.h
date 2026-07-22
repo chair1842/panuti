@@ -5,10 +5,13 @@
 #include <panuti/errno.h>
 #include <panuti/syscall/syscallno.h>
 
-// put a char to the screen (temp)
-int32_t syshandler_vga(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+// write to a handle
+int32_t syshandler_write(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
 // exit the current process
 int32_t syshandler_exit(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// open a handle
+int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
 #endif

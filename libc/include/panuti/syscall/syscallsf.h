@@ -2,13 +2,19 @@
 #define _PANUTI_SYSCALLSF_H
 #include "syscall.h"
 #include "syscallno.h"
+#include <stddef.h>
 
-static inline int32_t panutisysf_vga(char c) {
-	return panuti_syscall(SYSHANDLER_VGA, (uint32_t)c, 0, 0, 0);
+static inline int32_t panutisysf_write(int handle, const void* data, size_t size) {
+	return panuti_syscall(SYSHANDLER_WRITE, (uint32_t)handle, (uint32_t)data, (uint32_t)size, 0);
 }
 
 static inline int32_t panutisysf_exit(uint32_t code) {
 	return panuti_syscall(SYSHANDLER_EXIT, code, 0, 0, 0);
 }
+
+static inline int32_t panutisysf_open(const char* path) {
+	return panuti_syscall(SYSHANDLER_OPEN, (uint32_t)path, 0, 0, 0);
+}
+
 
 #endif
