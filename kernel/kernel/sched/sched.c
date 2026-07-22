@@ -81,14 +81,14 @@ task_t* sched_current(void) {
     return current;
 }
 
-void sched_block(task_t* t) {
+void task_block(task_t* t) {
     t->state = TASK_BLOCKED;
     if (t == current) {
         sched_schedule();
     }
 }
 
-void sched_wake(task_t* t) {
+void task_wake(task_t* t) {
     if (t->state == TASK_BLOCKED) {
         t->state = TASK_READY;
     }
