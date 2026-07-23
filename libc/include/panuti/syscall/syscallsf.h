@@ -32,5 +32,17 @@ static inline int32_t panutisysf_close(int handle) {
 	return panuti_syscall(SYSHANDLER_CLOSE, (uint32_t)handle, 0, 0, 0);
 }
 
+static inline int32_t panutisysf_mkdir(const char* path) {
+	return panuti_syscall(SYSHANDLER_MKDIR, (uint32_t)path, 0, 0, 0);
+}
+
+static inline int32_t panutisysf_regfind(const char* path) {
+	return panuti_syscall(SYSHANDLER_REGFIND, (uint32_t)path, 0, 0, 0);
+}
+
+static inline int32_t panutisysf_regroot(void) {
+	return panuti_syscall(SYSHANDLER_REGROOT, 0, 0, 0, 0);
+}
+
 
 #endif

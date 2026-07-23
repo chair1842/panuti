@@ -17,6 +17,9 @@ syscall_handler_t syscall_handlers[256] = {
 	[SYSHANDLER_ACTIVATE] = syshandler_activate,
 	[SYSHANDLER_WAIT] = syshandler_wait,
 	[SYSHANDLER_CLOSE] = syshandler_close,
+	[SYSHANDLER_MKDIR] = syshandler_mkdir,
+	[SYSHANDLER_REGFIND] = syshandler_regfind,
+	[SYSHANDLER_REGROOT] = syshandler_regroot,
 };
 
 void sysenter_init(void) {

@@ -26,4 +26,13 @@ int32_t syshandler_wait(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // close a handle
 int32_t syshandler_close(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// mkdir in registry
+int32_t syshandler_mkdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// find entry in registry
+int32_t syshandler_regfind(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// get registry root
+int32_t syshandler_regroot(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif
