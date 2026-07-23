@@ -3,19 +3,37 @@
 
 #include <kernel/handle/handle.h>
 #include <stdbool.h>
+#include <kernel/handle/inode_type.h>
 
-#define MAX_REGISTERED 64
-#define MAX_PATH_LEN 64
+#define MAX_INODES 128
+#define MAX_DIRENTS 256
+#define MAX_NAME_LEN 32
 
-typedef struct {
-	char path[MAX_PATH_LEN];
-	handle_type_t type;
+typedef struct dirent {
+	char name[MAX_NAME_LEN];
+	struct inode* inode;
+	struct dirent* next;
+	bool in_use;
+} dirent_t;
+
+typedef struct inode {
+	inode_type_t type;
+	int refcount;
+	bool in_use;
+
+	// leaf-only
 	void* impl;
 	const handle_ops_t* ops;
-	bool in_use;
-} registry_entry_t;
 
-int registry_add(const char* path, handle_type_t type, void* impl, const handle_ops_t* ops);
-registry_entry_t* registry_find(const char* path);
+	// dir-only
+	dirent_t* children;
+} inode_t;
+
+void registry_init(void);
+int registry_mkdir(const char* path);
+int registry_add(const char* path, inode_type_t type, void* impl, const handle_ops_t* ops);
+inode_t* registry_resolve(inode_t* start, const char* path);
+inode_t* registry_find(const char* path);
+inode_t* registry_root(void);
 
 #endif

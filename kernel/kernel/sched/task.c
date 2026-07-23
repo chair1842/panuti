@@ -1,3 +1,4 @@
+#include "kernel/handle/registry.h"
 #include <kernel/sched/task.h>
 #include <kernel/memman/vmalloc.h>
 #include <kernel/memman/memman.h>
@@ -27,6 +28,7 @@ task_t* task_create(void (*entry)(void)) {
 
 	t->pid = next_pid++;
 	t->state = TASK_READY;
+	t->cwd = registry_root();
 	t->addr_space = memman_create_addr_space();
 	if (!t->addr_space) {
 		vmalloc_free((void*)t->kernel_stack);

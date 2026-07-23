@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <kernel/handle/handle.h>
+#include <kernel/handle/registry.h>
 
 #define TASK_KERNEL_STACK_SIZE 4096
 
@@ -23,6 +24,7 @@ typedef struct task {
 	uint32_t pid;
 	struct task* next;
 	handle_t handles[MAX_HANDLES];
+	inode_t* cwd;
 } task_t;
 
 task_t* task_create(void (*entry)(void));

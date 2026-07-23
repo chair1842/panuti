@@ -1,0 +1,12 @@
+#ifndef _KERNEL_HANDLE_INODE_TYPE_H
+#define _KERNEL_HANDLE_INODE_TYPE_H
+
+typedef enum {
+	INODE_NONE = 0,
+	INODE_DIR,
+	INODE_FILE,
+	INODE_PIPE,
+	INODE_POINT
+} inode_type_t;
+
+#endif
