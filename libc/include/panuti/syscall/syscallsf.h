@@ -16,5 +16,21 @@ static inline int32_t panutisysf_open(const char* path) {
 	return panuti_syscall(SYSHANDLER_OPEN, (uint32_t)path, 0, 0, 0);
 }
 
+static inline int32_t panutisysf_read(int handle, void* data, size_t size) {
+	return panuti_syscall(SYSHANDLER_READ, (uint32_t)handle, (uint32_t)data, (uint32_t)size, 0);
+}
+
+static inline int32_t panutisysf_activate(int handle) {
+	return panuti_syscall(SYSHANDLER_ACTIVATE, (uint32_t)handle, 0, 0, 0);
+}
+
+static inline int32_t panutisysf_wait(int handle) {
+	return panuti_syscall(SYSHANDLER_WAIT, (uint32_t)handle, 0, 0, 0);
+}
+
+static inline int32_t panutisysf_close(int handle) {
+	return panuti_syscall(SYSHANDLER_CLOSE, (uint32_t)handle, 0, 0, 0);
+}
+
 
 #endif

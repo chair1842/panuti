@@ -13,6 +13,10 @@ syscall_handler_t syscall_handlers[256] = {
 	[SYSHANDLER_WRITE] = syshandler_write,
 	[SYSHANDLER_EXIT] = syshandler_exit,
 	[SYSHANDLER_OPEN] = syshandler_open,
+	[SYSHANDLER_READ] = syshandler_read,
+	[SYSHANDLER_ACTIVATE] = syshandler_activate,
+	[SYSHANDLER_WAIT] = syshandler_wait,
+	[SYSHANDLER_CLOSE] = syshandler_close,
 };
 
 void sysenter_init(void) {

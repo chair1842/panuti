@@ -14,4 +14,16 @@ int32_t syshandler_exit(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // open a handle
 int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// read from a handle
+int32_t syshandler_read(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// activate a handle
+int32_t syshandler_activate(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// wait on a handle
+int32_t syshandler_wait(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// close a handle
+int32_t syshandler_close(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif
