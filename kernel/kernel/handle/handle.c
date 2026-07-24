@@ -1,3 +1,4 @@
+#include "kernel/handle/inode_type.h"
 #include <kernel/handle/handle.h>
 #include <panuti/errno.h>
 #include <kernel/sched/task.h>
@@ -29,7 +30,7 @@ int op_not_supported_close(void* impl, struct task* self) {
 
 int handle_alloc(task_t* t) {
 	for (int i = 0; i < MAX_HANDLES; i++) {
-		if (t->handles[i].type == HANDLE_NONE) {
+		if (t->handles[i].type == INODE_NONE) {
 			return i;
 		}
 	}
@@ -42,7 +43,7 @@ void handle_free(task_t* t, int fd) {
 		return;
 	}
 	
-	t->handles[fd].type = HANDLE_NONE;
+	t->handles[fd].type = INODE_NONE;
 	t->handles[fd].impl = NULL;
 	t->handles[fd].ops = NULL;
 }

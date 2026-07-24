@@ -43,7 +43,8 @@ stdio/printf_.o \
 stdio/vprintf.o \
 stdlib/errno.o \
 string/strncpy.o \
-string/strcmp.o
+string/strcmp.o \
+string/strncmp.o
 
 HOSTEDOBJS=\
 $(ARCH_HOSTEDOBJS) \
