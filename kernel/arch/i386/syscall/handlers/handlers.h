@@ -2,8 +2,25 @@
 #define PANUTI_KERNEL_ARCH_I386_SYSCALL_HANDLERS_H
 #include "../syscall.h"
 #include <stdint.h>
+#include <stddef.h>
+#include <stdbool.h>
 #include <panuti/errno.h>
 #include <panuti/syscall/syscallno.h>
+
+#define USER_SPACE_BASE 0x08048000u
+#define USER_SPACE_END  0xC0000000u
+
+static inline bool is_user_ptr(const void* ptr) {
+	uint32_t addr = (uint32_t)ptr;
+	return addr >= USER_SPACE_BASE && addr < USER_SPACE_END;
+}
+
+static inline bool is_user_range(const void* buf, size_t len) {
+	if (len == 0) return true;
+	uint32_t start = (uint32_t)buf;
+	uint32_t end = start + (uint32_t)len;
+	return start >= USER_SPACE_BASE && end <= USER_SPACE_END && end > start;
+}
 
 // write to a handle
 int32_t syshandler_write(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);

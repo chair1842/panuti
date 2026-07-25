@@ -25,7 +25,7 @@ int op_not_supported_wait(void* impl, struct task* self) {
 
 int op_not_supported_close(void* impl, struct task* self) {
 	(void)impl; (void)self;
-	return PANUTIERRNO_UNSUPPORTEDOP;
+	return 0;
 }
 
 int handle_alloc(task_t* t) {

@@ -42,16 +42,19 @@ void terminal_putchar(char c) {
 	unsigned char uc = c;
 	if (c == '\n') {
 		terminal_column = 0;
-		if (++terminal_row == VGA_HEIGHT)
+		if (++terminal_row == VGA_HEIGHT) {
 			terminal_scroll();
+			terminal_row = VGA_HEIGHT - 1;
+		}
 		return;
 	}
 
 	terminal_putentryat(uc, terminal_color, terminal_column, terminal_row);
 	if (++terminal_column == VGA_WIDTH) {
 		terminal_column = 0;
-		if (++terminal_row == VGA_HEIGHT)
+		if (++terminal_row == VGA_HEIGHT) {
 			terminal_scroll();
+		}
 	}
 }
 
@@ -76,6 +79,7 @@ void terminal_scroll(void) {
 		const size_t index = (VGA_HEIGHT - 1) * VGA_WIDTH + x;
 		terminal_buffer[index] = vga_entry(' ', terminal_color);
 	}
+	terminal_row = VGA_HEIGHT - 1;
 }
 
 void terminal_fsetcolor(enum ansi_color fg_color, enum ansi_color bg_color) {

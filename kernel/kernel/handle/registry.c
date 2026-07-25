@@ -143,6 +143,10 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 		}
 	}
 
+	if (p > path + 1 && *(p - 1) == '/' && current->type != INODE_DIR) {
+		return NULL;
+	}
+
 	return current;
 }
 
