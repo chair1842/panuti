@@ -1,7 +1,7 @@
 #include <kernel/elf.h>
 #include <stdint.h>
 
-#define EDHR_MACHINE 3 // EM_386
+#define EHDR_MACHINE 3 // EM_386
 
 typedef uint32_t elf32_offset_t;
 typedef uint32_t elf32_addr_t;
@@ -47,18 +47,18 @@ elf_result_t elf32_parse(const void* data, size_t size, elf_loadable_segment_t* 
 	
 
 	if (ehdr->ident[4] != 1) {
-		return ELF_ERR_WRONG_ENDIAN;
+		return ELF_ERR_WRONG_CLASS;
 	}
 
 	if (ehdr->ident[5] != 1) {
-		return ELF_ERR_WRONG_CLASS;
+		return ELF_ERR_WRONG_ENDIAN;
 	}
 
 	if (ehdr->type != 2) {
 		return ELF_ERR_WRONG_TYPE;
 	}
 
-	if (ehdr->machine != EDHR_MACHINE) {
+	if (ehdr->machine != EHDR_MACHINE) {
 		return ELF_ERR_WRONG_MACHINE;
 	}
 	

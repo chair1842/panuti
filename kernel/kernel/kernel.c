@@ -1,10 +1,10 @@
+#include <kernel/handle/registry.h>
 #include <kernel/sched/task.h>
 #include <stdio.h>
 #include <kernel/tty.h>
 #include <kernel/sched/sched.h>
 #include <kernel/klog.h>
 #include <kernel/boot_mod.h>
-#include <kernel/sched/task.h>
 #include <kernel/kpanic.h>
 #include "drivers/vga/vga.h"
 
@@ -15,7 +15,10 @@ static void idle_task_entry(void) {
 }
 
 void kernel_main(void) {
+	registry_init();
 	terminal_initialize();
+	
+	registry_mkdir("/dvc");
 	vga_register_console();
 
 	const void* elf_data;

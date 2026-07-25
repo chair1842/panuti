@@ -1,8 +1,13 @@
 #include <kernel/elf.h>
-#include <kernel/memman/tempmap.h>
+#include <kernel/memman/memman.h>
 
 #define PAGE_SIZE 0x1000
-#define MAX_SEG_PAGES 256 // 1MB max segment size for now
+#define MAX_SEG_PAGES 256
+
+/* Dedicated scratch address for ELF segment loading.
+ * Must not collide with TEMP_MAP_BASE (0xC0600000) used by map_physical_temp,
+ * since the ELF source data may already be mapped there via kernel_get_init_module. */
+#define ELF_LOAD_SCRATCH 0xC0700000
 
 int elf_load_segments(addr_space_t addr_space, const void* elf_data, const elf_loadable_segment_t* segs, int nsegs) {
 	for (int s = 0; s < nsegs; s++) {
@@ -24,21 +29,19 @@ int elf_load_segments(addr_space_t addr_space, const void* elf_data, const elf_l
 		uint32_t map_flags = MEMMAN_PRESENT | MEMMAN_USER | MEMMAN_RW;
 		uint32_t phys_frames[MAX_SEG_PAGES];
 
-		// allocate + map every page up front, saving each physical frame
-		// so the copy step below doesn't need to look it up through CR3
 		for (uint32_t p = 0; p < num_pages; p++) {
 			uint32_t phys = memman_alloc_frame();
 			if (!phys) {
 				return -1;
 			}
-			
+
 			phys_frames[p] = phys;
 			memman_map_in(addr_space, page_start + p * PAGE_SIZE, phys, map_flags);
 		}
 
-		// copy filesz bytes in, zero-fill the rest, page by page
 		for (uint32_t p = 0; p < num_pages; p++) {
-			void* dst = map_physical_temp(phys_frames[p], PAGE_SIZE);
+			memman_map(ELF_LOAD_SCRATCH, phys_frames[p], MEMMAN_PRESENT | MEMMAN_RW);
+			uint8_t* dst = (uint8_t*)ELF_LOAD_SCRATCH;
 			uint32_t start = (p == 0) ? in_page_off : 0;
 
 			for (uint32_t off = start; off < PAGE_SIZE; off++) {
@@ -46,13 +49,13 @@ int elf_load_segments(addr_space_t addr_space, const void* elf_data, const elf_l
 				if (seg_byte >= memsz) {
 					break;
 				}
-				
-				((uint8_t*)dst)[off] = (seg_byte < filesz)
+
+				dst[off] = (seg_byte < filesz)
 					? ((const uint8_t*)elf_data)[offset + seg_byte]
 					: 0;
 			}
 
-			unmap_physical_temp(dst, PAGE_SIZE);
+			memman_unmap(ELF_LOAD_SCRATCH);
 		}
 	}
 
