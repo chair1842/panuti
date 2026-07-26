@@ -24,13 +24,15 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return PANUTIERRNO_UNSUPPORTEDOP; // no directory-open semantics yet
 	}
 
-	int fd = handle_alloc(t);
-	if (fd < 0) {
+	int des = handle_alloc(t);
+	if (des < 0) {
 		return PANUTIERRNO_NOFDS;
 	}
 
-	t->handles[fd].type = n->type;
-	t->handles[fd].impl = n->impl;
-	t->handles[fd].ops = n->ops;
-	return fd;
+	t->handles[des].type = n->type;
+	t->handles[des].impl = n->impl;
+	t->handles[des].ops = n->ops;
+
+	n->refcount++;
+	return des;
 }

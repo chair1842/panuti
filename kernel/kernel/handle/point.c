@@ -58,11 +58,18 @@ int point_activate(point_t* point) {
 
 	point->pending = true;
 
-	if (point->owner &&
-		point->owner->state == TASK_BLOCKED)
-	{
+	if (point->owner && point->owner->state == TASK_BLOCKED) {
 		task_wake(point->owner);
 	}
 
 	return 0;
+}
+
+void point_destroy(point_t* point) {
+	if (!point) {
+		return;
+	}
+
+	point->state = POSTATE_INVALID;
+	kfree(point);
 }

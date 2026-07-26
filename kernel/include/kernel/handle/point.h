@@ -19,5 +19,6 @@ point_t* point_alloc(task_t* owner);
 point_t* point_create(const char* path, task_t* owner);
 int point_activate(point_t* point);
 int point_wait(point_t* point, task_t* self);
+void point_destroy(point_t* point);
 
 #endif

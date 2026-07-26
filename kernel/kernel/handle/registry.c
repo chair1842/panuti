@@ -10,7 +10,7 @@ static inode_t* inode_alloc(inode_type_t type) {
 		if (!inodes[i].in_use) {
 			inodes[i].in_use = true;
 			inodes[i].type = type;
-			inodes[i].refcount = 0;
+			inodes[i].refcount = 1;
 			inodes[i].impl = NULL;
 			inodes[i].ops = NULL;
 			inodes[i].children = NULL;
@@ -172,4 +172,10 @@ inode_t* registry_resolve(inode_t* start, const char* path) {
 
 inode_t* registry_find(const char* path) {
 	return walk(root, path, false, INODE_DIR);
+}
+
+void inode_unref(inode_t* inode) {
+	if (--inode->refcount != 0) {
+		return;
+	}
 }

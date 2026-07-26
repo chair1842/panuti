@@ -6,6 +6,7 @@
 #include <kernel/handle/inode_type.h>
 
 struct task;
+struct inode;
 
 typedef struct {
 	int (*read)(void* impl, void* buf, size_t len);
@@ -16,9 +17,10 @@ typedef struct {
 } handle_ops_t;
 
 typedef struct {
-	inode_type_t type;          // was handle_type_t — now unified
+	inode_type_t type;
 	void* impl;
 	const handle_ops_t* ops;
+	struct inode* inode;
 } handle_t;
 
 #define MAX_HANDLES 32

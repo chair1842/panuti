@@ -3,6 +3,7 @@
 #include "syscall.h"
 #include "syscallno.h"
 #include <stddef.h>
+#include <stdint.h>
 
 static inline int32_t panutisysf_write(int handle, const void* data, size_t size) {
 	return panuti_syscall(SYSHANDLER_WRITE, (uint32_t)handle, (uint32_t)data, (uint32_t)size, 0);
@@ -36,5 +37,8 @@ static inline int32_t panutisysf_mkdir(const char* path) {
 	return panuti_syscall(SYSHANDLER_MKDIR, (uint32_t)path, 0, 0, 0);
 }
 
+static inline int32_t panutisysf(const char* path) {
+	return panuti_syscall(SYSHANDLER_POINT_CREATE, (uint32_t)path, 0, 0, 0)
+}
 
 #endif
