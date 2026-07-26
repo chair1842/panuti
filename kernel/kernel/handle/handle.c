@@ -18,7 +18,7 @@ int op_not_supported_act(void* impl) {
 	return PANUTIERRNO_UNSUPPORTEDOP;
 }
 
-int op_not_supported_wait(void* impl, struct task* self) {
+int op_not_supported_rdy(void* impl, struct task* self) {
 	(void)impl; (void)self;
 	return PANUTIERRNO_UNSUPPORTEDOP;
 }

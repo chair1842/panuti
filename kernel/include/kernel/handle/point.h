@@ -12,7 +12,6 @@ typedef enum {
 typedef struct point {
 	task_t* owner;
 	bool pending;
-	task_t* waiter;
 	point_state_t state;
 } point_t;
 

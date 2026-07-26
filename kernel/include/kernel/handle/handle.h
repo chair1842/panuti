@@ -11,7 +11,7 @@ typedef struct {
 	int (*read)(void* impl, void* buf, size_t len);
 	int (*write)(void* impl, const void* buf, size_t len);
 	int (*activate)(void* impl);
-	int (*wait)(void* impl, struct task* self);
+	int (*ready)(void* impl);
 	int (*close)(void* impl, struct task* self);
 } handle_ops_t;
 
@@ -26,7 +26,7 @@ typedef struct {
 int op_not_supported_rw(void* impl, void* buf, size_t len);
 int op_not_supported_w(void* impl, const void* buf, size_t len);
 int op_not_supported_act(void* impl);
-int op_not_supported_wait(void* impl, struct task* self);
+int op_not_supported_rdy(void* impl, struct task* self);
 int op_not_supported_close(void* impl, struct task* self);
 
 int handle_alloc(struct task* t);
