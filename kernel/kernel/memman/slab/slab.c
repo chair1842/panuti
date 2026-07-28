@@ -64,6 +64,11 @@ static slab_t* slab_create(uint32_t obj_size) {
 	uint32_t header_size = align_up(sizeof(slab_t), obj_size);
 	slab->capacity = (PAGE_SIZE - header_size) / obj_size;
 
+	if (slab->capacity == 0) {
+		vmalloc_free(slab);
+		return NULL;
+	}
+
 	for (uint32_t i = 0; i < slab->capacity - 1; i++) {
 		uint32_t* obj = (uint32_t*)slab_obj(slab, i);
 		*obj = i + 1;

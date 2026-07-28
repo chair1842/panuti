@@ -25,8 +25,8 @@ static inline int32_t panutisysf_activate(int handle) {
 	return panuti_syscall(SYSHANDLER_ACTIVATE, (uint32_t)handle, 0, 0, 0);
 }
 
-static inline int32_t panutisysf_wait(int handle) {
-	return panuti_syscall(SYSHANDLER_WAIT, (uint32_t)handle, 0, 0, 0);
+static inline int32_t panutisysf_wait(int* fds, size_t count, int* fired_fd) {
+	return panuti_syscall(SYSHANDLER_WAIT, (uint32_t)fds, (uint32_t)count, (uint32_t)fired_fd, 0);
 }
 
 static inline int32_t panutisysf_close(int handle) {
@@ -38,7 +38,7 @@ static inline int32_t panutisysf_mkdir(const char* path) {
 }
 
 static inline int32_t panutisysf(const char* path) {
-	return panuti_syscall(SYSHANDLER_POINT_CREATE, (uint32_t)path, 0, 0, 0)
+	return panuti_syscall(SYSHANDLER_POINT_CREATE, (uint32_t)path, 0, 0, 0);
 }
 
 static inline int32_t panutisysf_chdir(const char* path) {

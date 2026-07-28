@@ -36,9 +36,9 @@ task_t* task_create(void (*entry)(void)) {
 	}
 	
 	task_init_stack(t, entry);
-	sched_add(t);
 	task_count++;
-	
+	sched_add(t);
+
 	return t;
 }
 
@@ -73,8 +73,8 @@ task_t* task_create_user(void (*entry)(void)) {
 	t->state = TASK_READY;
 
 	task_init_user_stack(t, entry, user_esp);
-	sched_add(t);
 	task_count++;
+	sched_add(t);
 
 	return t;
 }
@@ -124,8 +124,8 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 	t->pid = next_pid++;
 	t->state = TASK_READY;
 	task_init_user_stack(t, (void (*)(void))(uint32_t)entry, user_esp);
-	sched_add(t);
 	task_count++;
+	sched_add(t);
 
 	return t;
 }

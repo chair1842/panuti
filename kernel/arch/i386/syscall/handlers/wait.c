@@ -4,7 +4,10 @@
 #include "handlers.h"
 #include <kernel/handle/point.h>
 
+// returns: 1 = found ready fd (written to *fired_fd), 0 = none ready, -1 = no fds support waiting
 static int wait_scan(task_t* task, int* fds, size_t count, int* fired_fd) {
+    int any_supported = 0;
+
     for (size_t i = 0; i < count; i++) {
         int fd = fds[i];
 
@@ -18,20 +21,25 @@ static int wait_scan(task_t* task, int* fds, size_t count, int* fired_fd) {
             continue;
         }
 
-        if (!h->ops->ready(h->impl)) {
-            continue;
+        int rdy = h->ops->ready(h->impl);
+        if (rdy < 0) {
+            continue; // unsupported
         }
 
-        if (h->type == INODE_POINT) {
-            point_t* point = h->impl;
-            point->pending = false;
-        }
+        any_supported = 1;
 
-        *fired_fd = fd;
-        return 1;
+        if (rdy > 0) {
+            if (h->type == INODE_POINT) {
+                point_t* point = h->impl;
+                point->pending = false;
+            }
+
+            *fired_fd = fd;
+            return 1;
+        }
     }
 
-    return 0;
+    return any_supported ? 0 : -1;
 }
 
 int32_t syshandler_wait(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
@@ -52,12 +60,17 @@ int32_t syshandler_wait(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
     task_t* current = sched_current();
 
     while (1) {
-        if (wait_scan(current, fds, count, fired_fd)) {
+        int result = wait_scan(current, fds, count, fired_fd);
+
+        if (result > 0) {
             return PANUTIERRNO_PLAINSUCCESS;
         }
 
-        current->state = TASK_BLOCKED;
+        if (result < 0) {
+            return PANUTIERRNO_UNSUPPORTEDOP;
+        }
 
+        current->state = TASK_BLOCKED;
         sched_schedule();
     }
 }

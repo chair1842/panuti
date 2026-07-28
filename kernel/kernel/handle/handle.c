@@ -18,9 +18,9 @@ int op_not_supported_act(void* impl) {
 	return PANUTIERRNO_UNSUPPORTEDOP;
 }
 
-int op_not_supported_rdy(void* impl, struct task* self) {
-	(void)impl; (void)self;
-	return PANUTIERRNO_UNSUPPORTEDOP;
+int op_not_supported_rdy(void* impl) {
+	(void)impl;
+	return -1;
 }
 
 int op_not_supported_close(void* impl, struct task* self) {
@@ -46,4 +46,5 @@ void handle_free(task_t* t, int fd) {
 	t->handles[fd].type = INODE_NONE;
 	t->handles[fd].impl = NULL;
 	t->handles[fd].ops = NULL;
+	t->handles[fd].inode = NULL;
 }

@@ -191,6 +191,7 @@ static void registry_destroy(inode_t* inode) {
 			d->in_use = false;
 			d = next;
 		}
+		inode->children = NULL;
 	}
 
 	inode->in_use = false;
@@ -213,6 +214,7 @@ dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len) {
 			}
 
 			inode_unref(curr->inode);
+			curr->in_use = false;
 			curr->next = NULL;
 			return curr;
 		}
@@ -224,6 +226,9 @@ dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len) {
 }
 
 void inode_unref(inode_t* inode) {
+	if (!inode) {
+		return;
+	}
 	if (--inode->refcount != 0) {
 		return;
 	}

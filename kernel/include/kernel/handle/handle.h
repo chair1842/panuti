@@ -28,7 +28,7 @@ typedef struct {
 int op_not_supported_rw(void* impl, void* buf, size_t len);
 int op_not_supported_w(void* impl, const void* buf, size_t len);
 int op_not_supported_act(void* impl);
-int op_not_supported_rdy(void* impl, struct task* self);
+int op_not_supported_rdy(void* impl);
 int op_not_supported_close(void* impl, struct task* self);
 
 int handle_alloc(struct task* t);

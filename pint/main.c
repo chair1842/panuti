@@ -178,8 +178,10 @@ int main(void) {
 		check(console, "activate fd=99 -> BADFD", r, PANUTIERRNO_BADFD);
 	}
 	{
-		int32_t r = panutisysf_wait(99);
-		check(console, "wait fd=99 -> BADFD", r, PANUTIERRNO_BADFD);
+		int wait_fds[] = {99};
+		int fired = -1;
+		int32_t r = panutisysf_wait(wait_fds, 1, &fired);
+		check(console, "wait fd=99 -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
 	}
 	{
 		int32_t r = panutisysf_close(99);
@@ -207,8 +209,12 @@ int main(void) {
 		check(console, "read from console -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
 		r = panutisysf_activate(fd);
 		check(console, "activate console -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
-		r = panutisysf_wait(fd);
-		check(console, "wait on console -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
+		{
+			int wait_fds[] = {fd};
+			int fired = -1;
+			r = panutisysf_wait(wait_fds, 1, &fired);
+			check(console, "wait on console -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
+		}
 		r = panutisysf_close(fd);
 		check(console, "close console (explicit) -> success", r, 0);
 	}
@@ -421,8 +427,139 @@ int main(void) {
 		check_is_success(console, "mkdir /d/d/d/d/d", r);
 	}
 
-	/* ---- 20. Open after full close cycle ---- */
-	section(console, "20. Sanity: open still works after all tests");
+	/* ---- 20. chdir basic ---- */
+	section(console, "20. chdir basic");
+
+	{
+		int32_t r = panutisysf_chdir("/testdir");
+		check_is_success(console, "chdir /testdir", r);
+	}
+	{
+		int32_t r = panutisysf_chdir("/no/such/dir");
+		check(console, "chdir /no/such/dir -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+	}
+
+	/* ---- 21. chdir to a file ---- */
+	section(console, "21. chdir to a file");
+
+	{
+		int fd = panutisysf_open("/dvc/console");
+		/* can't chdir to a file; open gives us an fd but the path is a device inode */
+		panutisysf_close(fd);
+		int32_t r = panutisysf_chdir("/dvc/console");
+		check(console, "chdir /dvc/console -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
+	}
+
+	/* ---- 22. chdir relative path ---- */
+	section(console, "22. chdir relative path");
+
+	{
+		/* we should be in /testdir from test 20 */
+		int32_t r = panutisysf_mkdir("/testdir/sub");
+		check_is_success(console, "mkdir /testdir/sub", r);
+		r = panutisysf_chdir("sub");
+		check_is_success(console, "chdir \"sub\" (relative)", r);
+		/* create something to prove we're in /testdir/sub */
+		r = panutisysf_mkdir("proof");
+		check_is_success(console, "mkdir proof (inside /testdir/sub)", r);
+		/* go back to root */
+		r = panutisysf_chdir("/");
+		check_is_success(console, "chdir / (back to root)", r);
+	}
+
+	/* ---- 23. chdir garbage pointer ---- */
+	section(console, "23. chdir garbage pointer");
+
+	{
+		int32_t r = panuti_syscall(SYSHANDLER_CHDIR, 0xDEAD0000, 0, 0, 0);
+		check(console, "chdir(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+	}
+
+	/* ---- 24. unlink basic ---- */
+	section(console, "24. unlink basic");
+
+	{
+		int32_t r = panutisysf_mkdir("/unlink_test");
+		check_is_success(console, "mkdir /unlink_test", r);
+		r = panutisysf_unlink("/unlink_test");
+		check_is_success(console, "unlink /unlink_test", r);
+		/* should be gone now */
+		int fd = panutisysf_open("/unlink_test");
+		check(console, "open /unlink_test after unlink -> NOTFOUND", fd, PANUTIERRNO_NOTFOUND);
+	}
+
+	/* ---- 25. unlink non-existent ---- */
+	section(console, "25. unlink non-existent");
+
+	{
+		int32_t r = panutisysf_unlink("/no/such/thing");
+		check(console, "unlink /no/such/thing -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+	}
+
+	/* ---- 26. unlink root ---- */
+	section(console, "26. unlink root");
+
+	{
+		int32_t r = panutisysf_unlink("/");
+		/* root's "." entry can't be unlinked by name lookup (path parsing
+		   returns empty name) so this should be NOTFOUND */
+		check(console, "unlink \"/\" -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+	}
+
+	/* ---- 27. unlink then mkdir (reuse inode slot) ---- */
+	section(console, "27. unlink then mkdir (slot reuse)");
+
+	{
+		int32_t r = panutisysf_mkdir("/recycle");
+		check_is_success(console, "mkdir /recycle", r);
+		r = panutisysf_unlink("/recycle");
+		check_is_success(console, "unlink /recycle", r);
+		r = panutisysf_mkdir("/recycle");
+		check_is_success(console, "mkdir /recycle again", r);
+		r = panutisysf_unlink("/recycle");
+		check_is_success(console, "unlink /recycle again", r);
+	}
+
+	/* ---- 28. unlink with trailing slash ---- */
+	section(console, "28. unlink with trailing slash");
+
+	{
+		int32_t r = panutisysf_mkdir("/trail_test");
+		check_is_success(console, "mkdir /trail_test", r);
+		r = panutisysf_unlink("/trail_test/");
+		check_is_success(console, "unlink \"/trail_test/\" (trailing slash)", r);
+		int fd = panutisysf_open("/trail_test");
+		check(console, "open /trail_test after unlink -> NOTFOUND", fd, PANUTIERRNO_NOTFOUND);
+	}
+
+	/* ---- 29. unlink garbage pointer ---- */
+	section(console, "29. unlink garbage pointer");
+
+	{
+		int32_t r = panuti_syscall(SYSHANDLER_UNLINK, 0xDEAD0000, 0, 0, 0);
+		check(console, "unlink(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+	}
+
+	/* ---- 30. chdir + unlink interaction ---- */
+	section(console, "30. chdir + unlink interaction");
+
+	{
+		int32_t r = panutisysf_mkdir("/interact");
+		check_is_success(console, "mkdir /interact", r);
+		r = panutisysf_mkdir("/interact/child");
+		check_is_success(console, "mkdir /interact/child", r);
+		r = panutisysf_chdir("/interact/child");
+		check_is_success(console, "chdir /interact/child", r);
+		/* we are now inside the dir we're about to unlink from parent */
+		r = panutisysf_unlink("/interact/child");
+		check_is_success(console, "unlink /interact/child (while cwd inside it)", r);
+		/* cwd still points to the inode; it's just unlinked from parent */
+		/* go back to root so we don't confuse later tests */
+		panutisysf_chdir("/");
+	}
+
+	/* ---- 31. Open after full close cycle ---- */
+	section(console, "31. Sanity: open still works after all tests");
 
 	{
 		int fd = panutisysf_open("/dvc/console");

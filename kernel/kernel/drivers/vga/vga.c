@@ -16,7 +16,7 @@ static const handle_ops_t vga_file_ops = {
 	.read = op_not_supported_rw,
 	.write = vga_write,
 	.activate = op_not_supported_act,
-	.wait = op_not_supported_wait,
+	.ready = op_not_supported_rdy,
 	.close = op_not_supported_close,
 };
 

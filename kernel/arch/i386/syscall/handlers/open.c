@@ -32,6 +32,7 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	t->handles[des].type = n->type;
 	t->handles[des].impl = n->impl;
 	t->handles[des].ops = n->ops;
+	t->handles[des].inode = n;
 
 	n->refcount++;
 	return des;

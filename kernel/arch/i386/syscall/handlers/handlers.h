@@ -19,7 +19,7 @@ static inline bool is_user_range(const void* buf, size_t len) {
 	if (len == 0) return true;
 	uint32_t start = (uint32_t)buf;
 	uint32_t end = start + (uint32_t)len;
-	return start >= USER_SPACE_BASE && end <= USER_SPACE_END && end > start;
+	return start >= USER_SPACE_BASE && end >= start && end <= USER_SPACE_END;
 }
 
 // write to a handle
