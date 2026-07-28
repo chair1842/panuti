@@ -49,4 +49,10 @@ int32_t syshandler_mkdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // create a point with the curr proc as the owner
 int32_t syshandler_point_create(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// change the current working directory
+int32_t syshandler_chdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// unlink a name from a directory
+int32_t syshandler_unlink(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

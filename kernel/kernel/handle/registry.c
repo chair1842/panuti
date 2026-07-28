@@ -1,6 +1,8 @@
 #include <kernel/handle/registry.h>
 #include <string.h>
 
+static void registry_destroy(inode_t* inode);
+
 static inode_t inodes[MAX_INODES];
 static dirent_t dirents[MAX_DIRENTS];
 static inode_t* root;
@@ -174,8 +176,56 @@ inode_t* registry_find(const char* path) {
 	return walk(root, path, false, INODE_DIR);
 }
 
+static void registry_destroy(inode_t* inode) {
+	if (!inode || inode->refcount > 0) {
+		return;
+	}
+
+	if (inode->type == INODE_DIR) {
+		dirent_t* d = inode->children;
+		while (d) {
+			dirent_t* next = d->next;
+			if (d->inode != inode) {
+				inode_unref(d->inode);
+			}
+			d->in_use = false;
+			d = next;
+		}
+	}
+
+	inode->in_use = false;
+}
+
+dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len) {
+	if (!dir || dir->type != INODE_DIR || !name) {
+		return NULL;
+	}
+
+	dirent_t* prev = NULL;
+	dirent_t* curr = dir->children;
+
+	while (curr) {
+		if (strlen(curr->name) == len && strncmp(curr->name, name, len) == 0) {
+			if (prev) {
+				prev->next = curr->next;
+			} else {
+				dir->children = curr->next;
+			}
+
+			inode_unref(curr->inode);
+			curr->next = NULL;
+			return curr;
+		}
+		prev = curr;
+		curr = curr->next;
+	}
+
+	return NULL;
+}
+
 void inode_unref(inode_t* inode) {
 	if (--inode->refcount != 0) {
 		return;
 	}
+	registry_destroy(inode);
 }

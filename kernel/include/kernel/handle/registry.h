@@ -35,6 +35,7 @@ int registry_add(const char* path, inode_type_t type, void* impl, const handle_o
 inode_t* registry_resolve(inode_t* start, const char* path);
 inode_t* registry_find(const char* path);
 inode_t* registry_root(void);
+dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len);
 void inode_unref(inode_t* inode);
 
 #endif

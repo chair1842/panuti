@@ -5,6 +5,7 @@
 #include <kernel/handle/point.h>
 #include <kernel/sched/sched.h>
 #include <panuti/errno.h>
+#include <string.h>
 
 int32_t syshandler_point_create(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	(void)a2; (void)a3; (void)a4;
@@ -24,6 +25,7 @@ int32_t syshandler_point_create(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t 
 	int des = handle_alloc(t);
 	if (des < 0) {
 		point_destroy(p);
+		handle_free(t, des);
 		return PANUTIERRNO_NOFDS;
 	}
 	
@@ -36,6 +38,7 @@ int32_t syshandler_point_create(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t 
 	if (n->type != INODE_POINT) {
 		// and the point we just created had an identity crisis
 		point_destroy(p);
+		registry_unlink(t->cwd, path, strlen(path));
 		return PANUTIERRNO_PLAINERR;
 	}
 	
