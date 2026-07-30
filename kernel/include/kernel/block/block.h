@@ -8,22 +8,22 @@
 typedef struct block_dev block_dev_t;
 
 typedef struct {
-    int (*read)(void* impl, uint64_t block, void* buf, size_t count);
-    int (*write)(void* impl, uint64_t block, const void* buf, size_t count);
-    uint64_t (*count)(void* impl);
+	int (*read)(void* impl, uint64_t block, void* buf, size_t count);
+	int (*write)(void* impl, uint64_t block, const void* buf, size_t count);
+	uint64_t (*count)(void* impl);
 } block_ops_t;
 
 typedef enum {
-    BLOCK_OK = 0,
-    BLOCK_ERR_INVAL = -1,
-    BLOCK_ERR_IO = -2,
+	BLOCK_OK = 0,
+	BLOCK_ERR_INVAL = -1,
+	BLOCK_ERR_IO = -2,
 } block_err_t;
 
 struct block_dev {
-    const block_ops_t* ops;
-    void* impl;
-    uint32_t block_size;
-    uint64_t block_count;
+	const block_ops_t* ops;
+	void* impl;
+	uint32_t block_size;
+	uint64_t block_count;
 };
 
 extern const handle_ops_t block_handle_ops;
