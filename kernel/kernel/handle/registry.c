@@ -193,6 +193,24 @@ int registry_mount(const char* path, const fs_ops_t* fs_ops, void* fs_impl) {
 	return 0;
 }
 
+int registry_unmount(const char* path) {
+	if (!path) {
+		return -1;
+	}
+
+	inode_t* n = walk(root, path, false, INODE_DIR);
+	if (!n || n->type != INODE_DIR) {
+		return -1;
+	}
+	if (!n->fs_ops) {
+		return -1; // not mounted
+	}
+
+	n->fs_ops = NULL;
+	n->fs_impl = NULL;
+	return 0;
+}
+
 inode_t* registry_resolve(inode_t* start, const char* path) {
 	return walk(start, path, false, INODE_DIR); 
 }
