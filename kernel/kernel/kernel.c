@@ -7,6 +7,7 @@
 #include <kernel/boot_mod.h>
 #include <kernel/kpanic.h>
 #include "drivers/vga/vga.h"
+#include "drivers/ramblock/ramblock.h"
 
 static void idle_task_entry(void) {
     while (1) {
@@ -20,6 +21,7 @@ void kernel_main(void) {
 	
 	registry_mkdir("/dvc");
 	vga_register_console();
+	ramblock_init("/dvc/ram0", 512, 1024);
 
 	const void* elf_data;
 	size_t elf_size;
