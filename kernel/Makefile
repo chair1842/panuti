@@ -42,7 +42,8 @@ kernel/memman/tempmap.o \
 kernel/handle/handle.o \
 kernel/handle/registry.o \
 kernel/drivers/vga/vga.o \
-kernel/handle/point.o
+kernel/handle/point.o \
+kernel/handle/fs.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

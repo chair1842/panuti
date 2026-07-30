@@ -2,6 +2,7 @@
 #define _KERNEL_HANDLE_REGISTRY_H
 
 #include <kernel/handle/handle.h>
+#include <kernel/handle/fs.h>
 #include <stdbool.h>
 #include <kernel/handle/inode_type.h>
 
@@ -27,6 +28,10 @@ typedef struct inode {
 
 	// dir-only
 	dirent_t* children;
+
+	// filesystem attachment
+	const fs_ops_t* fs_ops;
+	void* fs_impl;
 } inode_t;
 
 void registry_init(void);
@@ -35,7 +40,9 @@ int registry_add(const char* path, inode_type_t type, void* impl, const handle_o
 inode_t* registry_resolve(inode_t* start, const char* path);
 inode_t* registry_find(const char* path);
 inode_t* registry_root(void);
+inode_t* registry_inode_alloc(inode_type_t type);
 dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len);
 void inode_unref(inode_t* inode);
+int registry_mount(const char* path, const fs_ops_t* fs_ops, void* fs_impl);
 
 #endif

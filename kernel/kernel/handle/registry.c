@@ -7,7 +7,7 @@ static inode_t inodes[MAX_INODES];
 static dirent_t dirents[MAX_DIRENTS];
 static inode_t* root;
 
-static inode_t* inode_alloc(inode_type_t type) {
+inode_t* registry_inode_alloc(inode_type_t type) {
 	for (int i = 0; i < MAX_INODES; i++) {
 		if (!inodes[i].in_use) {
 			inodes[i].in_use = true;
@@ -16,6 +16,8 @@ static inode_t* inode_alloc(inode_type_t type) {
 			inodes[i].impl = NULL;
 			inodes[i].ops = NULL;
 			inodes[i].children = NULL;
+			inodes[i].fs_ops = NULL;
+			inodes[i].fs_impl = NULL;
 			return &inodes[i];
 		}
 	}
@@ -76,7 +78,7 @@ void registry_init(void) {
 		dirents[i].in_use = false;
 	}
 
-	root = inode_alloc(INODE_DIR);
+	root = registry_inode_alloc(INODE_DIR);
 	// root is its own parent, by convention
 	link_dirent(root, ".", 1, root);
 	link_dirent(root, "..", 2, root);
@@ -114,10 +116,15 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 		}
 
 		dirent_t* d = find_dirent(current, seg_start, len);
+		inode_t* child = d ? d->inode : NULL;
 
-		if (!d) {
+		if (!child && current->fs_ops && current->fs_ops->lookup) {
+			child = current->fs_ops->lookup(current->fs_impl, current, seg_start, len);
+		}
+
+		if (!child) {
 			if (is_last && create_last) {
-				inode_t* new_inode = inode_alloc(create_type);
+				inode_t* new_inode = registry_inode_alloc(create_type);
 				if (!new_inode) {
 					return NULL;
 				}
@@ -139,7 +146,7 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 			return NULL; // name collision
 		}
 
-		current = d->inode;
+		current = child;
 		if (*p == '/') {
 			p++;
 		}
@@ -165,6 +172,24 @@ int registry_add(const char* path, inode_type_t type, void* impl, const handle_o
 	
 	n->impl = impl;
 	n->ops = ops;
+	return 0;
+}
+
+int registry_mount(const char* path, const fs_ops_t* fs_ops, void* fs_impl) {
+	if (!fs_ops) {
+		return -1;
+	}
+
+	inode_t* n = walk(root, path, false, INODE_DIR);
+	if (!n || n->type != INODE_DIR) {
+		return -1;
+	}
+	if (n->fs_ops) {
+		return -1; // already mounted
+	}
+
+	n->fs_ops = fs_ops;
+	n->fs_impl = fs_impl;
 	return 0;
 }
 
