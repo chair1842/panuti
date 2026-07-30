@@ -1,6 +1,7 @@
 #include "syscall.h"
 #include "../msr.h"
 #include <panuti/errno.h>
+#include <panuti/syscall/syscallno.h>
 #include "handlers/handlers.h"
 
 #define KERNEL_CODE_SEL 0x08
@@ -20,6 +21,7 @@ syscall_handler_t syscall_handlers[256] = {
 	[SYSHANDLER_MKDIR] = syshandler_mkdir,
 	[SYSHANDLER_CHDIR] = syshandler_chdir,
 	[SYSHANDLER_UNLINK] = syshandler_unlink,
+	[SYSHANDLER_POINT_CREATE] = syshandler_point_create,
 };
 
 void sysenter_init(void) {
