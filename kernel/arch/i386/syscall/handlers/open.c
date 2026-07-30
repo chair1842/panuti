@@ -1,6 +1,7 @@
 #include <kernel/handle/handle.h>
 #include <kernel/handle/registry.h>
 #include <kernel/handle/fs.h>
+#include <kernel/block/block.h>
 #include <kernel/sched/task.h>
 #include <kernel/sched/sched.h>
 #include <panuti/errno.h>
@@ -28,6 +29,20 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	int des = handle_alloc(t);
 	if (des < 0) {
 		return PANUTIERRNO_NOFDS;
+	}
+
+	if (n->type == INODE_BLOCK) {
+		void* bh = block_open_handle((block_dev_t*)n->impl);
+		if (!bh) {
+			handle_free(t, des);
+			return PANUTIERRNO_PLAINERR;
+		}
+		t->handles[des].type = n->type;
+		t->handles[des].impl = bh;
+		t->handles[des].ops = &block_handle_ops;
+		t->handles[des].inode = n;
+		n->refcount++;
+		return des;
 	}
 
 	if (n->fs_ops) {

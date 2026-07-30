@@ -43,7 +43,8 @@ kernel/handle/handle.o \
 kernel/handle/registry.o \
 kernel/drivers/vga/vga.o \
 kernel/handle/point.o \
-kernel/handle/fs.o
+kernel/handle/fs.o \
+kernel/block/block.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \
