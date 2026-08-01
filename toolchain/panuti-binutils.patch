@@ -1,0 +1,96 @@
+diff --git a/.gitignore b/.gitignore
+index 7f1c81e00c..89a77fec88 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -76,3 +76,5 @@ stamp-*
+ /gmp*
+ /isl*
+ /gettext*
++
++/build/
+diff --git a/bfd/config.bfd b/bfd/config.bfd
+index 4dde5321f2..f76fcc4328 100644
+--- a/bfd/config.bfd
++++ b/bfd/config.bfd
+@@ -666,6 +666,11 @@ case "${targ}" in
+     targ_selvecs=
+     targ64_selvecs=x86_64_elf64_vec
+     ;;
++  i[3-7]86-*-panuti)
++    targ_defvec=i386_elf32_vec
++    targ_selvecs=
++    targ64_selvecs=x86_64_elf64_vec
++    ;;
+ #ifdef BFD64
+   x86_64-*-darwin*)
+     targ_defvec=x86_64_mach_o_vec
+diff --git a/config.sub b/config.sub
+index 3d35cde174..a7643d7510 100755
+--- a/config.sub
++++ b/config.sub
+@@ -2087,6 +2087,7 @@ case $os in
+ 	| oskit* \
+ 	| osx* \
+ 	| palmos* \
++	| panuti* \
+ 	| phoenix* \
+ 	| plan9* \
+ 	| powermax* \
+diff --git a/gas/configure.tgt b/gas/configure.tgt
+index f0ea55d9de..01bb4fddbc 100644
+--- a/gas/configure.tgt
++++ b/gas/configure.tgt
+@@ -250,6 +250,7 @@ case ${generic_target} in
+   i386-*-gnu*)				fmt=elf em=gnu ;;
+   i386-*-msdos*)			fmt=aout ;;
+   i386-*-moss*)				fmt=elf ;;
++  i386-*-panuti*)                       fmt=elf ;;
+   i386-*-pe)				fmt=coff em=pe ;;
+   i386-*-cygwin*)
+    case ${cpu} in
+diff --git a/ld/Makefile.am b/ld/Makefile.am
+index c219662d2e..be8de3032b 100644
+--- a/ld/Makefile.am
++++ b/ld/Makefile.am
+@@ -279,6 +279,7 @@ ALL_EMULATION_SOURCES = \
+ 	eelf_i386_be.c \
+ 	eelf_i386_fbsd.c \
+ 	eelf_i386_haiku.c \
++	eelf_i386_panuti.c \
+ 	eelf_i386_sol2.c \
+ 	eelf_i386_vxworks.c \
+ 	eelf_iamcu.c \
+diff --git a/ld/Makefile.in b/ld/Makefile.in
+index f1ba6af526..1dcb92c6a4 100644
+--- a/ld/Makefile.in
++++ b/ld/Makefile.in
+@@ -794,6 +794,7 @@ ALL_EMULATION_SOURCES = \
+ 	eelf_i386_be.c \
+ 	eelf_i386_fbsd.c \
+ 	eelf_i386_haiku.c \
++	eelf_i386_panuti.c \
+ 	eelf_i386_sol2.c \
+ 	eelf_i386_vxworks.c \
+ 	eelf_iamcu.c \
+@@ -1474,6 +1475,7 @@ distclean-compile:
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_be.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_fbsd.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_haiku.Po@am__quote@
++@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_panuti.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_sol2.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_i386_vxworks.Po@am__quote@
+ @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eelf_iamcu.Po@am__quote@
+diff --git a/ld/configure.tgt b/ld/configure.tgt
+index 3e158913b8..ea393302fb 100644
+--- a/ld/configure.tgt
++++ b/ld/configure.tgt
+@@ -407,6 +407,9 @@ i[3-7]86-*-moss*)	targ_emul=i386moss
+ i[3-7]86-*-winnt*)	targ_emul=i386pe ;
+ 			targ_extra_ofiles="deffilep.o pdb.o pe-dll.o"
+ 			;;
++i[3-7]86-*-panuti)	targ_emul=elf_i386_panuti
++			targ_extra_emuls=elf_i386
++			;;
+ i[3-7]86-*-pe)		targ_emul=i386pe ;
+ 			targ_extra_ofiles="deffilep.o pdb.o pe-dll.o"
+ 			;;
