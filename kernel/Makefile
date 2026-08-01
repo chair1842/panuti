@@ -45,7 +45,8 @@ kernel/drivers/vga/vga.o \
 kernel/drivers/ramblock/ramblock.o \
 kernel/handle/point.o \
 kernel/handle/fs.o \
-kernel/block/block.o
+kernel/block/block.o \
+kernel/fs/fatfs/fatfs.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

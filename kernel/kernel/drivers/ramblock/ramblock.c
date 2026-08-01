@@ -12,14 +12,20 @@ typedef struct {
 
 static int ramblock_read(void* impl, uint64_t block, void* buf, size_t count) {
 	ramblock_t* rb = (ramblock_t*)impl;
-	if (block + count > rb->block_count) return BLOCK_ERR_INVAL;
+	if (block + count > rb->block_count) {
+		return BLOCK_ERR_INVAL;
+	}
+	
 	memcpy(buf, rb->buffer + block * rb->block_size, count * rb->block_size);
 	return BLOCK_OK;
 }
 
 static int ramblock_write(void* impl, uint64_t block, const void* buf, size_t count) {
 	ramblock_t* rb = (ramblock_t*)impl;
-	if (block + count > rb->block_count) return BLOCK_ERR_INVAL;
+	if (block + count > rb->block_count) {
+		return BLOCK_ERR_INVAL;
+	}
+	
 	memcpy(rb->buffer + block * rb->block_size, buf, count * rb->block_size);
 	return BLOCK_OK;
 }
@@ -37,7 +43,9 @@ static const block_ops_t ramblock_ops = {
 
 void ramblock_init(const char* path, uint32_t block_size, uint64_t block_count) {
 	ramblock_t* rb = kmalloc(sizeof(ramblock_t), alignof(ramblock_t));
-	if (!rb) return;
+	if (!rb) {
+		return;
+	}
 
 	rb->buffer = kmalloc((size_t)block_size * (size_t)block_count, 1);
 	if (!rb->buffer) {
