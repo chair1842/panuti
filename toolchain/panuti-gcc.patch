@@ -35,10 +35,10 @@ index 7112f4dcd64..85ba0953251 100755
      *-mingw32* | \
      powerpc-*-eabisim* | \
 diff --git a/gcc/config.gcc b/gcc/config.gcc
-index fabd5f75f96..657387e13ec 100644
+index 743421768ea..44c2352b53d 100644
 --- a/gcc/config.gcc
 +++ b/gcc/config.gcc
-@@ -771,6 +771,13 @@ x86_cpus="generic intel"
+@@ -776,6 +776,13 @@ x86_cpus="generic intel"
  
  # Common parts for widely ported systems.
  case ${target} in
@@ -52,7 +52,7 @@ index fabd5f75f96..657387e13ec 100644
  *-*-darwin*)
    tmake_file="t-darwin "
    tm_file="${tm_file} darwin.h"
-@@ -2180,6 +2187,9 @@ i[34567]86-*-nto-qnx*)
+@@ -2184,6 +2191,9 @@ i[34567]86-*-nto-qnx*)
  	gnu_ld=yes
  	gas=yes
  	;;
@@ -62,11 +62,39 @@ index fabd5f75f96..657387e13ec 100644
  i[34567]86-*-rtems*)
  	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h i386/i386elf.h i386/rtemself.h rtems.h newlib-stdint.h"
  	tmake_file="${tmake_file} i386/t-rtems"
+diff --git a/gcc/config/panuti.h b/gcc/config/panuti.h
+new file mode 100644
+index 00000000000..5998e86c4f3
+--- /dev/null
++++ b/gcc/config/panuti.h
+@@ -0,0 +1,22 @@
++#undef TARGET_PANUTI
++#define TARGET_PANUTI 1
++
++#undef LIB_SPEC
++#define LIB_SPEC "-lc" /* link against C standard library */
++
++/* Files that are linked before user code.
++   The %s tells GCC to look for these files in the library directory. */
++#undef STARTFILE_SPEC
++#define STARTFILE_SPEC "crt0.o%s crti.o%s crtbegin.o%s"
++
++/* Files that are linked after user code. */
++#undef ENDFILE_SPEC
++#define ENDFILE_SPEC "crtend.o%s crtn.o%s"
++
++/* Additional predefined macros. */
++#undef TARGET_OS_CPP_BUILTINS
++#define TARGET_OS_CPP_BUILTINS()      \
++  do {                                \
++    builtin_define ("__myos__");      \
++    builtin_assert ("system=myos");   \
++  } while(0);
 diff --git a/libgcc/config.host b/libgcc/config.host
-index 046156fa5e7..ebbe3bb2fab 100644
+index c725c9effca..eb50f853b78 100644
 --- a/libgcc/config.host
 +++ b/libgcc/config.host
-@@ -395,6 +395,10 @@ aarch64*-*-elf | aarch64*-*-rtems*)
+@@ -399,6 +399,10 @@ aarch64*-*-elf | aarch64*-*-rtems*)
  	md_unwind_def_header=aarch64/aarch64-unwind-def.h
  	md_unwind_header=aarch64/aarch64-unwind.h
  	;;
@@ -78,15 +106,15 @@ index 046156fa5e7..ebbe3bb2fab 100644
  	extra_parts="$extra_parts crtfastmath.o"
  	tmake_file="${tmake_file} ${cpu_type}/t-aarch64"
 diff --git a/libstdc++-v3/configure b/libstdc++-v3/configure
-index 7c921ed282a..cd85d4c10f3 100755
+index 5a8d4ae0992..089142835bb 100755
 --- a/libstdc++-v3/configure
 +++ b/libstdc++-v3/configure
-@@ -46317,6 +46317,3226 @@ _ACEOF
+@@ -46315,6 +46315,3226 @@ _ACEOF
  fi
  done
  
 +    ;;
-+  *-myos*)
++  *-panuti*)
 +
 +  # All these tests are for C++; save the language and the compiler flags.
 +  # The CXXFLAGS thing is suspicious, but based on similar bits previously
@@ -243,8 +271,8 @@ index 7c921ed282a..cd85d4c10f3 100755
 +      rm -f conftest.c
 +      touch conftest.c
 +      if $CC -c conftest.c; then
-+	if $LD --gc-sections -o conftest conftest.o 2>&1 | \
-+	   grep "Warning: gc-sections option ignored" > /dev/null; then
++	if LC_ALL=C $LD --gc-sections -o conftest conftest.o 2>&1 | \
++	   grep "[Ww]arning: gc-sections option ignored" > /dev/null; then
 +	  ac_gcsections=no
 +	fi
 +      fi
@@ -3308,24 +3336,42 @@ index 7c921ed282a..cd85d4c10f3 100755
      ;;
    *-qnx6.1* | *-qnx6.2*)
      SECTION_FLAGS='-ffunction-sections -fdata-sections'
-@@ -54158,7 +57378,7 @@ $as_echo "$glibcxx_cv_libbacktrace_atomics" >&6; }
+@@ -54156,7 +57376,7 @@ $as_echo "$glibcxx_cv_libbacktrace_atomics" >&6; }
      CXXFLAGS='-O0 -S'
  
      cat > conftest.$ac_ext << EOF
--#line 54161 "configure"
-+#line 57381 "configure"
+-#line 54159 "configure"
++#line 57379 "configure"
  #include <stddef.h>
  int main()
  {
 diff --git a/libstdc++-v3/crossconfig.m4 b/libstdc++-v3/crossconfig.m4
-index b3269cb88e0..b57d4223ed4 100644
+index b3269cb88e0..df836f4ed15 100644
 --- a/libstdc++-v3/crossconfig.m4
 +++ b/libstdc++-v3/crossconfig.m4
-@@ -219,6 +219,12 @@ case "${host}" in
+@@ -90,7 +90,7 @@ case "${host}" in
+ 
+   *-freebsd*)
+     SECTION_FLAGS='-ffunction-sections -fdata-sections'
+-    AC_SUBST(SECTION_FLAGS) 
++    AC_SUBST(SECTION_FLAGS)
+     GLIBCXX_CHECK_LINKER_FEATURES
+     AC_DEFINE(HAVE_SETENV)
+     AC_DEFINE(HAVE_FINITEF)
+@@ -200,7 +200,7 @@ case "${host}" in
+     ;;
+   *-netbsd* | *-openbsd*)
+     SECTION_FLAGS='-ffunction-sections -fdata-sections'
+-    AC_SUBST(SECTION_FLAGS) 
++    AC_SUBST(SECTION_FLAGS)
+     GLIBCXX_CHECK_LINKER_FEATURES
+     AC_DEFINE(HAVE_FINITEF)
+     AC_DEFINE(HAVE_FINITE)
+@@ -219,9 +219,15 @@ case "${host}" in
      AC_CHECK_FUNCS(timespec_get)
      AC_CHECK_FUNCS(sockatmark)
      ;;
-+  *-myos*)
++  *-panuti*)
 +    GLIBCXX_CHECK_COMPILER_FEATURES
 +    GLIBCXX_CHECK_LINKER_FEATURES
 +    GLIBCXX_CHECK_MATH_SUPPORT
@@ -3333,4 +3379,8 @@ index b3269cb88e0..b57d4223ed4 100644
 +    ;;
    *-qnx6.1* | *-qnx6.2*)
      SECTION_FLAGS='-ffunction-sections -fdata-sections'
-     AC_SUBST(SECTION_FLAGS) 
+-    AC_SUBST(SECTION_FLAGS) 
++    AC_SUBST(SECTION_FLAGS)
+     GLIBCXX_CHECK_LINKER_FEATURES
+     AC_DEFINE(HAVE_COSF)
+     AC_DEFINE(HAVE_COSL)
