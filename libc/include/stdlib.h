@@ -13,6 +13,12 @@ void abort(void);
 
 void free(void* ptr);
 void* malloc(size_t size);
+void* calloc(size_t nmemb, size_t size);
+
+int atexit(void (*func)(void));
+int atoi(const char*);
+char* getenv(const char*);
+int abs(int);
 
 #ifdef __cplusplus
 }
