@@ -37,6 +37,8 @@ make install -j$(nproc)
 
 ## gcc
 
+you must have the panuti repo cloned in your machine already for this/
+
 ### patching
 
 1. clone `https://gcc.gnu.org/git/gcc.git`
@@ -54,6 +56,14 @@ then run `../configure --target=i686-panuti --prefix="$HOME/.local/cross" --with
 $HOME/panuti is where the panuti repo is located so change that to wherever you have the repo cloned to.
 
 $HOME/.local/cross is where the toolchain is installed to, so preferably add "your-prefix/bin" to your PATH.
+
+### copying headers to sysroot
+
+This step is required for building.
+
+if you dont do this step, you will get a bunch of annoying errors about missing headers and not build at all and then you have to do this step anyway.
+
+in the panuti repo, run `./headers.sh` to copy headers to sysroot/ so that they can be used
 
 ### building
 
