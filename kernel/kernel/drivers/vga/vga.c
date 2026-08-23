@@ -21,5 +21,5 @@ static const handle_ops_t vga_file_ops = {
 };
 
 void vga_register_console(void) {
-	registry_add("/dvc/console", INODE_PIPE, NULL, &vga_file_ops);
+	registry_add("/dvc/console", INODE_FILE, NULL, &vga_file_ops);
 }

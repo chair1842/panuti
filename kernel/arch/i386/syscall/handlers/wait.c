@@ -2,7 +2,6 @@
 #include <kernel/sched/sched.h>
 #include <panuti/errno.h>
 #include "handlers.h"
-#include <kernel/handle/point.h>
 
 // returns: 1 = found ready fd (written to *fired_fd), 0 = none ready, -1 = no fds support waiting
 static int wait_scan(task_t* task, int* fds, size_t count, int* fired_fd) {
@@ -29,11 +28,6 @@ static int wait_scan(task_t* task, int* fds, size_t count, int* fired_fd) {
         any_supported = 1;
 
         if (rdy > 0) {
-            if (h->type == INODE_POINT) {
-                point_t* point = h->impl;
-                point->pending = false;
-            }
-
             *fired_fd = fd;
             return 1;
         }

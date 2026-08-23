@@ -43,7 +43,6 @@ kernel/handle/handle.o \
 kernel/handle/registry.o \
 kernel/drivers/vga/vga.o \
 kernel/drivers/ramblock/ramblock.o \
-kernel/handle/point.o \
 kernel/handle/fs.o \
 kernel/block/block.o \
 kernel/fs/fatfs/fatfs.o

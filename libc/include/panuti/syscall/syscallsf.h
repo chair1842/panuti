@@ -37,10 +37,6 @@ static inline int32_t panutisysf_mkdir(const char* path) {
 	return panuti_syscall(SYSHANDLER_MKDIR, (uint32_t)path, 0, 0, 0);
 }
 
-static inline int32_t panutisysf(const char* path) {
-	return panuti_syscall(SYSHANDLER_POINT_CREATE, (uint32_t)path, 0, 0, 0);
-}
-
 static inline int32_t panutisysf_chdir(const char* path) {
 	return panuti_syscall(SYSHANDLER_CHDIR, (uint32_t)path, 0, 0, 0);
 }

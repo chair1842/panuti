@@ -21,7 +21,6 @@ syscall_handler_t syscall_handlers[256] = {
 	[SYSHANDLER_MKDIR] = syshandler_mkdir,
 	[SYSHANDLER_CHDIR] = syshandler_chdir,
 	[SYSHANDLER_UNLINK] = syshandler_unlink,
-	[SYSHANDLER_POINT_CREATE] = syshandler_point_create,
 };
 
 void sysenter_init(void) {
