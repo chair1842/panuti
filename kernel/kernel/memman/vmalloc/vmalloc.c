@@ -30,6 +30,51 @@ void* vmalloc_pg(void) {
 	return (void*)virt;
 }
 
+static uint32_t irq_save_disable(void) {
+	uint32_t flags;
+	__asm__ __volatile__("pushf\n\tpop %0\n\tcli" : "=r"(flags) :: "memory");
+	return flags;
+}
+
+static void irq_restore(uint32_t flags) {
+	__asm__ __volatile__("push %0\n\tpopf" :: "r"(flags) : "memory", "cc");
+}
+
+// Maps `npages` consecutive virtual pages (fresh physical frames each) in one
+// atomic step so concurrent callers can never interleave and fragment the range.
+void* vmalloc_pages(uint32_t npages) {
+	if (npages == 0 || npages > 65536) {
+		return NULL;
+	}
+
+	uint32_t flags = irq_save_disable();
+	uint32_t base = vmalloc_next;
+
+	for (uint32_t i = 0; i < npages; i++) {
+		uint32_t phys = memman_alloc_frame();
+		if (phys == 0) {
+			while (i > 0) {
+				i--;
+				vmalloc_free((void*)(base + i * 4096));
+			}
+			irq_restore(flags);
+			return NULL;
+		}
+		memman_map(base + i * 4096, phys, PAGE_PRESENT | PAGE_RW);
+	}
+
+	vmalloc_next += npages * 4096;
+	irq_restore(flags);
+
+	return (void*)base;
+}
+
+void vmalloc_free_pages(void* addr, uint32_t npages) {
+	for (uint32_t i = 0; i < npages; i++) {
+		vmalloc_free((void*)((uint32_t)addr + i * 4096));
+	}
+}
+
 void vmalloc_free(void* addr) {
 	uint32_t virt = (uint32_t)addr;
 	uint32_t phys = memman_get_phys(virt);

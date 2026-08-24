@@ -29,7 +29,7 @@ void pit_init(uint32_t freq) {
 		divisor = 1;
 	}
 
-	// Set PIT to mode 2 (rate generator)
+	// Set PIT to mode 3 (square wave generator)
 	outb(PIT_COMMAND, PIT_MODE);
 	outb(PIT_CHANNEL0, divisor & 0xFF);	  // low byte
 	outb(PIT_CHANNEL0, divisor >> 8);		// high byte

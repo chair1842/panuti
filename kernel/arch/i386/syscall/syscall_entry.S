@@ -20,6 +20,11 @@ sysenter_entry:
 	pushl $0x10
 	pop %gs
 
+	# SYSENTER cleared IF, and SYSEXIT does not restore EFLAGS. Re-enable
+	# interrupts here: it makes the syscall preemptible by the PIT scheduler
+	# AND ensures user mode resumes with IF=1.
+	sti
+
 	# cdecl call: syscall_dispatch(num, a1, a2, a3, a4), push right-to-left
 	push %ebp
 	push %edi

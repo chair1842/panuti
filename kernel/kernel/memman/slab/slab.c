@@ -39,6 +39,25 @@ static kmallocCache_t caches[] = {
 #define NUM_CACHES (sizeof(caches) / sizeof(caches[0]))
 #define PAGE_SIZE 4096
 
+// Allocations larger than a page: vmalloc_pages() hands out the first page as
+// a header (magic + page count) and kmalloc returns base + PAGE_SIZE, which is
+// still page-aligned so any alignment request up to PAGE_SIZE is satisfied.
+// The registry below maps each returned pointer back to its range at kfree()
+// time; slab objects are never page-aligned and single-page vmalloc_pg()
+// allocations carry no header, so an exact match here is unambiguous.
+#define BIG_ALLOC_MAGIC 0xB10CA110
+#define MAX_BIG_ALLOCS 64
+
+typedef struct {
+	uint32_t magic;
+	uint32_t npages;
+} big_alloc_hdr_t;
+
+static struct {
+	uint32_t vaddr;
+	uint32_t npages;
+} big_allocs[MAX_BIG_ALLOCS];
+
 static uint32_t align_up(uint32_t value, uint32_t alignment) {
 	return (value + alignment - 1) & ~(alignment - 1);
 }
@@ -97,13 +116,46 @@ void* kmalloc(uint32_t size, uint32_t align) {
 	if (align == 0) {
 		align = 1;
 	}
-	
+
 	if (size > 2048) {
-		if (size > 4096) {
+		if (align > PAGE_SIZE) {
 			return NULL;
 		}
-		
-		return vmalloc_pg();
+
+		if (size <= PAGE_SIZE) {
+			return vmalloc_pg();
+		}
+
+		uint32_t npages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
+		void* range = vmalloc_pages(npages + 1);
+		if (!range) {
+			klog(KLOG_WARN, "kmalloc(%u): multi-page allocation failed\n", size);
+			return NULL;
+		}
+
+		int slot = -1;
+		for (uint32_t i = 0; i < MAX_BIG_ALLOCS; i++) {
+			if (big_allocs[i].vaddr == 0) {
+				slot = (int)i;
+				break;
+			}
+		}
+		if (slot < 0) {
+			klog(KLOG_WARN, "kmalloc(%u): big_alloc registry full\n", size);
+			vmalloc_free_pages(range, npages + 1);
+			return NULL;
+		}
+
+		big_alloc_hdr_t* hdr = (big_alloc_hdr_t*)range;
+		hdr->magic = BIG_ALLOC_MAGIC;
+		hdr->npages = npages;
+
+		uint32_t data_vaddr = (uint32_t)range + PAGE_SIZE;
+		big_allocs[slot].vaddr = data_vaddr;
+		big_allocs[slot].npages = npages + 1;
+
+		memset((void*)data_vaddr, 0, npages * PAGE_SIZE);
+		return (void*)data_vaddr;
 	}
 
 	kmallocCache_t* cache = cache_for(size, align);
@@ -144,6 +196,13 @@ void kfree(void* ptr) {
 
 	if (slab->magic != SLAB_MAGIC) {
 		if (((uint32_t)ptr & (PAGE_SIZE - 1)) == 0) {
+			for (uint32_t i = 0; i < MAX_BIG_ALLOCS; i++) {
+				if (big_allocs[i].vaddr == (uint32_t)ptr) {
+					vmalloc_free_pages((void*)((uint32_t)ptr - PAGE_SIZE), big_allocs[i].npages);
+					big_allocs[i].vaddr = 0;
+					return;
+				}
+			}
 			vmalloc_free(ptr);
 		}
 		return;

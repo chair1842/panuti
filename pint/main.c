@@ -15,7 +15,7 @@ static void write_str(int fd, const char* s) {
 
 static void write_int(int fd, int n) {
 	char buf[16];
-	int i = 0;
+	int i = 15;
 	int neg = 0;
 	uint32_t val;
 	if (n < 0) {
@@ -25,28 +25,17 @@ static void write_int(int fd, int n) {
 		val = (uint32_t)n;
 	}
 	if (val == 0) {
-		buf[i++] = '0';
+		buf[--i] = '0';
 	} else {
-		char tmp[16];
-		int j = 0;
 		while (val > 0) {
-			tmp[j++] = '0' + (val % 10);
+			buf[--i] = '0' + (char)(val % 10);
 			val /= 10;
-		}
-		while (j > 0) {
-			buf[i++] = tmp[--j];
 		}
 	}
 	if (neg) {
-		buf[i++] = '-';
+		buf[--i] = '-';
 	}
-	/* reverse */
-	for (int s = 0, e = i - 1; s < e; s++, e--) {
-		char t = buf[s];
-		buf[s] = buf[e];
-		buf[e] = t;
-	}
-	panutisysf_write(fd, buf, (size_t)i);
+	panutisysf_write(fd, buf + i, (size_t)(16 - i));
 }
 
 static void check(int fd, const char* name, int32_t got, int32_t expect) {
@@ -290,8 +279,9 @@ int main(void) {
 		check(console, "syscall(255) -> INVALIDSYSCALL", r, PANUTIERRNO_INVALIDSYSCALL);
 	}
 	{
-		int32_t r = panuti_syscall(8, 0, 0, 0, 0);
-		check(console, "syscall(8) (unimplemented) -> INVALIDSYSCALL", r, PANUTIERRNO_INVALIDSYSCALL);
+		/* 8 is CHDIR (implemented); use a number past the dispatch table */
+		int32_t r = panuti_syscall(10, 0, 0, 0, 0);
+		check(console, "syscall(10) (unimplemented) -> INVALIDSYSCALL", r, PANUTIERRNO_INVALIDSYSCALL);
 	}
 
 	/* ---- 12. Double-close recovery ---- */

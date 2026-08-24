@@ -1,5 +1,6 @@
 #include <kernel/block/block.h>
 #include <kernel/memman/slab.h>
+#include <kernel/klog.h>
 #include <stdalign.h>
 #include <string.h>
 #include "ramblock.h"
@@ -44,12 +45,15 @@ static const block_ops_t ramblock_ops = {
 void ramblock_init(const char* path, uint32_t block_size, uint64_t block_count) {
 	ramblock_t* rb = kmalloc(sizeof(ramblock_t), alignof(ramblock_t));
 	if (!rb) {
+		klog(KLOG_WARN, "ramblock_init(%s): kmalloc failed\n", path);
 		return;
 	}
 
 	rb->buffer = kmalloc((size_t)block_size * (size_t)block_count, 1);
 	if (!rb->buffer) {
 		kfree(rb);
+		klog(KLOG_WARN, "ramblock_init(%s): buffer kmalloc failed (%u KiB)\n",
+			 path, (uint32_t)(((uint64_t)block_size * block_count) / 1024));
 		return;
 	}
 
@@ -58,4 +62,6 @@ void ramblock_init(const char* path, uint32_t block_size, uint64_t block_count) 
 	rb->block_count = block_count;
 
 	block_register(path, &ramblock_ops, rb, block_size, block_count);
+	klog(KLOG_INFO, "ramblock: %s registered (%u blocks x %u bytes)\n",
+		 path, (uint32_t)block_count, block_size);
 }
