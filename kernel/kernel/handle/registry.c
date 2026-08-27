@@ -160,6 +160,50 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 }
 
 int registry_mkdir(const char* path) {
+	if (!path || path[0] == '\0') {
+		return -1;
+	}
+
+	size_t len = strlen(path);
+	while (len > 1 && path[len - 1] == '/') {
+		len--;
+	}
+
+	const char* last = path + len;
+	while (last > path && *(last - 1) != '/') {
+		last--;
+	}
+
+	size_t namelen = (size_t)((path + len) - last);
+	if (namelen == 0) {
+		return -1;
+	}
+
+	inode_t* parent;
+	if (last == path) {
+		parent = root;
+	} else {
+		char buf[128];
+		size_t plen = (size_t)(last - path);
+		if (plen >= sizeof(buf)) {
+			return -1;
+		}
+		memcpy(buf, path, plen);
+		buf[plen] = '\0';
+		parent = registry_resolve(root, buf);
+	}
+
+	if (!parent || parent->type != INODE_DIR) {
+		return -1;
+	}
+
+	if (parent->fs_ops && parent->fs_ops->create) {
+		int ret = parent->fs_ops->create(parent->fs_impl, parent, last, namelen, INODE_DIR);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
 	inode_t* n = walk(root, path, true, INODE_DIR);
 	return n ? 0 : -1;
 }
@@ -243,6 +287,13 @@ static void registry_destroy(inode_t* inode) {
 dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len) {
 	if (!dir || dir->type != INODE_DIR || !name) {
 		return NULL;
+	}
+
+	if (dir->fs_ops && dir->fs_ops->unlink) {
+		int ret = dir->fs_ops->unlink(dir->fs_impl, dir, name, len);
+		if (ret < 0) {
+			return NULL;
+		}
 	}
 
 	dirent_t* prev = NULL;
