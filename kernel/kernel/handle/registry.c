@@ -3,12 +3,12 @@
 
 static void registry_destroy(inode_t* inode);
 
-static inode_t inodes[MAX_INODES];
-static dirent_t dirents[MAX_DIRENTS];
+static inode_t inodes[REG_MAX_INODES];
+static dirent_t dirents[REG_MAX_DIRENTS];
 static inode_t* root;
 
 inode_t* registry_inode_alloc(inode_type_t type) {
-	for (int i = 0; i < MAX_INODES; i++) {
+	for (int i = 0; i < REG_MAX_INODES; i++) {
 		if (!inodes[i].in_use) {
 			inodes[i].in_use = true;
 			inodes[i].type = type;
@@ -26,7 +26,7 @@ inode_t* registry_inode_alloc(inode_type_t type) {
 }
 
 static dirent_t* dirent_alloc(void) {
-	for (int i = 0; i < MAX_DIRENTS; i++) {
+	for (int i = 0; i < REG_MAX_DIRENTS; i++) {
 		if (!dirents[i].in_use) {
 			dirents[i].in_use = true;
 			dirents[i].next = NULL;
@@ -41,7 +41,7 @@ static dirent_t* dirent_alloc(void) {
 
 // links name -> target into dir's children list. does not check for collisions
 static dirent_t* link_dirent(inode_t* dir, const char* name, size_t len, inode_t* target) {
-	if (len >= MAX_NAME_LEN) {
+	if (len >= REG_MAX_NAME_LEN) {
 		return NULL;
 	}
 	
@@ -70,11 +70,11 @@ static dirent_t* find_dirent(inode_t* dir, const char* name, size_t len) {
 }
 
 void registry_init(void) {
-	for (int i = 0; i < MAX_INODES; i++) {
+	for (int i = 0; i < REG_MAX_INODES; i++) {
 		inodes[i].in_use = false;
 	}
 	
-	for (int i = 0; i < MAX_DIRENTS; i++) {
+	for (int i = 0; i < REG_MAX_DIRENTS; i++) {
 		dirents[i].in_use = false;
 	}
 

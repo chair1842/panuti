@@ -6,12 +6,12 @@
 #include <stdbool.h>
 #include <kernel/handle/inode_type.h>
 
-#define MAX_INODES 128
-#define MAX_DIRENTS 256
-#define MAX_NAME_LEN 32
+#define REG_MAX_INODES 1024
+#define REG_MAX_DIRENTS 2048
+#define REG_MAX_NAME_LEN 256
 
 typedef struct dirent {
-	char name[MAX_NAME_LEN];
+	char name[REG_MAX_NAME_LEN];
 	struct inode* inode;
 	struct dirent* next;
 	bool in_use;

@@ -44,7 +44,9 @@ stdio/vprintf.o \
 stdlib/errno.o \
 string/strncpy.o \
 string/strcmp.o \
-string/strncmp.o
+string/strncmp.o \
+string/memchr.o \
+string/strcpy.o
 
 HOSTEDOBJS=\
 $(ARCH_HOSTEDOBJS) \
