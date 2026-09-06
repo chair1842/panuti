@@ -24,6 +24,12 @@ typedef struct isofs {
 	isofs_dirent_t root;
 } isofs_t;
 
+typedef struct isofs_file {
+	isofs_t* fs;
+	uint32_t start_lba;
+	uint32_t length;
+} isofs_file_t;
+
 int isofs_mount(const char* mountp, const char* blkdev);
 
 #endif

@@ -40,7 +40,7 @@ static dirent_t* dirent_alloc(void) {
 }
 
 // links name -> target into dir's children list. does not check for collisions
-static dirent_t* link_dirent(inode_t* dir, const char* name, size_t len, inode_t* target) {
+dirent_t* registry_linkdirent(inode_t* dir, const char* name, size_t len, inode_t* target) {
 	if (len >= REG_MAX_NAME_LEN) {
 		return NULL;
 	}
@@ -80,8 +80,8 @@ void registry_init(void) {
 
 	root = registry_inode_alloc(INODE_DIR);
 	// root is its own parent, by convention
-	link_dirent(root, ".", 1, root);
-	link_dirent(root, "..", 2, root);
+	registry_linkdirent(root, ".", 1, root);
+	registry_linkdirent(root, "..", 2, root);
 }
 
 inode_t* registry_root(void) {
@@ -129,13 +129,13 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 					return NULL;
 				}
 				
-				if (!link_dirent(current, seg_start, len, new_inode)) {
+				if (!registry_linkdirent(current, seg_start, len, new_inode)) {
 					return NULL; // TODO: leaks new_inode on this path
 				}
 				
 				if (create_type == INODE_DIR) {
-					link_dirent(new_inode, ".", 1, new_inode);
-					link_dirent(new_inode, "..", 2, current);
+					registry_linkdirent(new_inode, ".", 1, new_inode);
+					registry_linkdirent(new_inode, "..", 2, current);
 				}
 				
 				return new_inode; // last component, done

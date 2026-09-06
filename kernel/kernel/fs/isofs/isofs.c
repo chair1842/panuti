@@ -1,5 +1,6 @@
 #include "kernel/block/block.h"
 #include "kernel/block/utils.h"
+#include "kernel/handle/inode_type.h"
 #include "kernel/handle/registry.h"
 #include <kernel/fs/isofs.h>
 #include <kernel/handle/fs.h>
@@ -73,22 +74,136 @@ static inline bool isofs_lba_valid(const isofs_t* fs, uint32_t lba, uint32_t len
 }
 
 static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* name, size_t len) {
-	(void)fs_impl; (void)dir; (void)name; (void)len;
-	return NULL;
+	isofs_t* fs = fs_impl;
+	if (dir->type != INODE_DIR) {
+		// i hope my code never makes this happen
+		return NULL;
+	}
+
+	// what's dir's extent?
+	uint32_t sd_lba;
+	uint32_t sd_len;
+	if (dir->impl) {
+		// normal dir
+		isofs_dirent_t* di = dir->impl;
+		sd_lba = di->start_lba;
+		sd_len = di->length;
+	} else {
+		// fs root
+		sd_lba = fs->root.start_lba;
+		sd_len = fs->root.length;
+	}
+
+	if (!isofs_lba_valid(fs, sd_lba, sd_len)) {
+		return NULL;
+	}
+
+	uint8_t* buf = kmalloc(sd_len, 1);
+	if (!buf) {
+		return NULL;
+	}
+
+	if (block_read_bytes(fs->block_device, (uint64_t)sd_lba * fs->block_size, sd_len, buf) != BLOCK_OK) {
+		kfree(buf);
+		return NULL;
+	}
+
+	struct inode* result = NULL;
+	uint32_t offset = 0;
+	while (offset < sd_len) {
+		uint8_t dr_len = buf[offset];
+
+		if (dr_len == 0) {
+			break;
+		}
+
+		if (dr_len < 34 || (offset + dr_len) > sd_len) {
+			offset++;
+			continue;
+		}
+
+		isofs_dirent_t dirent;
+		if (
+			parse_dir_record(&buf[offset], &dirent) == 0
+			&&
+			// check if this is what we are looking for
+			strlen(dirent.name) == len 
+			&&
+			strncmp(dirent.name, name, len) == 0
+		) {
+			inode_t* n = registry_inode_alloc(dirent.is_dir ? INODE_DIR : INODE_FILE);
+			if (n) {
+				isofs_dirent_t* fs_n = kmalloc(sizeof(isofs_dirent_t), alignof(isofs_dirent_t));
+				if (fs_n) {
+					fs_n->start_lba = dirent.start_lba;
+					fs_n->length = dirent.length;
+					fs_n->is_dir = dirent.is_dir;
+
+					n->impl = fs_n;
+					n->fs_ops = dir->fs_ops;
+					n->fs_impl = dir->fs_impl;
+
+					if (registry_linkdirent(dir, name, len, n)) {
+						result = n;
+					} else {
+						inode_unref(n);
+					}
+				}
+
+				break;
+			}
+		}
+
+		offset += dr_len;
+	}
+
+	kfree(buf);
+	return result;
 }
 
 static void isofs_close(void* file_impl) {
-	(void)file_impl;
+	kfree(file_impl);
 }
 
 static void* isofs_open(void* fs_impl, struct inode* node) {
-	(void)fs_impl; (void)node;
-	return NULL;
+	if (node->type != INODE_FILE) {
+		return NULL;
+	}
+
+	isofs_dirent_t* fs_n = node->impl;
+	if (!fs_n) {
+		return NULL;
+	}
+
+	isofs_file_t* f = kmalloc(sizeof(isofs_file_t), alignof(isofs_file_t));
+	if (!f) {
+		return NULL;
+	}
+
+	f->fs = fs_impl;
+	f->start_lba = fs_n->start_lba;
+	f->length = fs_n->length;
+
+	return f;
 }
 
 static int isofs_read(void* file_impl, void* buf, size_t len, size_t offset) {
-	(void)file_impl; (void)buf; (void)len; (void)offset;
-	return -1;
+	isofs_file_t* f = file_impl;
+
+	if (offset >= f->length) {
+		return 0;
+	}
+	
+	if (len > (f->length - offset)) {
+		len = f->length - offset;
+	}
+
+	uint64_t b_offset = (uint64_t)f->start_lba * (f->fs->block_size + offset);
+	if (block_read_bytes(f->fs->block_device, b_offset, len, buf)) {
+		return -1;
+	}
+
+	return (int)len;
 }
 
 // the rest of these ops are absolutely useless just like you, because you're in the wrong place.
