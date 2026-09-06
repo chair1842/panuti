@@ -198,7 +198,7 @@ static int isofs_read(void* file_impl, void* buf, size_t len, size_t offset) {
 		len = f->length - offset;
 	}
 
-	uint64_t b_offset = (uint64_t)f->start_lba * (f->fs->block_size + offset);
+	uint64_t b_offset = (uint64_t)((f->start_lba * f->fs->block_size) + offset);
 	if (block_read_bytes(f->fs->block_device, b_offset, len, buf)) {
 		return -1;
 	}

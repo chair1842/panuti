@@ -15,7 +15,7 @@ int block_read_bytes(block_dev_t *dev, uint64_t offset, uint32_t len, void *buf)
 	}
 
 	// the stars are aligned. you may now kiss your crush.
-	if (offset % blks == 0 && len % blks) {
+	if (offset % blks == 0 && len % blks == 0) {
 		return dev->ops->read(dev->impl, startblk, buf, len / blks);
 	}
 
