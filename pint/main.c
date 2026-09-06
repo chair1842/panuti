@@ -151,7 +151,7 @@ int main(void) {
 		check(console, "mkdir /a/b/c (parent missing)", r, -1);
 	}
 
-	/* ---- 5. Write/Read/Activate/Wait/Close with bad fds ---- */
+	/* ---- 5. Write/Read/Activate/Close with bad fds ---- */
 	section(console, "5. Bad file descriptors");
 
 	{
@@ -165,12 +165,6 @@ int main(void) {
 	{
 		int32_t r = panutisysf_activate(99);
 		check(console, "activate fd=99 -> BADFD", r, PANUTIERRNO_BADFD);
-	}
-	{
-		int wait_fds[] = {99};
-		int fired = -1;
-		int32_t r = panutisysf_wait(wait_fds, 1, &fired);
-		check(console, "wait fd=99 -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
 	}
 	{
 		int32_t r = panutisysf_close(99);
@@ -198,12 +192,6 @@ int main(void) {
 		check(console, "read from console -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
 		r = panutisysf_activate(fd);
 		check(console, "activate console -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
-		{
-			int wait_fds[] = {fd};
-			int fired = -1;
-			r = panutisysf_wait(wait_fds, 1, &fired);
-			check(console, "wait on console -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
-		}
 		r = panutisysf_close(fd);
 		check(console, "close console (explicit) -> success", r, 0);
 	}

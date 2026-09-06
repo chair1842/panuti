@@ -25,10 +25,6 @@ static inline int32_t panutisysf_activate(int handle) {
 	return panuti_syscall(SYSHANDLER_ACTIVATE, (uint32_t)handle, 0, 0, 0);
 }
 
-static inline int32_t panutisysf_wait(int* fds, size_t count, int* fired_fd) {
-	return panuti_syscall(SYSHANDLER_WAIT, (uint32_t)fds, (uint32_t)count, (uint32_t)fired_fd, 0);
-}
-
 static inline int32_t panutisysf_close(int handle) {
 	return panuti_syscall(SYSHANDLER_CLOSE, (uint32_t)handle, 0, 0, 0);
 }
