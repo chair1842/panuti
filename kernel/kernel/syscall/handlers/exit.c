@@ -1,7 +1,7 @@
-#include "handlers.h"
+#include <kernel/syscall/handlers.h>
 #include <panuti/errno.h>
-#include "kernel/sched/sched.h"
-#include "kernel/sched/task.h"
+#include <kernel/sched/sched.h>
+#include <kernel/sched/task.h>
 #include <stdint.h>
 
 int32_t syshandler_exit(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {

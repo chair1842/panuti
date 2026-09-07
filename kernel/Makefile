@@ -45,6 +45,16 @@ kernel/drivers/vga/vga.o \
 kernel/drivers/ramblock/ramblock.o \
 kernel/handle/fs.o \
 kernel/block/block.o \
+kernel/syscall/syscall.o \
+kernel/syscall/handlers/exit.o \
+kernel/syscall/handlers/open.o \
+kernel/syscall/handlers/write.o \
+kernel/syscall/handlers/read.o \
+kernel/syscall/handlers/activate.o \
+kernel/syscall/handlers/close.o \
+kernel/syscall/handlers/mkdir.o \
+kernel/syscall/handlers/chdir.o \
+kernel/syscall/handlers/unlink.o \
 kernel/fs/fatfs/fatfs.o \
 kernel/fs/isofs/isofs.o \
 kernel/block/utils.o
