@@ -33,6 +33,11 @@
 #define ATA_SECONDARY_IO 0x170
 #define ATA_SECONDARY_CTRL 0x376
 
+#define ATA_HEAD_MASTER 0xA0
+#define ATA_HEAD_SLAVE 0xB0
+
+#define IDE_TIMEOUT_TICKS 500
+
 typedef struct ide_channel {
 	uint16_t io_base;
 	uint16_t ctrl_base;
@@ -40,6 +45,7 @@ typedef struct ide_channel {
 	bool is_slave;
 	bool present;
 	bool is_atapi;
+	uint64_t block_count;
 	
 	volatile bool irq_fired;
 } ide_channel_t;

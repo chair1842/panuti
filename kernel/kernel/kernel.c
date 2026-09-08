@@ -6,6 +6,7 @@
 #include <kernel/klog.h>
 #include <kernel/boot_mod.h>
 #include <kernel/kpanic.h>
+#include <kernel/ata/atapi.h>
 #include "drivers/vga/vga.h"
 #include "drivers/ramblock/ramblock.h"
 
@@ -22,6 +23,7 @@ void kernel_main(void) {
 	registry_mkdir("/dvc");
 	vga_register_console();
 	ramblock_init("/dvc/ram0", 512, 1024);
+	atapi_init();
 
 	const void* elf_data;
 	size_t elf_size;
