@@ -267,9 +267,9 @@ int main(void) {
 		check(console, "syscall(255) -> INVALIDSYSCALL", r, PANUTIERRNO_INVALIDSYSCALL);
 	}
 	{
-		/* 8 is CHDIR (implemented); use a number past the dispatch table */
-		int32_t r = panuti_syscall(10, 0, 0, 0, 0);
-		check(console, "syscall(10) (unimplemented) -> INVALIDSYSCALL", r, PANUTIERRNO_INVALIDSYSCALL);
+		/* 40 is unimplemented; use a number past the dispatch table */
+		int32_t r = panuti_syscall(40, 0, 0, 0, 0);
+		check(console, "syscall(40) (unimplemented) -> INVALIDSYSCALL", r, PANUTIERRNO_INVALIDSYSCALL);
 	}
 
 	/* ---- 12. Double-close recovery ---- */
