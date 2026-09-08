@@ -547,6 +547,77 @@ int main(void) {
 		panutisysf_close(fd);
 	}
 
+	/* ---- 32. getpid ---- */
+	section(console, "32. getpid");
+
+	{
+		int32_t p1 = panutisysf_getpid();
+		int32_t p2 = panutisysf_getpid();
+		write_str(console, "  pid=");
+		write_int(console, (int)p1);
+		write_str(console, "\n");
+		check(console, "getpid is positive", p1 > 0 ? 1 : 0, 1);
+		check(console, "getpid stable across calls", p1 == p2 ? 1 : 0, 1);
+		/* kernel.c creates pint before idle, so pint is pid 1 */
+		check(console, "getpid is 1 (first user task)", p1, 1);
+	}
+
+	/* ---- 33. timesb (time since boot) ---- */
+	section(console, "33. timesb (time since boot)");
+
+	{
+		int32_t t0 = panutisysf_timesb();
+		for (volatile uint32_t i = 0; i < 50000000; i++) {}
+		int32_t t1 = panutisysf_timesb();
+		write_str(console, "  t0=");
+		write_int(console, (int)t0);
+		write_str(console, " t1=");
+		write_int(console, (int)t1);
+		write_str(console, "\n");
+		check(console, "timesb is non-negative", t0 < 0 ? 0 : 1, 1);
+		check(console, "timesb monotonic", t1 >= t0 ? 1 : 0, 1);
+		/* 100Hz timer: >5 ticks means the busy loop really elapsed time */
+		check(console, "timesb advanced over busy loop", (t1 - t0) > 5 ? 1 : 0, 1);
+	}
+
+	/* ---- 34. getcwd ---- */
+	section(console, "34. getcwd");
+
+	{
+		char buf[256];
+		int32_t r = panutisysf_getcwd(buf, sizeof(buf));
+		check_is_success(console, "getcwd at root", r);
+		check(console, "getcwd at root -> \"/\"", strcmp(buf, "/") == 0 ? 1 : 0, 1);
+	}
+
+	{
+		int32_t r = panutisysf_chdir("/level1/level2");
+		check_is_success(console, "chdir /level1/level2 (getcwd setup)", r);
+		char buf[256];
+		r = panutisysf_getcwd(buf, sizeof(buf));
+		check_is_success(console, "getcwd after chdir", r);
+		check(console, "getcwd -> \"/level1/level2\"", strcmp(buf, "/level1/level2") == 0 ? 1 : 0, 1);
+		/* "/level1/level2" is 14 chars, needs 15 bytes with the NUL */
+		char exact[15];
+		r = panutisysf_getcwd(exact, sizeof(exact));
+		check(console, "getcwd exact-fit buffer", r, 0);
+		/* one byte short -> INVALIDADDR */
+		char tiny[14];
+		r = panutisysf_getcwd(tiny, sizeof(tiny));
+		check(console, "getcwd too-small buffer -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+		/* zero-length buffer -> INVALIDADDR */
+		r = panutisysf_getcwd(buf, 0);
+		check(console, "getcwd len 0 -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+		/* back to root */
+		r = panutisysf_chdir("/");
+		check_is_success(console, "chdir / (back to root)", r);
+	}
+
+	{
+		int32_t r = panuti_syscall(SYSHANDLER_GETCWD, 0xDEAD0000, 256, 0, 0);
+		check(console, "getcwd(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+	}
+
 	/* ---- Summary ---- */
 	write_str(console, "\n==============================\n");
 	write_str(console, "RESULTS: ");
