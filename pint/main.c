@@ -618,6 +618,115 @@ int main(void) {
 		check(console, "getcwd(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
 	}
 
+	/* ---- 35. yield ---- */
+	section(console, "35. yield");
+
+	{
+		int32_t r1 = panutisysf_yield();
+		int32_t r2 = panutisysf_yield();
+		check(console, "yield returns 0", r1, 0);
+		check(console, "yield again returns 0", r2, 0);
+		/* still alive and kicking after giving up the cpu */
+		int fd = panutisysf_open("/dvc/console");
+		check_is_success(console, "open works after yield", fd);
+		panutisysf_close(fd);
+	}
+
+	/* ---- 36. rename ---- */
+	section(console, "36. rename");
+
+	{
+		int32_t r;
+		r = panutisysf_mkdir("/mv_a");
+		check_is_success(console, "mkdir /mv_a", r);
+		r = panutisysf_mkdir("/mv_a/thing");
+		check_is_success(console, "mkdir /mv_a/thing", r);
+		r = panutisysf_mkdir("/mv_b");
+		check_is_success(console, "mkdir /mv_b", r);
+		r = panutisysf_rename("/mv_a/thing", "/mv_b/thing");
+		check_is_success(console, "rename /mv_a/thing /mv_b/thing", r);
+		/* old name should be gone */
+		r = panutisysf_chdir("/mv_a/thing");
+		check(console, "chdir old path after rename -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+		/* new name should be there */
+		r = panutisysf_chdir("/mv_b/thing");
+		check_is_success(console, "chdir new path after rename", r);
+		r = panutisysf_chdir("/");
+		check_is_success(console, "chdir / (reset)", r);
+	}
+
+	{
+		int32_t r;
+		/* self rename is a no-op */
+		r = panutisysf_rename("/mv_b/thing", "/mv_b/thing");
+		check(console, "rename onto itself (no-op)", r, 0);
+		/* rename onto a fresh name */
+		r = panutisysf_rename("/mv_b/thing", "/mv_b/thing2");
+		check_is_success(console, "rename /mv_b/thing /mv_b/thing2", r);
+		/* collision: /mv_b/thing no longer exists, so create one to clash with */
+		r = panutisysf_mkdir("/mv_b/thing");
+		check_is_success(console, "mkdir /mv_b/thing (collision setup)", r);
+		r = panutisysf_rename("/mv_b/thing2", "/mv_b/thing");
+		check(console, "rename onto existing name -> EXISTS", r, PANUTIERRNO_EXISTS);
+	}
+
+	{
+		int32_t r = panutisysf_rename("/mv_a/nonexistent", "/mv_b/foo");
+		check(console, "rename nonexistent -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+	}
+
+	{
+		int32_t r = panutisysf_rename("/", "/mv_b/root");
+		check(console, "rename root -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+	}
+
+	{
+		int32_t r = panuti_syscall(SYSHANDLER_RENAME,
+			(uint32_t)0xDEAD0000, (uint32_t)"/mv_b/thing", 0, 0);
+		check(console, "rename(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+	}
+
+	/* ---- 37. link ---- */
+	section(console, "37. link");
+
+	{
+		/* /dvc/console is a FILE inode, linkable */
+		int32_t r = panutisysf_link("/dvc/console", "/ln_console");
+		check_is_success(console, "link /dvc/console /ln_console", r);
+		/* the new name must work like the original */
+		int fd = panutisysf_open("/ln_console");
+		check_is_success(console, "open linked /ln_console", fd);
+		r = panutisysf_write(fd, "ln works!\n", 10);
+		check(console, "write via linked name", r, 10);
+		panutisysf_close(fd);
+		/* collision: linking over an existing name */
+		r = panutisysf_link("/dvc/console", "/ln_console");
+		check(console, "link onto existing name -> EXISTS", r, PANUTIERRNO_EXISTS);
+		/* block devices are linkable too */
+		r = panutisysf_link("/dvc/ram0", "/ln_ram");
+		check_is_success(console, "link /dvc/ram0 /ln_ram", r);
+		fd = panutisysf_open("/ln_ram");
+		check_is_success(console, "open linked /ln_ram", fd);
+		panutisysf_close(fd);
+		/* directories are not */
+		r = panutisysf_link("/mv_b", "/ln_mv_b");
+		check(console, "link a directory -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
+		/* missing target */
+		r = panutisysf_link("/no/such/node", "/ln_nope");
+		check(console, "link nonexistent target -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+		/* cleanup our names */
+		r = panutisysf_unlink("/ln_console");
+		check_is_success(console, "unlink /ln_console", r);
+		r = panutisysf_unlink("/ln_ram");
+		check_is_success(console, "unlink /ln_ram", r);
+	}
+
+	{
+		int32_t r = panuti_syscall(SYSHANDLER_LINK,
+			(uint32_t)0xDEAD0000, (uint32_t)"/ln_x", 0, 0);
+		check(console, "link(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+	}
+
 	/* ---- Summary ---- */
 	write_str(console, "\n==============================\n");
 	write_str(console, "RESULTS: ");
