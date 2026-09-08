@@ -53,4 +53,16 @@ static inline int32_t panutisysf_getcwd(char* buf, size_t len) {
 	return panuti_syscall(SYSHANDLER_GETCWD, (uint32_t)buf, (uint32_t)len, 0, 0);
 }
 
+static inline int32_t panutisysf_yield(void) {
+	return panuti_syscall(SYSHANDLER_YIELD, 0, 0, 0, 0);
+}
+
+static inline int32_t panutisysf_rename(const char* oldpath, const char* newpath) {
+	return panuti_syscall(SYSHANDLER_RENAME, (uint32_t)oldpath, (uint32_t)newpath, 0, 0);
+}
+
+static inline int32_t panutisysf_link(const char* target, const char* newpath) {
+	return panuti_syscall(SYSHANDLER_LINK, (uint32_t)target, (uint32_t)newpath, 0, 0);
+}
+
 #endif

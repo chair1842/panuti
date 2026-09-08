@@ -60,7 +60,10 @@ kernel/fs/isofs/isofs.o \
 kernel/block/utils.o \
 kernel/syscall/handlers/getpid.o \
 kernel/syscall/handlers/timesb.o \
-kernel/syscall/handlers/getcwd.o
+kernel/syscall/handlers/getcwd.o \
+kernel/syscall/handlers/yield.o \
+kernel/syscall/handlers/rename.o \
+kernel/syscall/handlers/link.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

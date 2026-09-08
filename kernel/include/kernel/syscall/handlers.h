@@ -39,4 +39,13 @@ int32_t syshandler_timesb(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // get the current working directory
 int32_t syshandler_getcwd(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// give up the cpu for a turn
+int32_t syshandler_yield(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// move a name somewhere else
+int32_t syshandler_rename(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// add a second name that points at the same inode
+int32_t syshandler_link(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

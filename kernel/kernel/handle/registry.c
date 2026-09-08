@@ -284,6 +284,52 @@ static void registry_destroy(inode_t* inode) {
 	inode->in_use = false;
 }
 
+int registry_splitpath(inode_t* start, const char* path, inode_t** parent,
+                       const char** name, size_t* namelen) {
+	if (!path || path[0] == '\0') {
+		return -1;
+	}
+
+	size_t len = strlen(path);
+	while (len > 1 && path[len - 1] == '/') {
+		len--;
+	}
+
+	// last points at the final component; anything before it is the parent dir
+	const char* last = path + len;
+	while (last > path && *(last - 1) != '/') {
+		last--;
+	}
+
+	size_t nlen = (size_t)((path + len) - last);
+	if (nlen == 0) {
+		return -1;
+	}
+
+	inode_t* p;
+	if (last == path) {
+		p = start; // relative, no slashes at all: parent is where we stand
+	} else {
+		char buf[128];
+		size_t plen = (size_t)(last - path);
+		if (plen >= sizeof(buf)) {
+			return -1;
+		}
+		memcpy(buf, path, plen);
+		buf[plen] = '\0';
+		p = registry_resolve(start, buf);
+	}
+
+	if (!p || p->type != INODE_DIR) {
+		return -1;
+	}
+
+	*parent = p;
+	*name = last;
+	*namelen = nlen;
+	return 0;
+}
+
 dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len) {
 	if (!dir || dir->type != INODE_DIR || !name) {
 		return NULL;

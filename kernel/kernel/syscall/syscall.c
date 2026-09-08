@@ -16,6 +16,9 @@ syscall_handler_t syscall_handlers[256] = {
 	[SYSHANDLER_GETPID] = syshandler_getpid,
 	[SYSHANDLER_TIMESB] = syshandler_timesb,
 	[SYSHANDLER_GETCWD] = syshandler_getcwd,
+	[SYSHANDLER_YIELD] = syshandler_yield,
+	[SYSHANDLER_RENAME] = syshandler_rename,
+	[SYSHANDLER_LINK] = syshandler_link,
 };
 
 int32_t syscall_dispatch(uint32_t num, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
