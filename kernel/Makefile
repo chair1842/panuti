@@ -41,6 +41,7 @@ kernel/elf/elf.o \
 kernel/memman/tempmap.o \
 kernel/handle/handle.o \
 kernel/handle/registry.o \
+kernel/handle/mount.o \
 kernel/drivers/vga/vga.o \
 kernel/drivers/ramblock/ramblock.o \
 kernel/handle/fs.o \

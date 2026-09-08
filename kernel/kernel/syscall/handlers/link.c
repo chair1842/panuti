@@ -34,7 +34,7 @@ int32_t syshandler_link(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return PANUTIERRNO_NOTFOUND;
 	}
 
-	if (new_parent->fs_ops) {
+	if (mount_find(new_parent) || new_parent->mnt) {
 		return PANUTIERRNO_UNSUPPORTEDOP;
 	}
 

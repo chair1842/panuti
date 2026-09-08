@@ -3,6 +3,7 @@
 
 #include <kernel/handle/handle.h>
 #include <kernel/handle/fs.h>
+#include <kernel/handle/mount.h>
 #include <stdbool.h>
 #include <kernel/handle/inode_type.h>
 
@@ -29,9 +30,9 @@ typedef struct inode {
 	// dir-only
 	dirent_t* children;
 
-	// filesystem attachment
-	const fs_ops_t* fs_ops;
-	void* fs_impl;
+	// filesystem attachment: if non-NULL, this inode lives inside a mounted
+	// filesystem (fabricated by it), and `mnt` identifies the mount.
+	struct mount* mnt;
 } inode_t;
 
 void registry_init(void);

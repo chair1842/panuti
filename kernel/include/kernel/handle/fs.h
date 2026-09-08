@@ -16,6 +16,7 @@ typedef struct fs_ops {
 	int (*read)(void* file_impl, void* buf, size_t len, size_t offset);
 	int (*write)(void* file_impl, const void* buf, size_t len, size_t offset);
 	void (*close)(void* file_impl);
+	void (*finish)(void* fs_impl);
 } fs_ops_t;
 
 extern const handle_ops_t fs_file_ops;

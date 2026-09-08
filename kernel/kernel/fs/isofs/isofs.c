@@ -140,8 +140,7 @@ static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* 
 					fs_n->is_dir = dirent.is_dir;
 
 					n->impl = fs_n;
-					n->fs_ops = dir->fs_ops;
-					n->fs_impl = dir->fs_impl;
+					n->mnt = dir->mnt;
 
 					if (registry_linkdirent(dir, name, len, n)) {
 						result = n;
@@ -163,6 +162,10 @@ static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* 
 
 static void isofs_close(void* file_impl) {
 	kfree(file_impl);
+}
+
+static void isofs_finish(void* fs_impl) {
+	kfree(fs_impl);
 }
 
 static void* isofs_open(void* fs_impl, struct inode* node) {
@@ -232,6 +235,7 @@ static const fs_ops_t isofs_ops = {
 	.read = isofs_read,
 	.write = isofs_write,
 	.close = isofs_close,
+	.finish = isofs_finish,
 };
 
 int isofs_mount(const char *mountp, const char *blkdev) {
@@ -301,8 +305,32 @@ int isofs_mount(const char *mountp, const char *blkdev) {
 		kfree(fs);
 		return PANUTIERRNO_PLAINERR;
 	}
-		
-	if (registry_mount(mountp, &isofs_ops, fs) != 0) {
+
+	inode_t* mountpoint = registry_resolve(registry_root(), mountp);
+	if (!mountpoint || mountpoint->type != INODE_DIR) {
+		kfree(fs);
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	// explicit root inode for the mounted namespace, carrying the root extent
+	inode_t* root_node = registry_inode_alloc(INODE_DIR);
+	if (!root_node) {
+		kfree(fs);
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	isofs_dirent_t* rd = kmalloc(sizeof(isofs_dirent_t), alignof(isofs_dirent_t));
+	if (!rd) {
+		inode_unref(root_node);
+		kfree(fs);
+		return PANUTIERRNO_PLAINERR;
+	}
+	*rd = fs->root;
+	root_node->impl = rd;
+
+	if (mount_attach(mountpoint, &isofs_ops, fs, root_node) != 0) {
+		inode_unref(root_node);
+		kfree(rd);
 		kfree(fs);
 		return PANUTIERRNO_PLAINERR;
 	}

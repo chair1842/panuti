@@ -16,8 +16,7 @@ inode_t* registry_inode_alloc(inode_type_t type) {
 			inodes[i].impl = NULL;
 			inodes[i].ops = NULL;
 			inodes[i].children = NULL;
-			inodes[i].fs_ops = NULL;
-			inodes[i].fs_impl = NULL;
+			inodes[i].mnt = NULL;
 			return &inodes[i];
 		}
 	}
@@ -70,6 +69,8 @@ dirent_t* registry_finddirent(inode_t* dir, const char* name, size_t len) {
 }
 
 void registry_init(void) {
+	mount_init();
+
 	for (int i = 0; i < REG_MAX_INODES; i++) {
 		inodes[i].in_use = false;
 	}
@@ -115,36 +116,64 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 			return NULL; // tried to descend into a non-directory
 		}
 
-		dirent_t* d = registry_finddirent(current, seg_start, len);
-		inode_t* child = d ? d->inode : NULL;
+		mount_t* cmnt = current->mnt; // NULL -> registry tree, else we're inside a mount
+		inode_t* child = NULL;
+		bool crossed_out = false;
 
-		if (!child && current->fs_ops && current->fs_ops->lookup) {
-			child = current->fs_ops->lookup(current->fs_impl, current, seg_start, len);
-		}
+		if (cmnt) {
+			// inside a mounted filesystem: resolve through the mount
+			if (len == 2 && seg_start[0] == '.' && seg_start[1] == '.' && current == cmnt->root) {
+				// '..' at the mount root crosses back over the boundary to the cover
+				child = cmnt->mountpoint;
+				crossed_out = true;
+			} else if (cmnt->fs_ops->lookup) {
+				child = cmnt->fs_ops->lookup(cmnt->fs_impl, current, seg_start, len);
+				if (child) {
+					child->mnt = cmnt;
+				}
+			} else {
+				return NULL;
+			}
+		} else {
+			// registry tree: look in the dirent list
+			dirent_t* d = registry_finddirent(current, seg_start, len);
+			child = d ? d->inode : NULL;
 
-		if (!child) {
-			if (is_last && create_last) {
+			if (!child && is_last && create_last) {
 				inode_t* new_inode = registry_inode_alloc(create_type);
 				if (!new_inode) {
 					return NULL;
 				}
-				
+
 				if (!registry_linkdirent(current, seg_start, len, new_inode)) {
 					inode_unref(new_inode);
 					return NULL;
 				}
-				
+
 				if (create_type == INODE_DIR) {
 					registry_linkdirent(new_inode, ".", 1, new_inode);
 					registry_linkdirent(new_inode, "..", 2, current);
 				}
-				
+
 				return new_inode; // last component, done
 			}
-			
+		}
+
+		if (!child) {
 			return NULL; // missing component
 		} else if (is_last && create_last) {
 			return NULL; // name collision
+		}
+
+		// descend into a mountpoint if this child is one (unless we just crossed
+		// back out of the mount to its cover)
+		if (!crossed_out) {
+			mount_t* m = mount_find(child);
+			if (m) {
+				child->mnt = m;
+				child = m->root;
+				child->mnt = m;
+			}
 		}
 
 		current = child;
@@ -198,8 +227,9 @@ int registry_mkdir(const char* path) {
 		return -1;
 	}
 
-	if (parent->fs_ops && parent->fs_ops->create) {
-		int ret = parent->fs_ops->create(parent->fs_impl, parent, last, namelen, INODE_DIR);
+	mount_t* pmnt = parent->mnt;
+	if (pmnt && pmnt->fs_ops->create) {
+		int ret = pmnt->fs_ops->create(pmnt->fs_impl, parent, last, namelen, INODE_DIR);
 		if (ret < 0) {
 			return ret;
 		}
@@ -229,12 +259,18 @@ int registry_mount(const char* path, const fs_ops_t* fs_ops, void* fs_impl) {
 	if (!n || n->type != INODE_DIR) {
 		return -1;
 	}
-	if (n->fs_ops) {
-		return -1; // already mounted
+
+	// generic mount: allocate a fresh registry dir to act as the FS root
+	inode_t* r = registry_inode_alloc(INODE_DIR);
+	if (!r) {
+		return -1;
 	}
 
-	n->fs_ops = fs_ops;
-	n->fs_impl = fs_impl;
+	if (mount_attach(n, fs_ops, fs_impl, r) != 0) {
+		inode_unref(r);
+		return -1;
+	}
+
 	return 0;
 }
 
@@ -247,13 +283,11 @@ int registry_unmount(const char* path) {
 	if (!n || n->type != INODE_DIR) {
 		return -1;
 	}
-	if (!n->fs_ops) {
+	if (!mount_find(n)) {
 		return -1; // not mounted
 	}
 
-	n->fs_ops = NULL;
-	n->fs_impl = NULL;
-	return 0;
+	return mount_detach(n);
 }
 
 inode_t* registry_resolve(inode_t* start, const char* path) {
@@ -336,8 +370,8 @@ dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len) {
 		return NULL;
 	}
 
-	if (dir->fs_ops && dir->fs_ops->unlink) {
-		int ret = dir->fs_ops->unlink(dir->fs_impl, dir, name, len);
+	if (dir->mnt && dir->mnt->fs_ops->unlink) {
+		int ret = dir->mnt->fs_ops->unlink(dir->mnt->fs_impl, dir, name, len);
 		if (ret < 0) {
 			return NULL;
 		}

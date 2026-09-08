@@ -32,7 +32,8 @@ int32_t syshandler_rename(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	}
 
 	// shuffling names around on disk is the filesystem's job
-	if (old_parent->fs_ops || new_parent->fs_ops) {
+	if (mount_find(old_parent) || mount_find(new_parent) ||
+	    old_parent->mnt || new_parent->mnt) {
 		return PANUTIERRNO_UNSUPPORTEDOP;
 	}
 

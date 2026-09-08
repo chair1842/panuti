@@ -46,8 +46,8 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return des;
 	}
 
-	if (n->fs_ops) {
-		void* file_impl = fs_open_file(n->fs_impl, n->fs_ops, n);
+	if (n->mnt) {
+		void* file_impl = fs_open_file(n->mnt->fs_impl, n->mnt->fs_ops, n);
 		if (!file_impl) {
 			handle_free(t, des);
 			return PANUTIERRNO_PLAINERR;
