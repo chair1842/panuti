@@ -41,12 +41,14 @@ static void ata_irq15_handler(registers_t* regs) {
 }
 
 // the atapi secret sauce: shove a scsi command packet down the drive's throat
-// and hope the data pops out the other end.
+// and hope the data pops out the other end. transfer_bytes tells the drive
+// how much data to shove back (a whole sector, or just an 8-byte read
+// capacity reply. size matters).
 static int ide_send_packet(
 	ide_channel_t* ch,
 	const uint8_t cdb[12],
 	void* buf,
-	size_t transfer_sectors
+	size_t transfer_bytes
 ) {
 	if (ide_poll(ch) < 0) {
 		return BLOCK_ERR_IO;
@@ -56,7 +58,7 @@ static int ide_send_packet(
 	ide_write_reg(ch, ATA_REG_FEATURES, 0);
 
 	// byte count for the transfer, little-endian over two registers
-	uint16_t byte_count = (uint16_t)(transfer_sectors * ATAPI_SECTOR_SIZE);
+	uint16_t byte_count = (uint16_t)transfer_bytes;
 	ide_write_reg(ch, ATA_REG_LBA_MID, byte_count & 0xFF);
 	ide_write_reg(ch, ATA_REG_LBA_HI, byte_count >> 8);
 
@@ -80,8 +82,7 @@ static int ide_send_packet(
 	ide_wait_irq(ch);
 
 	// bytes of data are words of nothing, delivered straight to your door
-	size_t transfer_words = transfer_sectors * ATAPI_SECTOR_SIZE / 2;
-	insw(ch->io_base + ATA_REG_DATA, buf, transfer_words);
+	insw(ch->io_base + ATA_REG_DATA, buf, transfer_bytes / 2);
 
 	return BLOCK_OK;
 }
@@ -93,7 +94,7 @@ static inline uint32_t read_be32(const uint8_t* p) {
 static void atapi_read_capacity(ide_channel_t* ch, uint32_t* sectors) {
 	uint8_t cdb[12] = { SCSI_READ_CAPACITY };
 	uint8_t res[8];
-	if (ide_send_packet(ch, cdb, res, 1) != BLOCK_OK) {
+	if (ide_send_packet(ch, cdb, res, 8) != BLOCK_OK) {
 		*sectors = 0;
 		return;
 	}
@@ -115,7 +116,7 @@ static int atapi_read(void* impl, uint64_t block, void* buf, size_t count) {
 		cdb[5] = block & 0xFF;
 		cdb[8] = 1; // 1 sector per packet
 
-		if (ide_send_packet(ch, cdb, out, 1) != BLOCK_OK) {
+		if (ide_send_packet(ch, cdb, out, ATAPI_SECTOR_SIZE) != BLOCK_OK) {
 			return BLOCK_ERR_IO;
 		}
 
@@ -136,6 +137,10 @@ static uint64_t atapi_count(void* impl) {
 	ide_channel_t* ch = (ide_channel_t*)impl;
 	return ch->block_count;
 }
+
+// each registered cdrom gets the next free number, no matter which
+// slot on which bus it squats in
+static int next_cdrom_number = 0;
 
 static const block_ops_t atapi_ops = {
 	.read = atapi_read,
@@ -162,8 +167,15 @@ static void atapi_scan_channel(ide_channel_t* ch, int bus) {
 	char path[16];
 	const char* prefix = "/dvc/cdrom";
 	size_t plen = strlen(prefix);
+
+	// numbers never get reused; cdrom0 is simply whoever shows up first
+	int num = next_cdrom_number++;
+	if (num > 9) {
+		klog(KLOG_WARN, "atapi: more than ten cdroms? really?\n");
+	}
+
 	memcpy(path, prefix, plen + 1);
-	path[plen] = '0' + (bus * 2) + (ch->is_slave ? 1 : 0);
+	path[plen] = '0' + num;
 	path[plen + 1] = '\0';
 	block_register(path, &atapi_ops, ch, ATAPI_SECTOR_SIZE, sectors);
 	klog(KLOG_INFO, "atapi: %s registered (%u sectors)\n", path, sectors);

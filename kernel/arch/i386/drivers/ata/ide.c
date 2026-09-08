@@ -5,11 +5,6 @@
 #include <kernel/timer.h>
 #include <kernel/klog.h>
 
-#define IDE_TIMEOUT_TICKS 500
-
-#define ATA_HEAD_MASTER 0xA0
-#define ATA_HEAD_SLAVE 0xB0
-
 uint8_t ide_read_reg(ide_channel_t* ch, uint8_t offset) {
 	return inb(ch->io_base + offset);
 }
@@ -77,36 +72,26 @@ int ide_probe(ide_channel_t* ch) {
 		ch->is_slave = drive;
 
 		uint8_t head = drive ? ATA_HEAD_SLAVE : ATA_HEAD_MASTER;
-
 		ide_write_reg(ch, ATA_REG_DRIVE_HEAD, head);
-		ide_write_reg(ch, ATA_REG_SECCOUNT, 0);
-		ide_write_reg(ch, ATA_REG_LBA_LO, 0);
-		ide_write_reg(ch, ATA_REG_LBA_MID, 0);
-		ide_write_reg(ch, ATA_REG_LBA_HI, 0);
-		ide_write_reg(ch, ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
-		
-		uint8_t status = ide_read_reg(ch, ATA_REG_STATUS);
-		if (status == 0) {
-			continue;
+
+		// right after a reset the drive blurts out its type in the
+		// sector count and lba registers:
+		//   sec=1, lba_lo=1, lba_mid=0x14, lba_hi=0xEB for atapi
+		//   sec=1, lba_lo=0, lba_mid=0x00, lba_hi=0x00 for plain old ata
+		for (volatile int i = 0; i < 4; i++) {
+			iowait();
 		}
 
-		status = ide_poll(ch);
-		if (status < 0) {
-			continue;
+		uint8_t sec = ide_read_reg(ch, ATA_REG_SECCOUNT);
+		uint8_t lo  = ide_read_reg(ch, ATA_REG_LBA_LO);
+		uint8_t mid = ide_read_reg(ch, ATA_REG_LBA_MID);
+		uint8_t hi  = ide_read_reg(ch, ATA_REG_LBA_HI);
+
+		if (sec == 0) {
+			continue; // nothing answering on this slot
 		}
 
-		if (status & ATA_SR_ERR) {
-			ide_write_reg(ch, ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
-			status = ide_poll(ch);
-			if (status < 0) {
-				continue;
-			}
-		}
-		
-		uint16_t ident[256];
-		insw(ch->io_base + ATA_REG_DATA, ident, 256);
-
-		if (ident[0] == 0x8000) {
+		if (lo == 0x01 && mid == 0x14 && hi == 0xEB) {
 			ch->present = true;
 			ch->is_atapi = true;
 
@@ -115,14 +100,14 @@ int ide_probe(ide_channel_t* ch) {
 			return 0;
 		}
 
-		if (ident[0] == 0x0000) {
+		if (lo == 0x00 && mid == 0x00 && hi == 0x00) {
 			ch->present = true;
 			ch->is_atapi = false;
 
 			klog(KLOG_INFO, "ide: ATA drive on 0x%x %s\n", ch->io_base, drive ? "slave" : "master");
 
 			return 0;
-		} 
+		}
 	}
 
 	return -1;
