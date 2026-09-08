@@ -30,4 +30,13 @@ int32_t syshandler_chdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // unlink a name from a directory
 int32_t syshandler_unlink(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// get the pid of the currently running process
+int32_t syshandler_getpid(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// get the time in centiseconds scince boot
+int32_t syshandler_timesb(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// get the current working directory
+int32_t syshandler_getcwd(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

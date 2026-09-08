@@ -57,7 +57,10 @@ kernel/syscall/handlers/chdir.o \
 kernel/syscall/handlers/unlink.o \
 kernel/fs/fatfs/fatfs.o \
 kernel/fs/isofs/isofs.o \
-kernel/block/utils.o
+kernel/block/utils.o \
+kernel/syscall/handlers/getpid.o \
+kernel/syscall/handlers/timesb.o \
+kernel/syscall/handlers/getcwd.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

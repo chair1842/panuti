@@ -41,4 +41,16 @@ static inline int32_t panutisysf_unlink(const char* path) {
 	return panuti_syscall(SYSHANDLER_UNLINK, (uint32_t)path, 0, 0, 0);
 }
 
+static inline int32_t panutisysf_getpid(void) {
+	return panuti_syscall(SYSHANDLER_GETPID, 0, 0, 0, 0);
+}
+
+static inline int32_t panutisysf_timesb(void) {
+	return panuti_syscall(SYSHANDLER_TIMESB, 0, 0, 0, 0);
+}
+
+static inline int32_t panutisysf_getcwd(char* buf, size_t len) {
+	return panuti_syscall(SYSHANDLER_GETCWD, (uint32_t)buf, (uint32_t)len, 0, 0);
+}
+
 #endif

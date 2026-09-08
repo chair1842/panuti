@@ -59,7 +59,7 @@ dirent_t* registry_linkdirent(inode_t* dir, const char* name, size_t len, inode_
 	return d;
 }
 
-static dirent_t* find_dirent(inode_t* dir, const char* name, size_t len) {
+dirent_t* registry_finddirent(inode_t* dir, const char* name, size_t len) {
 	for (dirent_t* d = dir->children; d; d = d->next) {
 		if (strlen(d->name) == len && strncmp(d->name, name, len) == 0) {
 			return d;
@@ -115,7 +115,7 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 			return NULL; // tried to descend into a non-directory
 		}
 
-		dirent_t* d = find_dirent(current, seg_start, len);
+		dirent_t* d = registry_finddirent(current, seg_start, len);
 		inode_t* child = d ? d->inode : NULL;
 
 		if (!child && current->fs_ops && current->fs_ops->lookup) {

@@ -46,5 +46,6 @@ void inode_unref(inode_t* inode);
 int registry_mount(const char* path, const fs_ops_t* fs_ops, void* fs_impl);
 int registry_unmount(const char* path);
 dirent_t* registry_linkdirent(inode_t* dir, const char* name, size_t len, inode_t* target);
+dirent_t* registry_finddirent(inode_t* dir, const char* name, size_t len);
 
 #endif
