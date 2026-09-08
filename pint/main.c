@@ -727,6 +727,218 @@ int main(void) {
 		check(console, "link(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
 	}
 
+	/* ---- 38. block device i/o on /dvc/ram0 ---- */
+	section(console, "38. block device i/o on /dvc/ram0");
+
+	{
+		/* 700 bytes crosses the 512-byte sector boundary, so the write
+		   has to read-modify-write a partial tail */
+		char pattern[700];
+		for (int i = 0; i < 700; i++) {
+			pattern[i] = (char)('0' + (i % 10));
+		}
+		int b = panutisysf_open("/dvc/ram0");
+		check_is_success(console, "open /dvc/ram0 (block)", b);
+		int32_t r = panutisysf_write(b, pattern, 700);
+		check(console, "write 700 bytes to ram0", r, 700);
+
+		/* an independent handle sees the data from the start */
+		int c = panutisysf_open("/dvc/ram0");
+		check_is_success(console, "open /dvc/ram0 (2nd handle)", c);
+		char buf[700];
+		r = panutisysf_read(c, buf, 700);
+		check(console, "read 700 bytes back", r, 700);
+		check(console, "ram0 round-trip content", memcmp(buf, pattern, 700) == 0 ? 1 : 0, 1);
+		panutisysf_close(c);
+
+		/* the write advanced the first handle's offset */
+		char tail[8];
+		r = panutisysf_read(b, tail, 8);
+		check(console, "block read continues after write (offset advance)", r, 8);
+
+		/* zero-length io is a no-op */
+		r = panutisysf_read(b, tail, 0);
+		check(console, "read 0 bytes on block", r, 0);
+		r = panutisysf_write(b, "", 0);
+		check(console, "write 0 bytes on block", r, 0);
+
+		/* bad buffers bounce before touching the device */
+		r = panuti_syscall(SYSHANDLER_READ, (uint32_t)b, 0xDEAD0000, 16, 0);
+		check(console, "read(badptr) on block -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+		r = panuti_syscall(SYSHANDLER_WRITE, (uint32_t)b, 0xDEAD0000, 16, 0);
+		check(console, "write(badptr) on block -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+
+		/* block handles don't activate */
+		r = panutisysf_activate(b);
+		check_is_error(console, "activate block handle -> error", r);
+
+		/* close frees the slot */
+		r = panutisysf_close(b);
+		check(console, "close block handle", r, 0);
+		r = panutisysf_read(b, buf, 1);
+		check(console, "read closed block fd -> BADFD", r, PANUTIERRNO_BADFD);
+
+		/* trailing slash on a non-directory path doesn't resolve */
+		int fd = panutisysf_open("/dvc/ram0/");
+		check(console, "open \"/dvc/ram0/\" -> NOTFOUND", fd, PANUTIERRNO_NOTFOUND);
+	}
+
+	{
+		/* partial-block write: start at a non-sector-aligned offset, which
+		   forces the read-modify-write path */
+		char head[100];
+		char body[100];
+		for (int i = 0; i < 100; i++) {
+			head[i] = 'H';
+			body[i] = 'B';
+		}
+		int e = panutisysf_open("/dvc/ram0");
+		check_is_success(console, "open /dvc/ram0 (partial-write)", e);
+		int32_t r = panutisysf_write(e, head, 100);
+		check(console, "write 100 bytes (head)", r, 100);
+		r = panutisysf_write(e, body, 100);
+		check(console, "write 100 bytes (body, offset 100)", r, 100);
+
+		int f = panutisysf_open("/dvc/ram0");
+		check_is_success(console, "open /dvc/ram0 (verify)", f);
+		char mix[200];
+		r = panutisysf_read(f, mix, 200);
+		check(console, "read 200 bytes back", r, 200);
+		check(console, "first 100 bytes are head", memcmp(mix, head, 100) == 0 ? 1 : 0, 1);
+		check(console, "next 100 bytes are body", memcmp(mix + 100, body, 100) == 0 ? 1 : 0, 1);
+		panutisysf_close(e);
+		panutisysf_close(f);
+	}
+
+	/* ---- 39. files: rename + link interplay ---- */
+	section(console, "39. files: rename + link interplay");
+
+	{
+		/* rename a file (not just a dir), old name must die */
+		int32_t r = panutisysf_link("/dvc/console", "/rn_file");
+		check_is_success(console, "link /dvc/console /rn_file", r);
+		r = panutisysf_rename("/rn_file", "/rn_file2");
+		check_is_success(console, "rename linked file /rn_file /rn_file2", r);
+		int fd = panutisysf_open("/rn_file");
+		check(console, "open old name after rename -> NOTFOUND", fd, PANUTIERRNO_NOTFOUND);
+		fd = panutisysf_open("/rn_file2");
+		check_is_success(console, "open new name", fd);
+		r = panutisysf_write(fd, "renamed!\n", 9);
+		check(console, "write via renamed file", r, 9);
+		panutisysf_close(fd);
+
+		/* renaming a file onto an existing dir name is a collision */
+		r = panutisysf_mkdir("/rn_dir2");
+		check_is_success(console, "mkdir /rn_dir2 (collision setup)", r);
+		r = panutisysf_rename("/rn_file2", "/rn_dir2");
+		check(console, "rename file over dir -> EXISTS", r, PANUTIERRNO_EXISTS);
+		r = panutisysf_unlink("/rn_file2");
+		check_is_success(console, "unlink renamed file", r);
+
+		/* renaming into a missing parent is NOTFOUND */
+		r = panutisysf_rename("/rn_dir2", "/no/such/parent/child");
+		check(console, "rename into missing parent -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+		r = panutisysf_unlink("/rn_dir2");
+		check_is_success(console, "unlink /rn_dir2", r);
+	}
+
+	{
+		/* rename a dir into another dir, trailing slashes tolerated */
+		int32_t r = panutisysf_mkdir("/rn_a");
+		check_is_success(console, "mkdir /rn_a", r);
+		r = panutisysf_mkdir("/rn_b");
+		check_is_success(console, "mkdir /rn_b", r);
+		r = panutisysf_rename("/rn_a", "/rn_b/new");
+		check_is_success(console, "rename /rn_a /rn_b/new", r);
+		r = panutisysf_chdir("/rn_a");
+		check(console, "chdir old dir after rename -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+		r = panutisysf_chdir("/rn_b/new");
+		check_is_success(console, "chdir to renamed dir", r);
+		r = panutisysf_chdir("/");
+		check_is_success(console, "chdir / (reset)", r);
+		/* trailing slash on the target parses to the same name */
+		r = panutisysf_rename("/rn_b/new", "/rn_b/new/");
+		check(console, "rename onto itself with trailing slash (no-op)", r, 0);
+		/* trailing slash in the source works too */
+		r = panutisysf_rename("/rn_b/new/", "/rn_b/moved");
+		check_is_success(console, "rename with trailing slash in source", r);
+		r = panutisysf_unlink("/rn_b/moved");
+		check_is_success(console, "unlink renamed dir", r);
+		r = panutisysf_unlink("/rn_b");
+		check_is_success(console, "unlink /rn_b", r);
+	}
+
+	{
+		/* unlink of an open file: the fd keeps the inode alive */
+		int32_t r = panutisysf_link("/dvc/console", "/ln_live");
+		check_is_success(console, "link /dvc/console /ln_live", r);
+		int fd = panutisysf_open("/ln_live");
+		check_is_success(console, "open /ln_live", fd);
+		r = panutisysf_unlink("/ln_live");
+		check_is_success(console, "unlink /ln_live while open", r);
+		r = panutisysf_write(fd, "still here\n", 11);
+		check(console, "write through open fd after unlink", r, 11);
+		panutisysf_close(fd);
+		int gone = panutisysf_open("/ln_live");
+		check(console, "open unlinked name -> NOTFOUND", gone, PANUTIERRNO_NOTFOUND);
+	}
+
+	/* ---- 40. deep paths and .. traversal ---- */
+	section(console, "40. deep paths and .. traversal");
+
+	{
+		/* deepest chain created back in section 19 */
+		int32_t r = panutisysf_chdir("/d/d/d/d/d");
+		check_is_success(console, "chdir 5 levels deep", r);
+		char buf[256];
+		r = panutisysf_getcwd(buf, sizeof(buf));
+		check_is_success(console, "getcwd deep", r);
+		check(console, "getcwd -> \"/d/d/d/d/d\"", strcmp(buf, "/d/d/d/d/d") == 0 ? 1 : 0, 1);
+		/* climb all the way back out */
+		for (int i = 0; i < 5; i++) {
+			r = panutisysf_chdir("..");
+			if (r != 0) {
+				break;
+			}
+		}
+		r = panutisysf_getcwd(buf, sizeof(buf));
+		check(console, "getcwd back at root after 5x ..", r == 0 && strcmp(buf, "/") == 0 ? 1 : 0, 1);
+	}
+
+	{
+		/* . and .. as relative path components */
+		int32_t r = panutisysf_mkdir("/dot_dot");
+		check_is_success(console, "mkdir /dot_dot", r);
+		r = panutisysf_mkdir("/dot_dot/sub");
+		check_is_success(console, "mkdir /dot_dot/sub", r);
+		r = panutisysf_chdir("/dot_dot/sub");
+		check_is_success(console, "chdir /dot_dot/sub", r);
+		r = panutisysf_chdir(".");
+		check_is_success(console, "chdir . (no-op)", r);
+		char buf[256];
+		r = panutisysf_getcwd(buf, sizeof(buf));
+		check(console, "getcwd after chdir .", r == 0 && strcmp(buf, "/dot_dot/sub") == 0 ? 1 : 0, 1);
+		r = panutisysf_chdir("..");
+		check_is_success(console, "chdir ..", r);
+		r = panutisysf_getcwd(buf, sizeof(buf));
+		check(console, "getcwd after chdir ..", r == 0 && strcmp(buf, "/dot_dot") == 0 ? 1 : 0, 1);
+		r = panutisysf_chdir("../..");
+		check_is_success(console, "chdir ../.. (to root)", r);
+		r = panutisysf_getcwd(buf, sizeof(buf));
+		check(console, "getcwd back at root", r == 0 && strcmp(buf, "/") == 0 ? 1 : 0, 1);
+		/* walking past the top stops at the root */
+		r = panutisysf_chdir("/../..");
+		check_is_success(console, "chdir /../.. stays valid", r);
+		r = panutisysf_getcwd(buf, sizeof(buf));
+		check(console, "getcwd after /../..", r == 0 && strcmp(buf, "/") == 0 ? 1 : 0, 1);
+	}
+
+	{
+		/* chdir to the empty string is a miss */
+		int32_t r = panutisysf_chdir("");
+		check(console, "chdir \"\" -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+	}
+
 	/* ---- Summary ---- */
 	write_str(console, "\n==============================\n");
 	write_str(console, "RESULTS: ");
