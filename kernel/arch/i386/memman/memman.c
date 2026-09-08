@@ -37,3 +37,7 @@ void* memman_get_kernel_addr_space(void) {
 void* memman_create_addr_space(void) {
 	return vmm_create_page_dir();
 }
+
+void memman_destroy_addr_space(addr_space_t addr_space) {
+	vmm_destroy_page_dir(addr_space);
+}

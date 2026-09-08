@@ -17,6 +17,8 @@ uint32_t memman_get_phys(uint32_t virt);
 uint32_t memman_alloc_frame(void);
 void memman_free_frame(uint32_t phys);
 addr_space_t memman_create_addr_space(void);
+/* Frees every user frame, page table, and the page directory of an address space. */
+void memman_destroy_addr_space(addr_space_t addr_space);
 addr_space_t memman_get_kernel_addr_space(void);
 
 #endif

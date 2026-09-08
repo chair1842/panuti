@@ -130,7 +130,8 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 				}
 				
 				if (!registry_linkdirent(current, seg_start, len, new_inode)) {
-					return NULL; // TODO: leaks new_inode on this path
+					inode_unref(new_inode);
+					return NULL;
 				}
 				
 				if (create_type == INODE_DIR) {

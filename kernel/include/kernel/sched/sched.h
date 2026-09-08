@@ -4,6 +4,7 @@
 #include <kernel/sched/task.h>
 
 void sched_add(task_t* task);
+void sched_remove(task_t* task);
 void sched_schedule(void);
 void sched_init(void);
 task_t* sched_current(void);

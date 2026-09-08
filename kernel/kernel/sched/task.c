@@ -62,6 +62,7 @@ task_t* task_create_user(void (*entry)(void)) {
 	uint32_t user_stack_phys = memman_alloc_frame();
 	if (!user_stack_phys) {
 		vmalloc_free((void*)t->kernel_stack);
+		memman_destroy_addr_space(t->addr_space);
 		return NULL;
 	}
 
@@ -106,14 +107,14 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 
 	if (elf_load_segments(t->addr_space, elf_data, segs, nsegs) != 0) {
 		vmalloc_free((void*)t->kernel_stack);
-		// TODO: t->addr_space leaks here -- no teardown function yet
+		memman_destroy_addr_space(t->addr_space);
 		return NULL;
 	}
 
 	uint32_t user_stack_phys = memman_alloc_frame();
 	if (!user_stack_phys) {
 		vmalloc_free((void*)t->kernel_stack);
-		// TODO: t->addr_space leaks here too
+		memman_destroy_addr_space(t->addr_space);
 		return NULL;
 	}
 
@@ -128,4 +129,31 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 	sched_add(t);
 
 	return t;
+}
+
+void task_destroy(task_t* t) {
+	if (!t || t->state != TASK_TERMINATED) {
+		return;
+	}
+
+	for (int i = 0; i < MAX_HANDLES; i++) {
+		if (t->handles[i].type != INODE_NONE) {
+			handle_free(t, i);
+		}
+	}
+
+	if (t->kernel_stack) {
+		vmalloc_free((void*)t->kernel_stack);
+	}
+	if (t->addr_space) {
+		memman_destroy_addr_space(t->addr_space);
+	}
+
+	t->esp = 0;
+	t->kernel_stack = 0;
+	t->addr_space = NULL;
+	t->cwd = NULL;
+	t->next = NULL;
+	t->state = TASK_TERMINATED;
+	task_count--;
 }

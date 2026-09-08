@@ -11,6 +11,8 @@ void vmm_unmap_in(void* addr_space, uint32_t virt_addr);
 uint32_t vmm_get_phys(uint32_t virt_addr);
 /* Returns an opaque address-space handle containing the page directory's CR3 address. */
 void* vmm_create_page_dir(void);
+/* Frees every user frame, page table, and the page directory of a created address space. */
+void vmm_destroy_page_dir(void* addr_space);
 void* vmm_get_kernel_page_dir(void);
 
 #endif

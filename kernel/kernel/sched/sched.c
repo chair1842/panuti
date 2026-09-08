@@ -22,6 +22,37 @@ void sched_add(task_t* task) {
     klog(KLOG_INFO, "sched_add: next of task %x is %x\n", task->pid, task->next->pid);
 }
 
+void sched_remove(task_t* task) {
+    if (!task) {
+        return;
+    }
+
+    if (ready_queue == NULL) {
+        return;
+    }
+
+    if (ready_queue == task && task->next == task) {
+        ready_queue = NULL;
+        task->next = NULL;
+        return;
+    }
+
+    task_t* n = ready_queue;
+    while (n->next != task && n->next != ready_queue) {
+        n = n->next;
+    }
+
+    if (n->next == task) {
+        n->next = task->next;
+    }
+
+    if (ready_queue == task) {
+        ready_queue = n;
+    }
+
+    task->next = NULL;
+}
+
 void sched_schedule(void) {
     if (!sched_initialized) {
         return;
@@ -41,15 +72,21 @@ void sched_schedule(void) {
 
     task_t* next = prev->next;
     while (next->state != TASK_READY) {
-        if (next == prev) {
-            if (prev->state == TASK_READY) {
-                next = prev; 
-                break;
+        if (next->state == TASK_TERMINATED) {
+            task_t* dead = next;
+            next = dead->next;
+            sched_remove(dead);
+            task_destroy(dead);
+            if (ready_queue == NULL) {
+                kpanic("sched_schedule: no runnable tasks");
             }
-            
+            continue;
+        }
+
+        if (next == prev) {
             kpanic("sched_schedule: no runnable tasks");
         }
-        
+
         next = next->next;
     }
 
