@@ -48,4 +48,10 @@ int32_t syshandler_rename(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // add a second name that points at the same inode
 int32_t syshandler_link(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// mount a filesystem from a block device onto a mountpoint
+int32_t syshandler_mount(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// unmount a filesystem from a mountpoint
+int32_t syshandler_unmount(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

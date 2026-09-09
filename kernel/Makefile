@@ -64,8 +64,9 @@ kernel/syscall/handlers/timesb.o \
 kernel/syscall/handlers/getcwd.o \
 kernel/syscall/handlers/yield.o \
 kernel/syscall/handlers/rename.o \
-kernel/syscall/handlers/link.o
-
+kernel/syscall/handlers/link.o \
+kernel/syscall/handlers/mount.o \
+kernel/syscall/handlers/unmount.o
 OBJS=\
 $(ARCHDIR)/crti.o \
 $(ARCHDIR)/crtbegin.o \

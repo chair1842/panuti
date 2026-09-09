@@ -65,4 +65,12 @@ static inline int32_t panutisysf_link(const char* target, const char* newpath) {
 	return panuti_syscall(SYSHANDLER_LINK, (uint32_t)target, (uint32_t)newpath, 0, 0);
 }
 
+static inline int32_t panutisysf_mount(const char* mountp, const char* fstype, const char* blkdev) {
+	return panuti_syscall(SYSHANDLER_MOUNT, (uint32_t)mountp, (uint32_t)fstype, (uint32_t)blkdev, 0);
+}
+
+static inline int32_t panutisysf_unmount(const char* mountp) {
+	return panuti_syscall(SYSHANDLER_UNMOUNT, (uint32_t)mountp, 0, 0, 0);
+}
+
 #endif
