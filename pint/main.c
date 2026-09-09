@@ -939,6 +939,78 @@ int main(void) {
 		check(console, "chdir \"\" -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
 	}
 
+	/* ---- 41. mount / unmount ---- */
+	section(console, "41. mount / unmount");
+
+	{
+		int32_t r = panutisysf_mkdir("/mnt");
+		check_is_success(console, "mkdir /mnt", r);
+	}
+
+	{
+		/* mount the boot ISO (iso9660 on the atapi cdrom) */
+		int32_t r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		check_is_success(console, "mount /mnt iso9660 /dvc/cdrom0", r);
+	}
+
+	{
+		/* mounting over an already-mounted point fails */
+		int32_t r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		check_is_error(console, "mount over existing mountpoint -> error", r);
+	}
+
+	{
+		/* unknown filesystem type */
+		int32_t r = panutisysf_mount("/mnt", "nonsensefs", "/dvc/cdrom0");
+		check(console, "mount unknown fstype -> NOTSUPPORTED", r, PANUTIERRNO_NOTSUPPORTED);
+	}
+
+	{
+		/* nonexistent block device */
+		int32_t r = panutisysf_mount("/mnt2", "iso9660", "/dvc/ghost");
+		check(console, "mount missing blkdev -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+	}
+
+	{
+		/* mounting onto a non-directory mountpoint */
+		int32_t r = panutisysf_mount("/dvc/console", "iso9660", "/dvc/cdrom0");
+		check_is_error(console, "mount onto non-dir mountpoint -> error", r);
+	}
+
+	{
+		/* unmount works */
+		int32_t r = panutisysf_unmount("/mnt");
+		check(console, "unmount /mnt (clean) -> success", r, 0);
+	}
+
+	{
+		/* unmounting something not mounted fails */
+		int32_t r = panutisysf_unmount("/mnt");
+		check(console, "unmount /mnt again (not mounted) -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+		r = panutisysf_unmount("/no/such/mnt");
+		check(console, "unmount bogus path -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
+	}
+
+	{
+		/* mount + unmount cycle works */
+		int32_t r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		check_is_success(console, "re-mount /mnt", r);
+		r = panutisysf_unmount("/mnt");
+		check(console, "unmount /mnt (after re-mount) -> success", r, 0);
+	}
+
+	{
+		/* garbage pointers are rejected before touching anything */
+		int32_t r = panuti_syscall(SYSHANDLER_MOUNT, 0xDEAD0000, (uint32_t)"iso9660", (uint32_t)"/dvc/cdrom0", 0);
+		check(console, "mount(badptr mountp) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+		r = panuti_syscall(SYSHANDLER_MOUNT, (uint32_t)"/mnt", 0xDEAD0000, (uint32_t)"/dvc/cdrom0", 0);
+		check(console, "mount(badptr fstype) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+		r = panuti_syscall(SYSHANDLER_MOUNT, (uint32_t)"/mnt", (uint32_t)"iso9660", 0xDEAD0000, 0);
+		check(console, "mount(badptr blkdev) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+		r = panuti_syscall(SYSHANDLER_UNMOUNT, 0xDEAD0000, 0, 0, 0);
+		check(console, "unmount(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+	}
+
 	/* ---- Summary ---- */
 	write_str(console, "\n==============================\n");
 	write_str(console, "RESULTS: ");
