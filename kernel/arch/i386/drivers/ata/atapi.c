@@ -75,6 +75,8 @@ static int ide_send_packet(
 	uint32_t timeout = timer_get_ticks() + IDE_TIMEOUT_TICKS;
 	uint8_t status;
 	do {
+		// sleep instead of spinning; the drive's intq (or the timer) wakes us
+		__asm__ __volatile__("hlt");
 		status = ide_read_reg(ch, ATA_REG_STATUS);
 		if (timer_get_ticks() > timeout) {
 			return BLOCK_ERR_IO;
@@ -87,6 +89,7 @@ static int ide_send_packet(
 	// wait for the data to be ready for pio-out: bsy clear and drq set again
 	timeout = timer_get_ticks() + IDE_TIMEOUT_TICKS;
 	do {
+		__asm__ __volatile__("hlt");
 		status = ide_read_reg(ch, ATA_REG_STATUS);
 		if (timer_get_ticks() > timeout) {
 			return BLOCK_ERR_IO;
@@ -99,6 +102,7 @@ static int ide_send_packet(
 	// let the drive finish the transfer before we send the next packet
 	timeout = timer_get_ticks() + IDE_TIMEOUT_TICKS;
 	do {
+		__asm__ __volatile__("hlt");
 		status = ide_read_reg(ch, ATA_REG_STATUS);
 		if (timer_get_ticks() > timeout) {
 			return BLOCK_ERR_IO;
