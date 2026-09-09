@@ -44,6 +44,11 @@ static void ata_irq15_handler(registers_t* regs) {
 // and hope the data pops out the other end. transfer_bytes tells the drive
 // how much data to shove back (a whole sector, or just an 8-byte read
 // capacity reply. size matters).
+//
+// pio-polling version: we wait for the drive to assert DRQ ourselves instead
+// of betting on irq timing. with irqs the data can land in the buffer one
+// transfer late (the drive raises intq for the packet phase too), which
+// scrambles which sector we actually read on the next go.
 static int ide_send_packet(
 	ide_channel_t* ch,
 	const uint8_t cdb[12],
@@ -66,7 +71,7 @@ static int ide_send_packet(
 	ide_write_reg(ch, ATA_REG_DRIVE_HEAD, ch->is_slave ? ATA_HEAD_SLAVE : ATA_HEAD_MASTER);
 	ide_write_reg(ch, ATA_REG_COMMAND, ATA_CMD_PACKET);
 
-	// wait for the drive to accept the packet (drq set)
+	// wait for the drive to accept the packet (drq set, bsy clear)
 	uint32_t timeout = timer_get_ticks() + IDE_TIMEOUT_TICKS;
 	uint8_t status;
 	do {
@@ -74,15 +79,31 @@ static int ide_send_packet(
 		if (timer_get_ticks() > timeout) {
 			return BLOCK_ERR_IO;
 		}
-	} while ((status & ATA_SR_DRQ) == 0);
+	} while ((status & ATA_SR_BSY) || !(status & ATA_SR_DRQ));
 
-	// the cdb is 12 bytes = 6 words. insw/outsw are word-based.
+	// the cdb is 12 bytes = 6 words. outsw/insw are word-based.
 	outsw(ch->io_base + ATA_REG_DATA, cdb, 6);
 
-	ide_wait_irq(ch);
+	// wait for the data to be ready for pio-out: bsy clear and drq set again
+	timeout = timer_get_ticks() + IDE_TIMEOUT_TICKS;
+	do {
+		status = ide_read_reg(ch, ATA_REG_STATUS);
+		if (timer_get_ticks() > timeout) {
+			return BLOCK_ERR_IO;
+		}
+	} while ((status & ATA_SR_BSY) || !(status & ATA_SR_DRQ));
 
 	// bytes of data are words of nothing, delivered straight to your door
 	insw(ch->io_base + ATA_REG_DATA, buf, transfer_bytes / 2);
+
+	// let the drive finish the transfer before we send the next packet
+	timeout = timer_get_ticks() + IDE_TIMEOUT_TICKS;
+	do {
+		status = ide_read_reg(ch, ATA_REG_STATUS);
+		if (timer_get_ticks() > timeout) {
+			return BLOCK_ERR_IO;
+		}
+	} while (status & ATA_SR_BSY);
 
 	return BLOCK_OK;
 }

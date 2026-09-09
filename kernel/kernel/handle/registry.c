@@ -166,11 +166,12 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 		}
 
 		// descend into a mountpoint if this child is one (unless we just crossed
-		// back out of the mount to its cover)
+		// back out of the mount to its cover). the cover/mountpoint inode does
+		// NOT get .mnt set -- only the mounted root does -- so a later detach
+		// leaves no stale pointer on it.
 		if (!crossed_out) {
 			mount_t* m = mount_find(child);
 			if (m) {
-				child->mnt = m;
 				child = m->root;
 				child->mnt = m;
 			}
@@ -279,15 +280,24 @@ int registry_unmount(const char* path) {
 		return -1;
 	}
 
-	inode_t* n = walk(root, path, false, INODE_DIR);
-	if (!n || n->type != INODE_DIR) {
+	// resolve the mountpoint inode itself: walking the full path crosses into
+	// the mount and hands back the mounted root, which mount_find() won't see
+	inode_t* parent;
+	const char* name;
+	size_t namelen;
+	if (registry_splitpath(root, path, &parent, &name, &namelen) != 0) {
 		return -1;
 	}
-	if (!mount_find(n)) {
+
+	dirent_t* d = registry_finddirent(parent, name, namelen);
+	if (!d || d->inode->type != INODE_DIR) {
+		return -1;
+	}
+	if (!mount_find(d->inode)) {
 		return -1; // not mounted
 	}
 
-	return mount_detach(n);
+	return mount_detach(d->inode);
 }
 
 inode_t* registry_resolve(inode_t* start, const char* path) {

@@ -33,6 +33,11 @@ int mount_attach(struct inode* mountpoint, const fs_ops_t* fs_ops, void* fs_impl
 	if (mount_find(mountpoint)) {
 		return -1; // already a mountpoint
 	}
+	// when a path resolves into an existing mount it hands back the mount's
+	// root inode (which carries .mnt), so mounting over it must be rejected too
+	if (mountpoint->mnt) {
+		return -1; // inside an existing mount
+	}
 
 	mount_t* m = NULL;
 	for (int i = 0; i < REG_MAX_MOUNTS; i++) {
@@ -76,6 +81,12 @@ int mount_detach(struct inode* mountpoint) {
 		if (m->root->refcount > 0) {
 			m->root->refcount--;
 		}
+		// the mounted root no longer hangs off anything
+		m->root->mnt = NULL;
+	}
+	if (m->mountpoint) {
+		// just in case a walk ever left a stale pointer on the cover
+		m->mountpoint->mnt = NULL;
 	}
 
 	m->in_use = false;
