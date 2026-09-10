@@ -11,7 +11,7 @@
 #define USER_STACK_VIRT_TOP 0xB0000000
 #define PAGE_SIZE 0x1000
 
-static uint32_t next_pid = 1;
+static pid_t next_pid = 1;
 static uint32_t task_count = 0;
 static task_t tasks[MAX_TASKS] = {0};
 

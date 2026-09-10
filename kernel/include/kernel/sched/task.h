@@ -8,6 +8,8 @@
 
 #define TASK_KERNEL_STACK_SIZE 4096
 
+typedef uint32_t pid_t;
+
 typedef enum task_state {
 	TASK_READY = 0,
 	TASK_RUNNING = 1,
@@ -21,7 +23,7 @@ typedef struct task {
 	uint32_t user_stack;
 	void* addr_space;
 	task_state_t state;
-	uint32_t pid;
+	pid_t pid;
 	struct task* next;
 	handle_t handles[MAX_HANDLES];
 	inode_t* cwd;
