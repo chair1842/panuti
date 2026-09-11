@@ -1009,6 +1009,91 @@ int main(void) {
 		check(console, "unmount(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
 	}
 
+	/* ---- 42. pipe_create ---- */
+	section(console, "42. pipe_create");
+	{
+		int rfd, wfd;
+		int32_t r = panutisysf_pipe_create(&rfd, &wfd);
+		check_is_success(console, "pipe_create succeeds", r);
+		check(console, "read fd >= 0", rfd >= 0, 1);
+		check(console, "write fd >= 0", wfd >= 0, 1);
+		check(console, "fds differ", rfd != wfd, 1);
+
+		/* round-trip: write data, then read it back */
+		const char msg[] = "hello pipe";
+		r = panutisysf_write(wfd, msg, sizeof(msg));
+		check(console, "write to write end", r, (int32_t)sizeof(msg));
+		char buf[32] = {0};
+		r = panutisysf_read(rfd, buf, sizeof(buf));
+		check(console, "read from read end", r, (int32_t)sizeof(msg));
+		/* byte-level check */
+		int match = 1;
+		for (size_t i = 0; i < sizeof(msg); i++) {
+			if (buf[i] != msg[i]) { match = 0; break; }
+		}
+		check(console, "data matches", match, 1);
+
+		panutisysf_close(rfd);
+		panutisysf_close(wfd);
+	}
+	/* EOF when write end is closed */
+	{
+		int rfd, wfd;
+		panutisysf_pipe_create(&rfd, &wfd);
+		panutisysf_close(wfd);
+		char buf[8];
+		int32_t r = panutisysf_read(rfd, buf, sizeof(buf));
+		check(console, "read after close(write) -> EOF (0)", r, 0);
+		panutisysf_close(rfd);
+	}
+	/* broken pipe when read end is closed */
+	{
+		int rfd, wfd;
+		panutisysf_pipe_create(&rfd, &wfd);
+		panutisysf_close(rfd);
+		int32_t r = panutisysf_write(wfd, "x", 1);
+		check(console, "write after close(read) -> broken (-1)", r, -1);
+		panutisysf_close(wfd);
+	}
+	/* writing to read end or reading from write end */
+	{
+		int rfd, wfd;
+		panutisysf_pipe_create(&rfd, &wfd);
+		int32_t r = panutisysf_write(rfd, "x", 1);
+		check(console, "write to read end -> -1", r, -1);
+		char buf[4];
+		r = panutisysf_read(wfd, buf, sizeof(buf));
+		check(console, "read from write end -> -1", r, -1);
+		panutisysf_close(rfd);
+		panutisysf_close(wfd);
+	}
+	/* multiple independent pipes */
+	{
+		int r1, w1, r2, w2;
+		panutisysf_pipe_create(&r1, &w1);
+		panutisysf_pipe_create(&r2, &w2);
+		panutisysf_write(w1, "aaa", 3);
+		panutisysf_write(w2, "bbb", 3);
+		char a[8] = {0}, b[8] = {0};
+		panutisysf_read(r1, a, 3);
+		panutisysf_read(r2, b, 3);
+		check(console, "pipe1 data independent", a[0] == 'a', 1);
+		check(console, "pipe2 data independent", b[0] == 'b', 1);
+		panutisysf_close(r1);
+		panutisysf_close(w1);
+		panutisysf_close(r2);
+		panutisysf_close(w2);
+	}
+	/* garbage pointer args */
+	{
+		int32_t r = panuti_syscall(SYSHANDLER_PIPE_CREATE, 0xDEAD0000, 0xDEAD0004, 0, 0);
+		check(console, "pipe_create(badptr,badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+		r = panuti_syscall(SYSHANDLER_PIPE_CREATE, 0xDEAD0000, 0, 0, 0);
+		check(console, "pipe_create(badptr,0) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+		r = panuti_syscall(SYSHANDLER_PIPE_CREATE, 0, 0xDEAD0000, 0, 0);
+		check(console, "pipe_create(0,badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+	}
+
 	/* ---- Summary ---- */
 	write_str(console, "\n==============================\n");
 	write_str(console, "RESULTS: ");
