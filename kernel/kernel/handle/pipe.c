@@ -182,7 +182,7 @@ int pipe_create_pair(task_t* t, int* out_read, int* out_write) {
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	int r_des = handle_alloc(t);
+	int r_des = handle_alloc(t, INODE_PIPE);
 	if (r_des < 0) {
 		kfree(read_end);
 		kfree(write_end);
@@ -190,7 +190,7 @@ int pipe_create_pair(task_t* t, int* out_read, int* out_write) {
 		return PANUTIERRNO_NOFDS;
 	}
 
-	int w_des = handle_alloc(t);
+	int w_des = handle_alloc(t, INODE_PIPE);
 	if (w_des < 0) {
 		handle_free(t, r_des);
 		kfree(read_end);

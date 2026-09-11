@@ -27,7 +27,7 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return PANUTIERRNO_UNSUPPORTEDOP; // no directory-open semantics yet
 	}
 
-	int des = handle_alloc(t);
+	int des = handle_alloc(t, n->type);
 	if (des < 0) {
 		return PANUTIERRNO_NOFDS;
 	}

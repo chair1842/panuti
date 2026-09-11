@@ -31,7 +31,7 @@ int op_not_supported_act(void* impl);
 int op_not_supported_rdy(void* impl);
 int op_not_supported_close(void* impl, struct task* self);
 
-int handle_alloc(struct task* t);
+int handle_alloc(struct task* t, inode_type_t type);
 void handle_free(struct task* t, int fd);
 
 #endif
