@@ -369,9 +369,6 @@ Unmount a filesystem from a mountpoint.
 
 ### 17 -- PIPE_CREATE
 
-> **Note:** The handler is implemented but is **not registered** in the dispatch table.
-> Calling this syscall returns `PANUTIERRNO_INVALIDSYSCALL`.
-
 ```c
 int32_t panutisysf_pipe_create(const int* read_fd, const int* write_fd);
 ```
