@@ -551,8 +551,8 @@ int main(void) {
 	section(console, "32. getpid");
 
 	{
-		int32_t p1 = panutisysf_getpid();
-		int32_t p2 = panutisysf_getpid();
+		uint32_t p1 = panutisysf_getpid();
+		uint32_t p2 = panutisysf_getpid();
 		write_str(console, "  pid=");
 		write_int(console, (int)p1);
 		write_str(console, "\n");
@@ -622,10 +622,8 @@ int main(void) {
 	section(console, "35. yield");
 
 	{
-		int32_t r1 = panutisysf_yield();
-		int32_t r2 = panutisysf_yield();
-		check(console, "yield returns 0", r1, 0);
-		check(console, "yield again returns 0", r2, 0);
+		panutisysf_yield();
+		panutisysf_yield();
 		/* still alive and kicking after giving up the cpu */
 		int fd = panutisysf_open("/dvc/console");
 		check_is_success(console, "open works after yield", fd);

@@ -9,8 +9,8 @@ static inline int32_t panutisysf_write(int handle, const void* data, size_t size
 	return panuti_syscall(SYSHANDLER_WRITE, (uint32_t)handle, (uint32_t)data, (uint32_t)size, 0);
 }
 
-static inline int32_t panutisysf_exit(uint32_t code) {
-	return panuti_syscall(SYSHANDLER_EXIT, code, 0, 0, 0);
+static inline void panutisysf_exit(uint32_t code) {
+	panuti_syscall(SYSHANDLER_EXIT, code, 0, 0, 0);
 }
 
 static inline int32_t panutisysf_open(const char* path) {
@@ -41,8 +41,8 @@ static inline int32_t panutisysf_unlink(const char* path) {
 	return panuti_syscall(SYSHANDLER_UNLINK, (uint32_t)path, 0, 0, 0);
 }
 
-static inline int32_t panutisysf_getpid(void) {
-	return panuti_syscall(SYSHANDLER_GETPID, 0, 0, 0, 0);
+static inline uint32_t panutisysf_getpid(void) {
+	return (uint32_t)panuti_syscall(SYSHANDLER_GETPID, 0, 0, 0, 0);
 }
 
 static inline int32_t panutisysf_timesb(void) {
@@ -53,8 +53,8 @@ static inline int32_t panutisysf_getcwd(char* buf, size_t len) {
 	return panuti_syscall(SYSHANDLER_GETCWD, (uint32_t)buf, (uint32_t)len, 0, 0);
 }
 
-static inline int32_t panutisysf_yield(void) {
-	return panuti_syscall(SYSHANDLER_YIELD, 0, 0, 0, 0);
+static inline void panutisysf_yield(void) {
+	panuti_syscall(SYSHANDLER_YIELD, 0, 0, 0, 0);
 }
 
 static inline int32_t panutisysf_rename(const char* oldpath, const char* newpath) {
