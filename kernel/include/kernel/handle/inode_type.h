@@ -5,7 +5,8 @@ typedef enum {
     INODE_NONE = 0,
     INODE_DIR,
     INODE_FILE,
-    INODE_BLOCK
+    INODE_BLOCK,
+    INODE_PIPE,
 } inode_type_t;
 
 #endif
