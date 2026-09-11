@@ -54,4 +54,7 @@ int32_t syshandler_mount(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // unmount a filesystem from a mountpoint
 int32_t syshandler_unmount(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// create an anonymous pipe
+int32_t syshandler_pipe_create(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

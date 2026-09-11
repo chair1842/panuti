@@ -73,4 +73,8 @@ static inline int32_t panutisysf_unmount(const char* mountp) {
 	return panuti_syscall(SYSHANDLER_UNMOUNT, (uint32_t)mountp, 0, 0, 0);
 }
 
+static inline int32_t panutisysf_pipe_create(const int* read_fd, const int* write_fd) {
+	return panuti_syscall(SYSHANDLER_PIPE_CREATE, (uint32_t)read_fd, (uint32_t)write_fd, 0, 0);
+}
+
 #endif
