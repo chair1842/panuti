@@ -414,7 +414,7 @@ Closing the write end sends EOF to readers.
 | 14 | `LINK` | Yes |
 | 15 | `MOUNT` | Yes |
 | 16 | `UNMOUNT` | Yes |
-| 17 | `PIPE_CREATE` | **No** (bug) |
+| 17 | `PIPE_CREATE` | Yes |
 
 ## Limits
 
