@@ -103,6 +103,9 @@ int main(void) {
 		panutisysf_exit(1);
 	}
 
+	int nin = 0;   /* input streams, filled by nstream */
+	int nout = 0;  /* output streams, filled by nstream */
+
 	write_str(console, "=== PANUTI SYSCALL STRESS TEST ===\n");
 
 	/* ---- 1. Basic open/write/close on console ---- */
@@ -1092,6 +1095,93 @@ int main(void) {
 		check(console, "pipe_create(badptr,0) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
 		r = panuti_syscall(SYSHANDLER_PIPE_CREATE, 0, 0xDEAD0000, 0, 0);
 		check(console, "pipe_create(0,badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+	}
+
+	/* ---- 43. nstream ---- */
+	section(console, "43. nstream");
+	{
+		int counts[2] = { -1, -1 };
+		panutisysf_nstream(counts);
+		check(console, "nstream wrote input count (0..16)", counts[0] >= 0 && counts[0] <= 16, 1);
+		check(console, "nstream wrote output count (0..16)", counts[1] >= 0 && counts[1] <= 16, 1);
+		/* the console device is bound as out-stream 0 at task creation */
+		check(console, "at least one output stream (console bound)", counts[1] >= 1, 1);
+		write_str(console, "  in=");
+		write_int(console, counts[0]);
+		write_str(console, " out=");
+		write_int(console, counts[1]);
+		write_str(console, "\n");
+		nin = counts[0];
+		nout = counts[1];
+	}
+	{
+		int32_t r = panuti_syscall(SYSHANDLER_NSTREAM, 0xDEAD0000, 0, 0, 0);
+		check(console, "nstream(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+		r = panuti_syscall(SYSHANDLER_NSTREAM, 0, 0, 0, 0);
+		check(console, "nstream(NULL) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+	}
+
+	/* ---- 44. stream_read ---- */
+	section(console, "44. stream_read");
+	{
+		char buf[64];
+
+		/* negative index, valid buffer */
+		int32_t r = panutisysf_stream_read(-1, buf, 1);
+		check(console, "stream_read(-1, buf) -> BADFD", r, PANUTIERRNO_BADFD);
+
+		/* index past the reported input streams */
+		r = panutisysf_stream_read(nin + 5, buf, 1);
+		check(console, "stream_read(nin+5, buf) -> BADFD", r, PANUTIERRNO_BADFD);
+
+		/* the buffer is validated before the stream index */
+		r = panutisysf_stream_read(0, (void*)0xDEAD0000, 1);
+		check(console, "stream_read(0, badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+		r = panutisysf_stream_read(nin + 5, (void*)0xDEAD0000, 1);
+		check(console, "stream_read(bad index, badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+
+		/* zero-length read with a valid buffer passes the range check,
+		   then fails on the stream index if there are no in-streams */
+		r = panutisysf_stream_read(0, buf, 0);
+		if (nin == 0) {
+			check(console, "stream_read(0, buf, 0) with no in-streams -> BADFD", r, PANUTIERRNO_BADFD);
+		} else {
+			check_is_success(console, "stream_read(0, buf, 0)", r);
+		}
+	}
+
+	/* ---- 45. stream_write ---- */
+	section(console, "45. stream_write");
+	{
+		const char msg[] = "stream write ok!\n";
+
+		/* stream 0 is the console bound at task creation */
+		int32_t r = panutisysf_stream_write(0, msg, sizeof(msg));
+		if (nout == 0) {
+			check(console, "stream_write(0, msg) with no out-streams -> BADFD", r, PANUTIERRNO_BADFD);
+		} else {
+			check(console, "stream_write(0, msg) wrote all bytes", r, (int32_t)sizeof(msg));
+		}
+
+		/* negative index, valid buffer */
+		r = panutisysf_stream_write(-1, msg, sizeof(msg));
+		check(console, "stream_write(-1, msg) -> BADFD", r, PANUTIERRNO_BADFD);
+
+		/* index past the reported output streams */
+		r = panutisysf_stream_write(nout + 5, msg, sizeof(msg));
+		check(console, "stream_write(nout+5, msg) -> BADFD", r, PANUTIERRNO_BADFD);
+
+		/* the buffer is validated before the stream index */
+		r = panutisysf_stream_write(0, (void*)0xDEAD0000, 1);
+		check(console, "stream_write(0, badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
+
+		/* zero-length write with a valid buffer reaches the stream */
+		r = panutisysf_stream_write(0, msg, 0);
+		if (nout == 0) {
+			check(console, "stream_write(0, msg, 0) with no out-streams -> BADFD", r, PANUTIERRNO_BADFD);
+		} else {
+			check(console, "stream_write(0, msg, 0) wrote 0 bytes", r, 0);
+		}
 	}
 
 	/* ---- Summary ---- */

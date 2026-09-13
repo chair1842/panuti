@@ -88,7 +88,7 @@ static inline int32_t panutisysf_pipe_create(const int* read_fd, const int* writ
 	return panuti_syscall(SYSHANDLER_PIPE_CREATE, (uint32_t)read_fd, (uint32_t)write_fd, 0, 0);
 }
 
-static inline void panutisysf_nstream(int* out[2]) {
+static inline void panutisysf_nstream(int out[2]) {
 	panuti_syscall(SYSHANDLER_NSTREAM, (uint32_t)out, 0, 0, 0);
 }
 
