@@ -6,7 +6,6 @@
 #include <stddef.h>
 #include <kernel/sched/sched.h>
 #include <kernel/elf.h>
-#include <kernel/handle/handle.h>
 
 #define MAX_TASKS 64
 #define USER_STACK_VIRT_TOP 0xB0000000
@@ -30,11 +29,24 @@ static void task_init_default_streams(task_t* t) {
 	}
 }
 
+// finds a free slot: one that's never been used (state == 0 / TASK_NONE,
+// assuming that's the zero-value of task_state_t) or has been fully
+// reaped (TASK_TERMINATED with everything already torn down by
+// task_destroy). Returns NULL if every slot is occupied.
+static task_t* task_find_free_slot(void) {
+	for (int i = 0; i < MAX_TASKS; i++) {
+		if (tasks[i].state == TASK_NONE || tasks[i].state == TASK_TERMINATED) {
+			return &tasks[i];
+		}
+	}
+	return NULL;
+}
+
 static task_t* task_alloc_common(void) {
-	if (task_count == MAX_TASKS) {
+	task_t* t = task_find_free_slot();
+	if (!t) {
 		return NULL;
 	}
-	task_t* t = &tasks[task_count];
 
 	t->kernel_stack = (uint32_t)vmalloc_pg();
 	if (!t->kernel_stack) {
@@ -82,6 +94,7 @@ task_t* task_create_user(void (*entry)(void)) {
 	if (!user_stack_phys) {
 		vmalloc_free((void*)t->kernel_stack);
 		memman_destroy_addr_space(t->addr_space);
+		t->state = TASK_NONE; // release the slot back, since alloc_common already claimed it
 		return NULL;
 	}
 
@@ -113,6 +126,7 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 	if (elf_load_segments(t->addr_space, elf_data, segs, nsegs) != 0) {
 		vmalloc_free((void*)t->kernel_stack);
 		memman_destroy_addr_space(t->addr_space);
+		t->state = TASK_NONE;
 		return NULL;
 	}
 
@@ -120,6 +134,7 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 	if (!user_stack_phys) {
 		vmalloc_free((void*)t->kernel_stack);
 		memman_destroy_addr_space(t->addr_space);
+		t->state = TASK_NONE;
 		return NULL;
 	}
 
@@ -145,8 +160,6 @@ void task_destroy(task_t* t) {
 		}
 	}
 
-	// release the inode refs streams took at creation/spawn time,
-	// same as the handle table above
 	for (int i = 0; i < t->no_in_streams; i++) {
 		if (t->in_streams[i].inode) {
 			t->in_streams[i].inode->refcount--;
@@ -172,6 +185,6 @@ void task_destroy(task_t* t) {
 	t->next = NULL;
 	t->no_in_streams = 0;
 	t->no_out_streams = 0;
-	t->state = TASK_TERMINATED;
+	t->state = TASK_NONE;
 	task_count--;
 }

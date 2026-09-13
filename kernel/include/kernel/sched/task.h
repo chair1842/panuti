@@ -12,10 +12,11 @@
 typedef uint32_t pid_t;
 
 typedef enum task_state {
-	TASK_READY = 0,
-	TASK_RUNNING = 1,
-	TASK_BLOCKED = 2,
-	TASK_TERMINATED = 3,
+	TASK_NONE = 0,
+	TASK_READY,
+	TASK_RUNNING,
+	TASK_BLOCKED,
+	TASK_TERMINATED,
 } task_state_t;
 
 typedef struct task {
