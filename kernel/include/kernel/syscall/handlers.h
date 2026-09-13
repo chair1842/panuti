@@ -2,6 +2,7 @@
 #define _KERNEL_SYSCALL_HANDLERS_H
 
 #include <stdint.h>
+#include <kernel/mem/usr.h>
 
 // write to a handle
 int32_t syshandler_write(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
@@ -56,5 +57,12 @@ int32_t syshandler_unmount(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
 // create an anonymous pipe
 int32_t syshandler_pipe_create(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// output the number of streams
+int32_t syshandler_nstream(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// read from the in streams
+int32_t syshandler_stream_read(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+int32_t syshandler_stream_write(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
 #endif

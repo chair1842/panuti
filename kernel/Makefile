@@ -68,7 +68,10 @@ kernel/syscall/handlers/link.o \
 kernel/syscall/handlers/mount.o \
 kernel/syscall/handlers/unmount.o \
 kernel/handle/pipe.o \
-kernel/syscall/handlers/pipe_create.o
+kernel/syscall/handlers/pipe_create.o \
+kernel/syscall/handlers/nstream.o \
+kernel/syscall/handlers/stream_read.o \
+kernel/syscall/handlers/stream_write.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

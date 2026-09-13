@@ -1,5 +1,6 @@
 #ifndef _PANUTI_SYSCALLSF_H
 #define _PANUTI_SYSCALLSF_H
+
 #include "syscall.h"
 #include "syscallno.h"
 #include <stddef.h>
@@ -65,8 +66,18 @@ static inline int32_t panutisysf_link(const char* target, const char* newpath) {
 	return panuti_syscall(SYSHANDLER_LINK, (uint32_t)target, (uint32_t)newpath, 0, 0);
 }
 
-static inline int32_t panutisysf_mount(const char* mountp, const char* fstype, const char* blkdev) {
-	return panuti_syscall(SYSHANDLER_MOUNT, (uint32_t)mountp, (uint32_t)fstype, (uint32_t)blkdev, 0);
+static inline int32_t panutisysf_mount(
+	const char* mountp, 
+	const char* fstype, 
+	const char* blkdev
+) {
+	return panuti_syscall(
+		SYSHANDLER_MOUNT,
+		(uint32_t)mountp,
+		(uint32_t)fstype,
+		(uint32_t)blkdev,
+		0
+	);
 }
 
 static inline int32_t panutisysf_unmount(const char* mountp) {
@@ -75,6 +86,30 @@ static inline int32_t panutisysf_unmount(const char* mountp) {
 
 static inline int32_t panutisysf_pipe_create(const int* read_fd, const int* write_fd) {
 	return panuti_syscall(SYSHANDLER_PIPE_CREATE, (uint32_t)read_fd, (uint32_t)write_fd, 0, 0);
+}
+
+static inline void panutisysf_nstream(int* out[2]) {
+	panuti_syscall(SYSHANDLER_NSTREAM, (uint32_t)out, 0, 0, 0);
+}
+
+static inline int32_t panutisysf_stream_read(int stream_no, void* buf, size_t len) {
+	return panuti_syscall(
+		SYSHANDLER_STREAM_READ,
+		(uint32_t)stream_no,
+		(uint32_t)buf,
+		(uint32_t)len, 
+		0
+	);
+}
+
+static inline int32_t panutisysf_stream_write(int stream_no, const void* buf, size_t len) {
+	return panuti_syscall(
+		SYSHANDLER_STREAM_WRITE,
+		(uint32_t)stream_no,
+		(uint32_t)buf, 
+		(uint32_t)len,
+		0
+	);
 }
 
 #endif
