@@ -62,7 +62,7 @@ Write data to an open file descriptor.
 ### 1 -- EXIT
 
 ```c
-int32_t panutisysf_exit(uint32_t code);
+void panutisysf_exit(uint32_t code);
 ```
 
 Terminate the current process.
@@ -269,14 +269,14 @@ Retrieve the absolute path of the current working directory.
 ### 12 -- YIELD
 
 ```c
-int32_t panutisysf_yield(void);
+void panutisysf_yield(void);
 ```
 
 Voluntarily give up the CPU so the scheduler can run another task.
 
 **Parameters:** none.
 
-**Returns:** 0 (always succeeds).
+**Returns:** no return value (always succeeds).
 
 ---
 
@@ -393,6 +393,76 @@ Closing the write end sends EOF to readers.
 
 ---
 
+### 18 -- NSTREAM
+
+```c
+void panutisysf_nstream(int* out[2]);
+```
+
+Report the number of input and output streams attached to the calling task.
+
+Every task carries a fixed set of stream slots in each direction; only the entries that were successfully bound at task creation count as valid streams.
+
+**Parameters:**
+- `out` -- userspace pointer to an array of 2 `int`s used to return the stream counts
+
+**Returns:** 0 on success.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `out` is not a valid userspace pointer
+
+**Note:** On success, `out[0]` receives the number of input streams and `out[1]` the number of output streams. At task creation the kernel attempts to bind output stream 0 to the console device (`/dvc/console`) and input stream 0 to the keyboard device (`/dvc/kbd`); a slot is only registered if the device is available.
+
+---
+
+### 19 -- STREAM_READ
+
+```c
+int32_t panutisysf_stream_read(int stream_no, void* buf, size_t len);
+```
+
+Read data from one of the calling task's input streams.
+
+**Parameters:**
+- `stream_no` -- input stream index (0 to N-1, where N is the input-stream count reported by `NSTREAM`)
+- `buf` -- userspace buffer to receive the data
+- `len` -- maximum number of bytes to read
+
+**Returns:** number of bytes actually read, or error code.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `buf`/`len` is not a valid userspace range
+- `PANUTIERRNO_BADFD` -- `stream_no` is out of range for the task's input streams
+- `PANUTIERRNO_UNSUPPORTEDOP` -- the underlying stream does not support reading
+
+**Note:** The result is produced by the underlying device's read operation, so its value is device-specific.
+
+---
+
+### 20 -- STREAM_WRITE
+
+```c
+int32_t panutisysf_stream_write(int stream_no, const void* buf, size_t len);
+```
+
+Write data to one of the calling task's output streams.
+
+**Parameters:**
+- `stream_no` -- output stream index (0 to N-1, where N is the output-stream count reported by `NSTREAM`)
+- `buf` -- userspace buffer of data to write
+- `len` -- number of bytes to write
+
+**Returns:** number of bytes actually written, or error code.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `buf`/`len` is not a valid userspace range
+- `PANUTIERRNO_BADFD` -- `stream_no` is out of range for the task's output streams
+- `PANUTIERRNO_UNSUPPORTEDOP` -- the underlying stream does not support writing
+
+**Note:** The result is produced by the underlying device's write operation, so its value is device-specific.
+
+---
+
 ## Quick Reference
 
 | # | Name | Registered |
@@ -415,6 +485,9 @@ Closing the write end sends EOF to readers.
 | 15 | `MOUNT` | Yes |
 | 16 | `UNMOUNT` | Yes |
 | 17 | `PIPE_CREATE` | Yes |
+| 18 | `NSTREAM` | Yes |
+| 19 | `STREAM_READ` | Yes |
+| 20 | `STREAM_WRITE` | Yes |
 
 ## Limits
 
@@ -427,3 +500,5 @@ Closing the write end sends EOF to readers.
 | Max getcwd nesting | 64 components |
 | Max mounted filesystems | 64 |
 | Pipe buffer size | 4096 bytes |
+| Max input streams per task | 16 |
+| Max output streams per task | 16 |
