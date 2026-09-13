@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <kernel/sched/sched.h>
 #include <kernel/elf.h>
+#include <kernel/handle/handle.h>
 
 #define MAX_TASKS 64
 #define USER_STACK_VIRT_TOP 0xB0000000
@@ -15,34 +16,21 @@ static pid_t next_pid = 1;
 static uint32_t task_count = 0;
 static task_t tasks[MAX_TASKS] = {0};
 
-task_t* task_create(void (*entry)(void)) {
-	if (!entry || task_count == MAX_TASKS) {
-		return NULL;
+static void task_init_default_streams(task_t* t) {
+	if (handle_build("/dvc/console", &t->out_streams[0])) {
+		t->no_out_streams = 1;
+	} else {
+		t->no_out_streams = 0;
 	}
 
-	task_t* t = &tasks[task_count];
-	t->kernel_stack = (uint32_t)vmalloc_pg();
-	if (!t->kernel_stack) {
-		return NULL;
+	if (handle_build("/dvc/kbd", &t->in_streams[0])) {
+		t->no_in_streams = 1;
+	} else {
+		t->no_in_streams = 0;
 	}
-
-	t->pid = next_pid++;
-	t->state = TASK_READY;
-	t->cwd = registry_root();
-	t->addr_space = memman_create_addr_space();
-	if (!t->addr_space) {
-		vmalloc_free((void*)t->kernel_stack);
-		return NULL;
-	}
-	
-	task_init_stack(t, entry);
-	task_count++;
-	sched_add(t);
-
-	return t;
 }
 
-task_t* task_create_user(void (*entry)(void)) {
+static task_t* task_alloc_common(void) {
 	if (task_count == MAX_TASKS) {
 		return NULL;
 	}
@@ -56,6 +44,37 @@ task_t* task_create_user(void (*entry)(void)) {
 	t->addr_space = memman_create_addr_space();
 	if (!t->addr_space) {
 		vmalloc_free((void*)t->kernel_stack);
+		return NULL;
+	}
+
+	t->pid = next_pid++;
+	t->state = TASK_READY;
+	t->cwd = registry_root();
+	task_init_default_streams(t);
+
+	return t;
+}
+
+task_t* task_create(void (*entry)(void)) {
+	if (!entry) {
+		return NULL;
+	}
+
+	task_t* t = task_alloc_common();
+	if (!t) {
+		return NULL;
+	}
+
+	task_init_stack(t, entry);
+	task_count++;
+	sched_add(t);
+
+	return t;
+}
+
+task_t* task_create_user(void (*entry)(void)) {
+	task_t* t = task_alloc_common();
+	if (!t) {
 		return NULL;
 	}
 
@@ -70,9 +89,6 @@ task_t* task_create_user(void (*entry)(void)) {
 	memman_map_in(t->addr_space, user_stack_virt_base, user_stack_phys, MEMMAN_PRESENT | MEMMAN_RW | MEMMAN_USER);
 	uint32_t user_esp = user_stack_virt_base + PAGE_SIZE;
 
-	t->pid = next_pid++;
-	t->state = TASK_READY;
-
 	task_init_user_stack(t, entry, user_esp);
 	task_count++;
 	sched_add(t);
@@ -81,11 +97,6 @@ task_t* task_create_user(void (*entry)(void)) {
 }
 
 task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
-	if (task_count == MAX_TASKS) {
-		return NULL;
-	}
-	task_t* t = &tasks[task_count];
-
 	elf_loadable_segment_t segs[16];
 	int nsegs;
 	uint64_t entry;
@@ -94,14 +105,8 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 		return NULL;
 	}
 
-	t->kernel_stack = (uint32_t)vmalloc_pg();
-	if (!t->kernel_stack) {
-		return NULL;
-	}
-
-	t->addr_space = memman_create_addr_space();
-	if (!t->addr_space) {
-		vmalloc_free((void*)t->kernel_stack);
+	task_t* t = task_alloc_common();
+	if (!t) {
 		return NULL;
 	}
 
@@ -122,8 +127,6 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 	memman_map_in(t->addr_space, user_stack_virt_base, user_stack_phys, MEMMAN_PRESENT | MEMMAN_RW | MEMMAN_USER);
 	uint32_t user_esp = user_stack_virt_base + PAGE_SIZE;
 
-	t->pid = next_pid++;
-	t->state = TASK_READY;
 	task_init_user_stack(t, (void (*)(void))(uint32_t)entry, user_esp);
 	task_count++;
 	sched_add(t);
@@ -142,6 +145,19 @@ void task_destroy(task_t* t) {
 		}
 	}
 
+	// release the inode refs streams took at creation/spawn time,
+	// same as the handle table above
+	for (int i = 0; i < t->no_in_streams; i++) {
+		if (t->in_streams[i].inode) {
+			t->in_streams[i].inode->refcount--;
+		}
+	}
+	for (int i = 0; i < t->no_out_streams; i++) {
+		if (t->out_streams[i].inode) {
+			t->out_streams[i].inode->refcount--;
+		}
+	}
+
 	if (t->kernel_stack) {
 		vmalloc_free((void*)t->kernel_stack);
 	}
@@ -154,6 +170,8 @@ void task_destroy(task_t* t) {
 	t->addr_space = NULL;
 	t->cwd = NULL;
 	t->next = NULL;
+	t->no_in_streams = 0;
+	t->no_out_streams = 0;
 	t->state = TASK_TERMINATED;
 	task_count--;
 }

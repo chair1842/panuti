@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <kernel/handle/inode_type.h>
+#include <stdbool.h>
 
 struct task;
 struct inode;
@@ -33,5 +34,6 @@ int op_not_supported_close(void* impl, struct task* self);
 
 int handle_alloc(struct task* t, inode_type_t type);
 void handle_free(struct task* t, int fd);
+bool handle_build(const char* path, handle_t* out);
 
 #endif

@@ -2,6 +2,7 @@
 #include <kernel/handle/handle.h>
 #include <panuti/errno.h>
 #include <kernel/sched/task.h>
+#include <kernel/handle/registry.h>
 
 int op_not_supported_rw(void* impl, void* buf, size_t len) {
 	(void)impl; (void)buf; (void)len;
@@ -48,4 +49,19 @@ void handle_free(task_t* t, int fd) {
 	t->handles[fd].impl = NULL;
 	t->handles[fd].ops = NULL;
 	t->handles[fd].inode = NULL;
+}
+
+bool handle_build(const char* path, handle_t* out) {
+	inode_t* n = registry_resolve(registry_root(), path);
+	if (!n) {
+		return false;
+	}
+
+	out->type = n->type;
+	out->impl = n->impl;
+	out->ops = n->ops;
+	out->inode = n;
+
+	n->refcount++;
+	return true;
 }
