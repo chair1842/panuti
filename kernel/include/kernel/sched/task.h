@@ -5,6 +5,7 @@
 #include <stddef.h>
 #include <kernel/handle/handle.h>
 #include <kernel/handle/registry.h>
+#include <panuti/syscall/procreate.h>
 
 #define TASK_KERNEL_STACK_SIZE 4096
 #define MAX_STREAMS 16
@@ -48,7 +49,15 @@ void task_switch_to(task_t* old, task_t* new);
 void task_init_stack(task_t* t, void (*entry)(void));
 void task_init_user_stack(task_t* t, void (*entry)(void), uint32_t user_esp);
 void task_activate(task_t* task);
-/* Frees the resources of a terminated task and reaps its slot. */
 void task_destroy(task_t* task);
+int task_build_user_argv_stack(
+	uint32_t stack_phys,
+	uint32_t stack_virt_top,
+    char** argv,
+    int argc,
+    size_t max_bytes,
+    uint32_t* out_esp
+); 
+pid_t task_procreate(task_t* caller, const procreate_args_t* args);
 
 #endif

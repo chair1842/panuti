@@ -63,6 +63,11 @@ int32_t syshandler_nstream(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
 // read from the in streams
 int32_t syshandler_stream_read(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// write to the out streams
 int32_t syshandler_stream_write(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// create a process
+int32_t syshandler_procreate(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
 #endif

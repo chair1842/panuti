@@ -71,7 +71,8 @@ kernel/handle/pipe.o \
 kernel/syscall/handlers/pipe_create.o \
 kernel/syscall/handlers/nstream.o \
 kernel/syscall/handlers/stream_read.o \
-kernel/syscall/handlers/stream_write.o
+kernel/syscall/handlers/stream_write.o \
+kernel/syscall/handlers/procreate.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

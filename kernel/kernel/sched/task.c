@@ -1,15 +1,20 @@
 #include "kernel/handle/registry.h"
+#include <kernel/handle/fs.h>
 #include <kernel/sched/task.h>
 #include <kernel/memman/vmalloc.h>
 #include <kernel/memman/memman.h>
+#include <kernel/memman/slab.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <kernel/sched/sched.h>
 #include <kernel/elf.h>
+#include <panuti/errno.h>
 
 #define MAX_TASKS 64
 #define USER_STACK_VIRT_TOP 0xB0000000
 #define PAGE_SIZE 0x1000
+#define MAX_ARGV_BYTES 512
+#define ELF_READ_MAX (256 * 1024)
 
 static pid_t next_pid = 1;
 static uint32_t task_count = 0;
@@ -187,4 +192,161 @@ void task_destroy(task_t* t) {
 	t->no_out_streams = 0;
 	t->state = TASK_NONE;
 	task_count--;
+}
+
+static void procreate_cleanup(task_t* t) {
+	if (!t) {
+		return;
+	}
+
+	for (int i = 0; i < t->no_in_streams; i++) {
+		if (t->in_streams[i].inode) {
+			t->in_streams[i].inode->refcount--;
+		}
+	}
+	for (int i = 0; i < t->no_out_streams; i++) {
+		if (t->out_streams[i].inode) {
+			t->out_streams[i].inode->refcount--;
+		}
+	}
+
+	if (t->kernel_stack) {
+		vmalloc_free((void*)t->kernel_stack);
+	}
+	if (t->addr_space) {
+		memman_destroy_addr_space(t->addr_space);
+	}
+
+	t->state = TASK_NONE;
+}
+
+static int elf_read_whole_file(inode_t* n, void** out_data, size_t* out_size) {
+	void* file_impl = fs_open_file(n->mnt->fs_impl, n->mnt->fs_ops, n);
+	if (!file_impl) {
+		return -1;
+	}
+
+	uint8_t* buf = kmalloc(ELF_READ_MAX, 1);
+	if (!buf) {
+		return -1;
+	}
+
+	size_t total = 0;
+	while (total < ELF_READ_MAX) {
+		int n_read = n->mnt->fs_ops->read(file_impl, buf + total, ELF_READ_MAX - total, total);
+		if (n_read <= 0) {
+			break;
+		}
+		
+		total += (size_t)n_read;
+	}
+
+	if (total == 0) {
+		kfree(buf);
+		return -1;
+	}
+
+	*out_data = buf;
+	*out_size = total;
+	return 0;
+}
+
+static int install_stream(task_t* caller, int fd, handle_t* dest) {
+	if (fd < 0 || fd >= MAX_HANDLES || caller->handles[fd].type == INODE_NONE) {
+		return -1;
+	}
+
+	*dest = caller->handles[fd];
+	if (dest->inode) {
+		dest->inode->refcount++;
+	}
+
+	return 0;
+}
+
+pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
+	inode_t* bin = registry_resolve(caller->cwd, args->path);
+	if (!bin) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	void* elf_data;
+	size_t elf_size;
+	if (elf_read_whole_file(bin, &elf_data, &elf_size) != 0) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	elf_loadable_segment_t segs[16];
+	int nsegs;
+	uint64_t entry;
+	if (elf32_parse(elf_data, elf_size, segs, 16, &nsegs, &entry) != ELF_OK) {
+		kfree(elf_data);
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	task_t* t = task_alloc_common();
+	if (!t) {
+		kfree(elf_data);
+		return PANUTIERRNO_NOFDS;
+	}
+
+	if (elf_load_segments(t->addr_space, elf_data, segs, nsegs) != 0) {
+		kfree(elf_data);
+		procreate_cleanup(t);
+		return PANUTIERRNO_PLAINERR;
+	}
+	
+	kfree(elf_data);
+
+	uint32_t user_stack_phys = memman_alloc_frame();
+	if (!user_stack_phys) {
+		procreate_cleanup(t);
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	uint32_t user_stack_virt_base = USER_STACK_VIRT_TOP - PAGE_SIZE;
+	memman_map_in(t->addr_space, user_stack_virt_base, user_stack_phys, MEMMAN_PRESENT | MEMMAN_RW | MEMMAN_USER);
+
+	char* synth_argv[1];
+	char** real_argv = args->argv;
+	int real_argc = args->argc;
+	if (real_argc == 0) {
+		synth_argv[0] = (char*)args->path;
+		real_argv = synth_argv;
+		real_argc = 1;
+	}
+
+	uint32_t user_esp;
+	if (task_build_user_argv_stack(user_stack_phys, USER_STACK_VIRT_TOP, real_argv, real_argc, MAX_ARGV_BYTES, &user_esp) != 0) {
+		procreate_cleanup(t);
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	if (args->no_in_streams > 0) {
+		for (int i = 0; i < args->no_in_streams; i++) {
+			if (install_stream(caller, args->in_streams[i], &t->in_streams[i]) != 0) {
+				procreate_cleanup(t);
+				return PANUTIERRNO_BADFD;
+			}
+		}
+		
+		t->no_in_streams = args->no_in_streams;
+	}
+
+	if (args->no_out_streams > 0) {
+		for (int i = 0; i < args->no_out_streams; i++) {
+			if (install_stream(caller, args->out_streams[i], &t->out_streams[i]) != 0) {
+				procreate_cleanup(t);
+				return PANUTIERRNO_BADFD;
+			}
+		}
+		
+		t->no_out_streams = args->no_out_streams;
+	}
+
+	task_init_user_stack(t, (void (*)(void))(uint32_t)entry, user_esp);
+	task_count++;
+	sched_add(t);
+
+	return t->pid;
 }

@@ -5,6 +5,8 @@
 #include "syscallno.h"
 #include <stddef.h>
 #include <stdint.h>
+#include <sys/types.h>
+#include "procreate.h"
 
 static inline int32_t panutisysf_write(int handle, const void* data, size_t size) {
 	return panuti_syscall(SYSHANDLER_WRITE, (uint32_t)handle, (uint32_t)data, (uint32_t)size, 0);
@@ -110,6 +112,10 @@ static inline int32_t panutisysf_stream_write(int stream_no, const void* buf, si
 		(uint32_t)len,
 		0
 	);
+}
+
+static inline pid_t panutisysf_procreate(const procreate_args_t* args) {
+	return (pid_t)panuti_syscall(SYSHANDLER_PROCREATE, (uint32_t)args, 0, 0, 0);
 }
 
 #endif
