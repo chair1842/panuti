@@ -105,7 +105,7 @@ task_t* task_create_user(void (*entry)(void)) {
 
 	uint32_t user_stack_virt_base = USER_STACK_VIRT_TOP - PAGE_SIZE;
 	memman_map_in(t->addr_space, user_stack_virt_base, user_stack_phys, MEMMAN_PRESENT | MEMMAN_RW | MEMMAN_USER);
-	uint32_t user_esp = user_stack_virt_base + PAGE_SIZE;
+	uint32_t user_esp = user_stack_virt_base + PAGE_SIZE - 4;
 
 	task_init_user_stack(t, entry, user_esp);
 	task_count++;
@@ -145,7 +145,7 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 
 	uint32_t user_stack_virt_base = USER_STACK_VIRT_TOP - PAGE_SIZE;
 	memman_map_in(t->addr_space, user_stack_virt_base, user_stack_phys, MEMMAN_PRESENT | MEMMAN_RW | MEMMAN_USER);
-	uint32_t user_esp = user_stack_virt_base + PAGE_SIZE;
+	uint32_t user_esp = user_stack_virt_base + PAGE_SIZE - 4;
 
 	task_init_user_stack(t, (void (*)(void))(uint32_t)entry, user_esp);
 	task_count++;
