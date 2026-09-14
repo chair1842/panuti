@@ -96,7 +96,7 @@ static void section(int fd, const char* name) {
 
 /* ------------------------------------------------------------------ */
 
-int main(void) {
+int main(int argc, char** argv) {
 	int console = panutisysf_open("/dvc/console");
 	if (console < 0) {
 		/* nowhere to output; just die */
