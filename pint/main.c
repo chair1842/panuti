@@ -103,6 +103,17 @@ int main(int argc, char** argv) {
 		panutisysf_exit(1);
 	}
 
+	/* Child mode: procreated with "--child" argument */
+	if (argc >= 2 && strcmp(argv[1], "--child") == 0) {
+		write_str(console, "  [child] argc=");
+		write_int(console, argc);
+		write_str(console, " argv[1]=");
+		write_str(console, argv[1]);
+		write_str(console, "\n");
+		panutisysf_close(console);
+		panutisysf_exit(42);
+	}
+
 	int nin = 0;   /* input streams, filled by nstream */
 	int nout = 0;  /* output streams, filled by nstream */
 
@@ -1182,6 +1193,126 @@ int main(int argc, char** argv) {
 		} else {
 			check(console, "stream_write(0, msg, 0) wrote 0 bytes", r, 0);
 		}
+	}
+
+	/* ---- 46. procreate + wait ---- */
+	section(console, "46. procreate + wait (mount ISO, spawn child, reap)");
+
+	{
+		/* mount the boot ISO so we can read pint.elf from it */
+		int32_t r = panutisysf_mkdir("/mnt");
+		write_str(console, "  mkdir /mnt -> ");
+		write_int(console, r);
+		write_str(console, "\n");
+
+		r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		check_is_success(console, "mount /mnt iso9660 /dvc/cdrom0", r);
+
+		/* procreate pint.elf with --child so it exits immediately */
+		char* child_argv[] = { "pint", "--child" };
+		procreate_args_t cargs = {
+			.path = "/mnt/boot/pint.elf",
+			.argv = child_argv,
+			.argc = 2,
+			.in_streams = (int*)0,
+			.no_in_streams = 0,
+			.out_streams = (int*)0,
+			.no_out_streams = 0,
+		};
+		pid_t child = panutisysf_procreate(&cargs);
+		write_str(console, "  procreate pid=");
+		write_int(console, (int)child);
+		write_str(console, "\n");
+		check(console, "procreate returns positive pid", child > 0 ? 1 : 0, 1);
+
+		/* wait for the child to finish */
+		int ec = -1;
+		int32_t w = panutisysf_wait(child, &ec);
+		write_str(console, "  wait returned=");
+		write_int(console, w);
+		write_str(console, " exit_code=");
+		write_int(console, ec);
+		write_str(console, "\n");
+		check_is_success(console, "wait returns success", w);
+		check(console, "child exit code == 42", ec, 42);
+
+		/* the child's pid should be gone now; waiting again must fail */
+		ec = -1;
+		w = panutisysf_wait(child, &ec);
+		check(console, "wait on reaped pid -> NOTFOUND", w, PANUTIERRNO_NOTFOUND);
+
+		/* unmount */
+		r = panutisysf_unmount("/mnt");
+		check(console, "unmount /mnt after test", r, 0);
+	}
+
+	/* ---- 47. procreate / wait edge cases ---- */
+	section(console, "47. procreate / wait edge cases");
+
+	{
+		/* procreate with a bogus path */
+		procreate_args_t bad = {
+			.path = "/no/such/bin.elf",
+			.argv = (char**)0,
+			.argc = 0,
+			.in_streams = (int*)0,
+			.no_in_streams = 0,
+			.out_streams = (int*)0,
+			.no_out_streams = 0,
+		};
+		pid_t p = panutisysf_procreate(&bad);
+		write_str(console, "  procreate(badpath) pid=");
+		write_int(console, (int)p);
+		write_str(console, "\n");
+		/* procreate must fail (returns error code, not a pid) */
+		check_is_error(console, "procreate bad path -> error", (int32_t)p);
+	}
+
+	{
+		/* procreate with garbage pointer in path */
+		procreate_args_t gp;
+		gp.path = (const char*)0xDEAD0000;
+		gp.argv = (char**)0;
+		gp.argc = 0;
+		gp.in_streams = (int*)0;
+		gp.no_in_streams = 0;
+		gp.out_streams = (int*)0;
+		gp.no_out_streams = 0;
+		pid_t p = panutisysf_procreate(&gp);
+		write_str(console, "  procreate(badptr path) pid=");
+		write_int(console, (int)p);
+		write_str(console, "\n");
+		check_is_error(console, "procreate bad pointer path -> error", (int32_t)p);
+	}
+
+	{
+		/* wait on a pid that doesn't exist */
+		int ec = -1;
+		int32_t w = panutisysf_wait(9999, &ec);
+		write_str(console, "  wait(9999) -> ");
+		write_int(console, w);
+		write_str(console, "\n");
+		check(console, "wait(nonexistent) -> NOTFOUND", w, PANUTIERRNO_NOTFOUND);
+	}
+
+	{
+		/* wait on self should fail */
+		uint32_t my_pid = panutisysf_getpid();
+		int ec = -1;
+		int32_t w = panutisysf_wait((pid_t)my_pid, &ec);
+		write_str(console, "  wait(self) -> ");
+		write_int(console, w);
+		write_str(console, "\n");
+		check(console, "wait(self) -> PLAINERR", w, PANUTIERRNO_PLAINERR);
+	}
+
+	{
+		/* wait with garbage pointer for exit code */
+		int32_t w = panutisysf_wait(1, (int*)0xDEAD0000);
+		write_str(console, "  wait(badptr ec) -> ");
+		write_int(console, w);
+		write_str(console, "\n");
+		check(console, "wait(badptr) -> INVALIDADDR", w, PANUTIERRNO_INVALIDADDR);
 	}
 
 	/* ---- Summary ---- */

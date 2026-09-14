@@ -7,10 +7,11 @@
 int32_t syshandler_exit(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	(void)a2; (void)a3; (void)a4;
 	uint32_t exit_code = a1;
-	(void)exit_code;
 
 	task_t* current = sched_current();
+	current->exit_code = exit_code;
 	current->state = TASK_TERMINATED;
+	task_wake_waiters(current->pid);
 	sched_schedule();
 
 	return PANUTIERRNO_PLAINSUCCESS;
