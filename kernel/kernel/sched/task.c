@@ -221,13 +221,20 @@ static void procreate_cleanup(task_t* t) {
 }
 
 static int elf_read_whole_file(inode_t* n, void** out_data, size_t* out_size) {
-	void* file_impl = fs_open_file(n->mnt->fs_impl, n->mnt->fs_ops, n);
+	if (!n->mnt->fs_ops->open) {
+		return -1;
+	}
+
+	void* file_impl = n->mnt->fs_ops->open(n->mnt->fs_impl, n);
 	if (!file_impl) {
 		return -1;
 	}
 
 	uint8_t* buf = kmalloc(ELF_READ_MAX, 1);
 	if (!buf) {
+		if (n->mnt->fs_ops->close) {
+			n->mnt->fs_ops->close(file_impl);
+		}
 		return -1;
 	}
 
@@ -242,8 +249,15 @@ static int elf_read_whole_file(inode_t* n, void** out_data, size_t* out_size) {
 	}
 
 	if (total == 0) {
+		if (n->mnt->fs_ops->close) {
+			n->mnt->fs_ops->close(file_impl);
+		}
 		kfree(buf);
 		return -1;
+	}
+
+	if (n->mnt->fs_ops->close) {
+		n->mnt->fs_ops->close(file_impl);
 	}
 
 	*out_data = buf;
@@ -356,6 +370,7 @@ int task_wait_pid(pid_t target, int* exit_code_out) {
 		if (tasks[i].pid == target && tasks[i].state != TASK_NONE) {
 			if (tasks[i].state == TASK_TERMINATED) {
 				*exit_code_out = tasks[i].exit_code;
+				sched_remove(&tasks[i]);
 				task_destroy(&tasks[i]);
 				return 0;
 			}

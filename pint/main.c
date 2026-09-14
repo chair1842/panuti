@@ -1211,7 +1211,7 @@ int main(int argc, char** argv) {
 		/* procreate pint.elf with --child so it exits immediately */
 		char* child_argv[] = { "pint", "--child" };
 		procreate_args_t cargs = {
-			.path = "/mnt/boot/pint.elf",
+			.path = "/mnt/BOOT/PINT.ELF",
 			.argv = child_argv,
 			.argc = 2,
 			.in_streams = (int*)0,
