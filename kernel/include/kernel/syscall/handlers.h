@@ -70,4 +70,7 @@ int32_t syshandler_stream_write(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t 
 // create a process
 int32_t syshandler_procreate(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// wait for a process to exit
+int32_t syshandler_wait(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

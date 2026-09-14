@@ -118,4 +118,8 @@ static inline pid_t panutisysf_procreate(const procreate_args_t* args) {
 	return (pid_t)panuti_syscall(SYSHANDLER_PROCREATE, (uint32_t)args, 0, 0, 0);
 }
 
+static inline int32_t panutisysf_wait(pid_t pid, int* ec_out) {
+	return panuti_syscall(SYSHANDLER_WAIT, (uint32_t)pid, (uint32_t)ec_out, 0, 0);
+}
+
 #endif

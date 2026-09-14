@@ -54,50 +54,39 @@ void sched_remove(task_t* task) {
 }
 
 void sched_schedule(void) {
-    if (!sched_initialized) {
-        return;
-    }
-    
-    if (!current) {
-        current = ready_queue;
-        current->state = TASK_RUNNING;
-        return;
-    }
+	if (!sched_initialized) {
+		return;
+	}
 
-    task_t* prev = current;
+	if (!current) {
+		current = ready_queue;
+		current->state = TASK_RUNNING;
+		return;
+	}
 
-    if (prev->state == TASK_RUNNING) {
-        prev->state = TASK_READY;
-    }
+	task_t* prev = current;
 
-    task_t* next = prev->next;
-    while (next->state != TASK_READY) {
-        if (next->state == TASK_TERMINATED) {
-            task_t* dead = next;
-            next = dead->next;
-            sched_remove(dead);
-            task_destroy(dead);
-            if (ready_queue == NULL) {
-                kpanic("sched_schedule: no runnable tasks");
-            }
-            continue;
-        }
+	if (prev->state == TASK_RUNNING) {
+		prev->state = TASK_READY;
+	}
 
-        if (next == prev) {
-            kpanic("sched_schedule: no runnable tasks");
-        }
+	task_t* next = prev->next;
+	while (next->state != TASK_READY) {
+		if (next == prev) {
+			kpanic("sched_schedule: no runnable tasks");
+		}
 
-        next = next->next;
-    }
+		next = next->next;
+	}
 
-    current = next;
-    current->state = TASK_RUNNING;
+	current = next;
+	current->state = TASK_RUNNING;
 
-    if (prev != current) {
-        klog(KLOG_INFO, "sched_schedule: switching from %p to %p\n", prev, current);
-        task_activate(current);
-        task_switch_to(prev, current);
-    }
+	if (prev != current) {
+		klog(KLOG_INFO, "sched_schedule: switching from %p to %p\n", prev, current);
+		task_activate(current);
+		task_switch_to(prev, current);
+	}
 }
 
 void sched_init(void) {
