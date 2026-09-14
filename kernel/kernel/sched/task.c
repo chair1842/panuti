@@ -350,3 +350,28 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 
 	return t->pid;
 }
+
+int task_wait_pid(pid_t target, int* exit_code_out) {
+	for (int i = 0; i < MAX_TASKS; i++) {
+		if (tasks[i].pid == target && tasks[i].state != TASK_NONE) {
+			if (tasks[i].state == TASK_TERMINATED) {
+				*exit_code_out = tasks[i].exit_code;
+				task_destroy(&tasks[i]);
+				return 0;
+			}
+			
+			return 1;
+		}
+	}
+	
+	return -1;
+}
+
+void task_wake_waiters(pid_t exited_pid) {
+	for (int i = 0; i < MAX_TASKS; i++) {
+		if (tasks[i].state == TASK_BLOCKED && tasks[i].pid_waiting_on == exited_pid) {
+			tasks[i].pid_waiting_on = 0;
+			task_wake(&tasks[i]);
+		}
+	}
+}

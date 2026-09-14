@@ -40,6 +40,9 @@ typedef struct task {
 
 	handle_t out_streams[MAX_STREAMS];
 	int no_out_streams;
+	
+	uint32_t exit_code;
+	pid_t pid_waiting_on;
 } task_t;
 
 task_t* task_create(void (*entry)(void));
@@ -59,5 +62,7 @@ int task_build_user_argv_stack(
     uint32_t* out_esp
 ); 
 pid_t task_procreate(task_t* caller, const procreate_args_t* args);
+int task_wait_pid(pid_t target, int* exit_code_out);
+void task_wake_waiters(pid_t exited_pid);
 
 #endif
