@@ -463,6 +463,62 @@ Write data to one of the calling task's output streams.
 
 ---
 
+### 21 -- PROCREATE
+
+```c
+pid_t panutisysf_procreate(const procreate_args_t* args);
+```
+
+Create a new user process by loading an ELF executable.
+
+**Parameters:**
+- `args` -- pointer to a `procreate_args_t` struct (see below)
+
+**Returns:** PID of the new process, or error code.
+
+The `procreate_args_t` struct is defined in `libc/include/panuti/syscall/procreate.h`:
+
+```c
+typedef struct procreate_args {
+    const char* path;       // path to ELF executable
+    char** argv;            // argument string pointers
+    int argc;               // number of arguments (max 32)
+    int* in_streams;        // array of input stream handle indices
+    int no_in_streams;      // number of input streams (max 16)
+    int* out_streams;       // array of output stream handle indices
+    int no_out_streams;     // number of output streams (max 16)
+} procreate_args_t;
+```
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `args` or any pointer inside the struct is not a valid userspace pointer
+- `PANUTIERRNO_PLAINERR` -- `argc`, `no_in_streams`, or `no_out_streams` is out of range
+
+---
+
+### 22 -- WAIT
+
+```c
+int32_t panutisysf_wait(pid_t pid, int* ec_out);
+```
+
+Block until a target process exits and retrieve its exit code.
+
+**Parameters:**
+- `pid` -- PID of the process to wait for
+- `ec_out` -- userspace pointer to `int` where the exit code is written
+
+**Returns:** 0 on success, or error code.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `ec_out` is not a valid userspace pointer
+- `PANUTIERRNO_PLAINERR` -- attempting to wait on the calling process itself
+- `PANUTIERRNO_NOTFOUND` -- target process does not exist
+
+**Note:** The caller blocks until the target process terminates. If the target is still running, the caller is put to sleep and retried when the target exits.
+
+---
+
 ## Quick Reference
 
 | # | Name | Registered |
@@ -488,6 +544,8 @@ Write data to one of the calling task's output streams.
 | 18 | `NSTREAM` | Yes |
 | 19 | `STREAM_READ` | Yes |
 | 20 | `STREAM_WRITE` | Yes |
+| 21 | `PROCREATE` | Yes |
+| 22 | `WAIT` | Yes |
 
 ## Limits
 
@@ -502,3 +560,4 @@ Write data to one of the calling task's output streams.
 | Pipe buffer size | 4096 bytes |
 | Max input streams per task | 16 |
 | Max output streams per task | 16 |
+| Max procreate argv count | 32 |
