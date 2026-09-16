@@ -5,6 +5,11 @@
 #include <string.h>
 
 int block_read_bytes(block_dev_t *dev, uint64_t offset, uint32_t len, void *buf) {
+	// a zero-length read must not underflow `offset + len - 1`
+	if (len == 0) {
+		return BLOCK_OK;
+	}
+
 	uint32_t blks = dev->block_size;
 	uint64_t startblk = offset / blks;
 	uint64_t endblk = (offset + len - 1) / blks;

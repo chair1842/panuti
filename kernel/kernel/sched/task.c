@@ -161,6 +161,10 @@ void task_destroy(task_t* t) {
 
 	for (int i = 0; i < MAX_HANDLES; i++) {
 		if (t->handles[i].type != INODE_NONE) {
+			inode_unref(t->handles[i].inode);
+			if (t->handles[i].ops && t->handles[i].ops->close) {
+				t->handles[i].ops->close(t->handles[i].impl, t);
+			}
 			handle_free(t, i);
 		}
 	}

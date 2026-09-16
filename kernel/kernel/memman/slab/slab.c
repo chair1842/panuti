@@ -122,15 +122,36 @@ void* kmalloc(uint32_t size, uint32_t align) {
 			return NULL;
 		}
 
-		if (size <= PAGE_SIZE) {
-			return vmalloc_pg();
-		}
-
-		uint32_t npages = (size + PAGE_SIZE - 1) / PAGE_SIZE;
-		void* range = vmalloc_pages(npages + 1);
-		if (!range) {
-			klog(KLOG_WARN, "kmalloc(%u): multi-page allocation failed\n", size);
+		// compute the page count in 64 bits; a size near 2^32 would wrap the
+		// 32-bit sum and silently produce a tiny allocation
+		uint64_t need = (uint64_t)size + PAGE_SIZE - 1;
+		if (need > 65535ULL * PAGE_SIZE) { // 65535 data pages + 1 header page
+			klog(KLOG_WARN, "kmalloc(%u): request too large\n", size);
 			return NULL;
+		}
+		uint32_t npages = (uint32_t)(need / PAGE_SIZE);
+
+		void* data;
+		uint32_t total_pages;
+		if (size <= PAGE_SIZE) {
+			data = vmalloc_pg();
+			if (!data) {
+				return NULL;
+			}
+			total_pages = 1;
+		} else {
+			void* range = vmalloc_pages(npages + 1);
+			if (!range) {
+				klog(KLOG_WARN, "kmalloc(%u): multi-page allocation failed\n", size);
+				return NULL;
+			}
+
+			big_alloc_hdr_t* hdr = (big_alloc_hdr_t*)range;
+			hdr->magic = BIG_ALLOC_MAGIC;
+			hdr->npages = npages;
+
+			data = (void*)((uint32_t)range + PAGE_SIZE);
+			total_pages = npages + 1;
 		}
 
 		int slot = -1;
@@ -142,20 +163,19 @@ void* kmalloc(uint32_t size, uint32_t align) {
 		}
 		if (slot < 0) {
 			klog(KLOG_WARN, "kmalloc(%u): big_alloc registry full\n", size);
-			vmalloc_free_pages(range, npages + 1);
+			if (total_pages == 1) {
+				vmalloc_free(data);
+			} else {
+				vmalloc_free_pages((void*)((uint32_t)data - PAGE_SIZE), total_pages);
+			}
 			return NULL;
 		}
 
-		big_alloc_hdr_t* hdr = (big_alloc_hdr_t*)range;
-		hdr->magic = BIG_ALLOC_MAGIC;
-		hdr->npages = npages;
+		big_allocs[slot].vaddr = (uint32_t)data;
+		big_allocs[slot].npages = total_pages;
 
-		uint32_t data_vaddr = (uint32_t)range + PAGE_SIZE;
-		big_allocs[slot].vaddr = data_vaddr;
-		big_allocs[slot].npages = npages + 1;
-
-		memset((void*)data_vaddr, 0, npages * PAGE_SIZE);
-		return (void*)data_vaddr;
+		memset(data, 0, (size_t)npages * PAGE_SIZE);
+		return data;
 	}
 
 	kmallocCache_t* cache = cache_for(size, align);
@@ -192,19 +212,32 @@ void kfree(void* ptr) {
 		return;
 	}
 
+	// Whole-page allocations never live at sub-page alignment, and slab objects
+	// are never page-aligned. So a page-aligned pointer is always either a big
+	// allocation tracked in the registry (data pointer == registered vaddr) or
+	// a raw vmalloc page; classify before ever reading a magic out of the
+	// caller-visible data.
+	if (((uint32_t)ptr & (PAGE_SIZE - 1)) == 0) {
+		for (uint32_t i = 0; i < MAX_BIG_ALLOCS; i++) {
+			if (big_allocs[i].vaddr == (uint32_t)ptr) {
+				uint32_t base = (uint32_t)ptr;
+				uint32_t npages = big_allocs[i].npages;
+				if (npages > 1) {
+					base -= PAGE_SIZE; // multi-page: first page is the header
+				}
+				vmalloc_free_pages((void*)base, npages);
+				big_allocs[i].vaddr = 0;
+				return;
+			}
+		}
+
+		vmalloc_free(ptr);
+		return;
+	}
+
 	slab_t* slab = (slab_t*)((uint32_t)ptr & ~0xFFF);
 
 	if (slab->magic != SLAB_MAGIC) {
-		if (((uint32_t)ptr & (PAGE_SIZE - 1)) == 0) {
-			for (uint32_t i = 0; i < MAX_BIG_ALLOCS; i++) {
-				if (big_allocs[i].vaddr == (uint32_t)ptr) {
-					vmalloc_free_pages((void*)((uint32_t)ptr - PAGE_SIZE), big_allocs[i].npages);
-					big_allocs[i].vaddr = 0;
-					return;
-				}
-			}
-			vmalloc_free(ptr);
-		}
 		return;
 	}
 

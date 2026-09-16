@@ -1,6 +1,7 @@
 #include <kernel/sched/task.h>
 #include <stdint.h>
 #include <kernel/memman/tempmap.h>
+#include <kernel/mem/usr.h>
 #include <string.h>
 
 extern void enter_usermode_trampoline(void);
@@ -50,15 +51,26 @@ int task_build_user_argv_stack(
 ) {
 	size_t header_size = sizeof(uint32_t) + (size_t)(argc + 1) * sizeof(uint32_t);
 
-	size_t strings_size = 0;
-	for (int i = 0; i < argc; i++) {
-		strings_size += strlen(argv[i]) + 1;
-	}
-
-	size_t total_size = header_size + strings_size;
-	if (total_size > max_bytes || total_size > PAGE_SIZE) {
+	// truncation check: argc is bounded by the caller, but a malicious argv
+	// count here would otherwise wrap the header size arithmetic
+	if (argc < 0 || (uint64_t)header_size > max_bytes) {
 		return -1;
 	}
+
+	uint64_t total_u64 = header_size;
+	for (int i = 0; i < argc; i++) {
+		size_t sl = kernel_user_strlen(argv[i]);
+		if (sl == (size_t)-1) {
+			return -1;
+		}
+		total_u64 += sl + 1;
+	}
+
+	if (total_u64 > max_bytes || total_u64 > PAGE_SIZE) {
+		return -1;
+	}
+
+	size_t total_size = (size_t)total_u64;
 
 	void* page = map_physical_temp(stack_phys, PAGE_SIZE);
 	if (!page) {

@@ -65,11 +65,12 @@ static int parse_dir_record(const uint8_t* dir_record, isofs_dirent_t* out_diren
 }
 
 static inline bool isofs_lba_valid(const isofs_t* fs, uint32_t lba, uint32_t len) {
-	// how many ISO blocks does this extent span?
-	uint32_t blocks = (len + fs->block_size - 1) / fs->block_size;
+	// how many ISO blocks does this extent span? (computed in 64 bits so a
+	// huge `len` cannot wrap)
+	uint64_t blocks = ((uint64_t)len + fs->block_size - 1) / fs->block_size;
 	// reject overflow and out-of-range extents
 	if (lba >= fs->volume_space_size) return false;
-	if (blocks > fs->volume_space_size - lba) return false; // avoids lba+blocks overflow
+	if (blocks > (uint64_t)fs->volume_space_size - lba) return false; // avoids lba+blocks overflow
 	return true;
 }
 
@@ -122,9 +123,15 @@ static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* 
 			continue;
 		}
 
+		// the file identifier lives at byte 32 and must fit inside the record
+		// itself; without this a hostile record can make us read past `buf`
+		if ((uint32_t)buf[offset + 32] > (uint32_t)dr_len - 33) {
+			offset++;
+			continue;
+		}
+
 		isofs_dirent_t dirent;
-		if (
-			parse_dir_record(&buf[offset], &dirent) == 0
+		if (parse_dir_record(&buf[offset], &dirent) == 0
 			&&
 			// check if this is what we are looking for
 			strlen(dirent.name) == len 
@@ -147,6 +154,8 @@ static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* 
 					} else {
 						inode_unref(n);
 					}
+				} else {
+					inode_unref(n);
 				}
 
 				break;
@@ -201,7 +210,7 @@ static int isofs_read(void* file_impl, void* buf, size_t len, size_t offset) {
 		len = f->length - offset;
 	}
 
-	uint64_t b_offset = (uint64_t)((f->start_lba * f->fs->block_size) + offset);
+	uint64_t b_offset = (uint64_t)f->start_lba * f->fs->block_size + offset;
 	if (block_read_bytes(f->fs->block_device, b_offset, len, buf)) {
 		return -1;
 	}
@@ -287,6 +296,14 @@ int isofs_mount(const char *mountp, const char *blkdev) {
 	fs->block_device = dev;
 	fs->volume_space_size = read_le32(&pvd[80]);
 	fs->block_size = read_le16(&pvd[128]);
+
+	// a malformed PVD could claim block_size 0 (division by zero below) or a
+	// non-power-of-two size that breaks block arithmetic
+	if (fs->block_size == 0 || (fs->block_size & (fs->block_size - 1)) != 0 ||
+	    fs->block_size > 65536) {
+		kfree(fs);
+		return PANUTIERRNO_PLAINERR;
+	}
 	
 	uint64_t iso_bytes = (uint64_t)fs->volume_space_size * fs->block_size;
 	uint64_t dev_bytes = (uint64_t)dev->block_count * dev->block_size;

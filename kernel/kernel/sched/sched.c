@@ -99,7 +99,7 @@ void sched_init(void) {
     task_activate(current);
     sched_initialized = true;
     
-    task_t dummy; // to be thrown away
+    static task_t dummy; // to be thrown away
     task_switch_to(&dummy, current);
 }
 

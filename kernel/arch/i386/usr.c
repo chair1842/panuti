@@ -17,3 +17,20 @@ bool kernel_is_user_range(const void* buf, size_t len) {
 	uint32_t end = start + (uint32_t)len;
 	return start >= USER_SPACE_BASE && end >= start && end <= USER_SPACE_END;
 }
+
+size_t kernel_user_strlen(const void* ptr) {
+	uint32_t addr = (uint32_t)ptr;
+	if (addr < USER_SPACE_BASE || addr >= USER_SPACE_END) {
+		return (size_t)-1;
+	}
+
+	uint32_t remaining = USER_SPACE_END - addr;
+	const uint8_t* p = (const uint8_t*)ptr;
+	for (uint32_t i = 0; i < remaining; i++) {
+		if (p[i] == '\0') {
+			return (size_t)i;
+		}
+	}
+
+	return (size_t)-1;
+}

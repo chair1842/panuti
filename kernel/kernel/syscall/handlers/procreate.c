@@ -16,7 +16,7 @@ int32_t syshandler_procreate(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4)
 
 	procreate_args_t args = *user_args;
 
-	if (!kernel_is_user_ptr(args.path)) {
+	if (!kernel_is_user_ptr(args.path) || kernel_user_strlen(args.path) == (size_t)-1) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 
@@ -30,7 +30,7 @@ int32_t syshandler_procreate(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4)
 		}
 		
 		for (int i = 0; i < args.argc; i++) {
-			if (!kernel_is_user_ptr(args.argv[i])) {
+			if (!kernel_is_user_ptr(args.argv[i]) || kernel_user_strlen(args.argv[i]) == (size_t)-1) {
 				return PANUTIERRNO_INVALIDADDR;
 			}
 		}

@@ -2,7 +2,7 @@
 #include <kernel/memman/memman.h>
 
 #define TEST_PAYLOAD_VIRT 0xB0001000
-#define TEMP_MAP_VIRT     0xC0500000
+#define TEMP_MAP_VIRT     0xC0810000
 
 static const uint8_t test_payload_code[] = {
 	0xB8, 0x01, 0x00, 0x00, 0x00,  /* mov eax, 1 (SYSHANDLER_EXIT) */

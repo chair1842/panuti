@@ -11,7 +11,8 @@ int32_t syshandler_rename(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	const char* oldpath = (const char*)a1;
 	const char* newpath = (const char*)a2;
 
-	if (!kernel_is_user_ptr(oldpath) || !kernel_is_user_ptr(newpath)) {
+	if (!kernel_is_user_ptr(oldpath) || !kernel_is_user_ptr(newpath) ||
+	    kernel_user_strlen(oldpath) == (size_t)-1 || kernel_user_strlen(newpath) == (size_t)-1) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 

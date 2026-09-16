@@ -15,11 +15,13 @@ task_switch_to:
 	movl %esp, (%eax) # old->esp = current esp
 
 	movl 28(%esp), %eax	# new task ptr
-	movl 12(%eax), %eax	# i386 address-space handle (physical page directory)
-	movl %eax, %cr3
 
-	movl 28(%esp), %eax	# new task ptr
-	movl (%eax), %esp # esp = new->esp
+	movl 12(%eax), %ecx	# new->addr_space (physical page directory)
+	movl (%eax), %esp	# esp = new->esp, still under the OLD page tables
+
+	movl %ecx, %cr3		# switch page tables AFTER the stack switch, so no
+	                      # memory read is ever made off the old stack under
+	                      # the new address space
 
 	popfl                 # restore incoming task's EFLAGS (incl. IF)
 	pop %edi

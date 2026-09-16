@@ -9,7 +9,7 @@ int32_t syshandler_pipe_create(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a
 	int* user_out_read = (int*)a1;
 	int* user_out_write = (int*)a2;
 
-	if (!kernel_is_user_ptr(user_out_read) || !kernel_is_user_ptr(user_out_write)) {
+	if (!kernel_is_user_range(user_out_read, sizeof(int)) || !kernel_is_user_range(user_out_write, sizeof(int))) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 

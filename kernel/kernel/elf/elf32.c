@@ -67,6 +67,10 @@ elf_result_t elf32_parse(const void* data, size_t size, elf_loadable_segment_t* 
 	if (phdr_table_end > size) {
 		return ELF_ERR_PHDR_OUT_OF_BOUNDS;
 	}
+	if (ehdr->phentsize < sizeof(elf32_phdr_t)) {
+		/* entries smaller than the struct we dereference would read OOB */
+		return ELF_ERR_PHDR_OUT_OF_BOUNDS;
+	}
 	
 
 	const uint8_t* phdr_base = (const uint8_t*)data + ehdr->phoff;
@@ -76,6 +80,12 @@ elf_result_t elf32_parse(const void* data, size_t size, elf_loadable_segment_t* 
 		const elf32_phdr_t* phdr = (const elf32_phdr_t*)(phdr_base + i * ehdr->phentsize);
 		if (phdr->type != 1) {
 			continue; // skip anything that isn't PT_LOAD
+		}
+
+		// reject segments whose file data lies outside the provided buffer;
+		// elf_load_segments reads directly from `data` at these offsets
+		if ((uint64_t)phdr->offset + (uint64_t)phdr->filesz > size) {
+			return ELF_ERR_PHDR_OUT_OF_BOUNDS;
 		}
 
 		if (nsegs >= max_segs) {

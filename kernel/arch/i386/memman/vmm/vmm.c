@@ -7,8 +7,9 @@
 #define RECURSIVE_TABLE_BASE 0xFFC00000
 #define PAGE_SIZE 0x1000
 
-/* A scratch page used while initializing a page directory not yet active in CR3. */
-#define PAGE_DIR_TEMP_MAP 0xC0400000
+/* A scratch page used while initializing a page directory not yet active in CR3.
+ * Lives above the vmalloc heap (which is capped at 0xC0800000). */
+#define PAGE_DIR_TEMP_MAP 0xC0800000
 
 #define KERNEL_PDE_START (KERNEL_VIRT_OFFSET >> 22)
 #define RECURSIVE_PDE_INDEX 1023

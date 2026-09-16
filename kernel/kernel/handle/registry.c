@@ -190,7 +190,7 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 	return current;
 }
 
-int registry_mkdir(const char* path) {
+int registry_mkdir_at(inode_t* start, const char* path) {
 	if (!path || path[0] == '\0') {
 		return -1;
 	}
@@ -210,9 +210,11 @@ int registry_mkdir(const char* path) {
 		return -1;
 	}
 
+	const inode_t* base = (path[0] == '/') ? root : start;
+
 	inode_t* parent;
 	if (last == path) {
-		parent = root;
+		parent = (inode_t*)base;
 	} else {
 		char buf[128];
 		size_t plen = (size_t)(last - path);
@@ -221,7 +223,7 @@ int registry_mkdir(const char* path) {
 		}
 		memcpy(buf, path, plen);
 		buf[plen] = '\0';
-		parent = registry_resolve(root, buf);
+		parent = registry_resolve((inode_t*)base, buf);
 	}
 
 	if (!parent || parent->type != INODE_DIR) {
@@ -236,8 +238,12 @@ int registry_mkdir(const char* path) {
 		}
 	}
 
-	inode_t* n = walk(root, path, true, INODE_DIR);
+	inode_t* n = walk((inode_t*)base, path, true, INODE_DIR);
 	return n ? 0 : -1;
+}
+
+int registry_mkdir(const char* path) {
+	return registry_mkdir_at(root, path);
 }
 
 int registry_add(const char* path, inode_type_t type, void* impl, const handle_ops_t* ops) {

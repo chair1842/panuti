@@ -37,6 +37,7 @@ typedef struct inode {
 
 void registry_init(void);
 int registry_mkdir(const char* path);
+int registry_mkdir_at(inode_t* start, const char* path);
 int registry_add(const char* path, inode_type_t type, void* impl, const handle_ops_t* ops);
 inode_t* registry_resolve(inode_t* start, const char* path);
 inode_t* registry_find(const char* path);
