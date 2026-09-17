@@ -16,4 +16,8 @@ typedef void (*isr_handler_t)(registers_t*);
 void register_handler(uint8_t vector, isr_handler_t handler);
 void isr_handler(registers_t* regs);
 
+const char* exception_name(uint32_t vector);
+int exception_from_user(const registers_t* regs);
+void exception_dump(const registers_t* regs);
+
 #endif
