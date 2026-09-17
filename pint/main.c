@@ -114,6 +114,36 @@ int main(int argc, char** argv) {
 		panutisysf_exit(42);
 	}
 
+	/* Child mode: --write-parent — write "hello parent" to stream 0 (parent's pipe write-end), exit 10 */
+	if (argc >= 2 && strcmp(argv[1], "--write-parent") == 0) {
+		panutisysf_stream_write(0, "hello parent", 12);
+		panutisysf_close(console);
+		panutisysf_exit(10);
+	}
+
+	/* Child mode: --read-parent — read from stream 0 (parent's pipe read-end), echo to console, exit 11 */
+	if (argc >= 2 && strcmp(argv[1], "--read-parent") == 0) {
+		char buf[64];
+		int32_t n = panutisysf_stream_read(0, buf, sizeof(buf) - 1);
+		if (n > 0) {
+			buf[n] = '\0';
+			write_str(console, "[child-read] ");
+			write_str(console, buf);
+			write_str(console, "\n");
+		} else {
+			write_str(console, "[child-read] EOF\n");
+		}
+		panutisysf_close(console);
+		panutisysf_exit(11);
+	}
+
+	/* Child mode: --stream-write — write to stream 0, exit 20 */
+	if (argc >= 2 && strcmp(argv[1], "--stream-write") == 0) {
+		panutisysf_stream_write(0, "stream child\n", 13);
+		panutisysf_close(console);
+		panutisysf_exit(20);
+	}
+
 	int nin = 0;   /* input streams, filled by nstream */
 	int nout = 0;  /* output streams, filled by nstream */
 
@@ -1313,6 +1343,395 @@ int main(int argc, char** argv) {
 		write_int(console, w);
 		write_str(console, "\n");
 		check(console, "wait(badptr) -> INVALIDADDR", w, PANUTIERRNO_INVALIDADDR);
+	}
+
+	/* ---- 48. pipe stress tests ---- */
+	section(console, "48. pipe stress tests");
+
+	/* large data: fill pipe close to buffer capacity (4096) */
+	{
+		int rfd, wfd;
+		panutisysf_pipe_create(&rfd, &wfd);
+
+		static char big[2048];
+		for (int i = 0; i < 2048; i++) {
+			big[i] = (char)('a' + (i % 26));
+		}
+		int32_t r = panutisysf_write(wfd, big, 2048);
+		check(console, "write 2048 bytes to pipe", r, 2048);
+
+		static char buf[2048];
+		r = panutisysf_read(rfd, buf, 2048);
+		check(console, "read 2048 bytes from pipe", r, 2048);
+
+		int match = 1;
+		for (int i = 0; i < 2048; i++) {
+			if (buf[i] != big[i]) { match = 0; break; }
+		}
+		check(console, "2048-byte content matches", match, 1);
+
+		panutisysf_close(rfd);
+		panutisysf_close(wfd);
+	}
+
+	/* multiple small writes, single read */
+	{
+		int rfd, wfd;
+		panutisysf_pipe_create(&rfd, &wfd);
+
+		panutisysf_write(wfd, "AAA", 3);
+		panutisysf_write(wfd, "BBB", 3);
+		panutisysf_write(wfd, "CCC", 3);
+
+		char buf[16] = {0};
+		int32_t r = panutisysf_read(rfd, buf, sizeof(buf));
+		check(console, "read after 3 writes (got 9 bytes)", r, 9);
+
+		int match = (buf[0] == 'A' && buf[3] == 'B' && buf[6] == 'C') ? 1 : 0;
+		check(console, "concatenated data order preserved", match, 1);
+
+		panutisysf_close(rfd);
+		panutisysf_close(wfd);
+	}
+
+	/* single write, multiple partial reads */
+	{
+		int rfd, wfd;
+		panutisysf_pipe_create(&rfd, &wfd);
+
+		panutisysf_write(wfd, "0123456789", 10);
+
+		char part1[4] = {0};
+		char part2[4] = {0};
+		char part3[4] = {0};
+		int32_t r1 = panutisysf_read(rfd, part1, 4);
+		int32_t r2 = panutisysf_read(rfd, part2, 4);
+		int32_t r3 = panutisysf_read(rfd, part3, 4);
+		check(console, "partial read 1 (4 bytes)", r1, 4);
+		check(console, "partial read 2 (4 bytes)", r2, 4);
+		check(console, "partial read 3 (2 bytes left)", r3, 2);
+		check(console, "part1 == '0123'", memcmp(part1, "0123", 4) == 0 ? 1 : 0, 1);
+		check(console, "part2 == '4567'", memcmp(part2, "4567", 4) == 0 ? 1 : 0, 1);
+		check(console, "part3 == '89'", memcmp(part3, "89", 2) == 0 ? 1 : 0, 1);
+
+		panutisysf_close(rfd);
+		panutisysf_close(wfd);
+	}
+
+	/* read more than available */
+	{
+		int rfd, wfd;
+		panutisysf_pipe_create(&rfd, &wfd);
+
+		panutisysf_write(wfd, "short", 5);
+
+		char buf[64] = {0};
+		int32_t r = panutisysf_read(rfd, buf, 64);
+		check(console, "read 64 but only 5 available -> got 5", r, 5);
+		check(console, "data from partial fill", memcmp(buf, "short", 5) == 0 ? 1 : 0, 1);
+
+		panutisysf_close(rfd);
+		panutisysf_close(wfd);
+	}
+
+	/* zero-byte write edge case */
+	{
+		int rfd, wfd;
+		panutisysf_pipe_create(&rfd, &wfd);
+
+		int32_t r = panutisysf_write(wfd, "", 0);
+		check(console, "zero-byte write on pipe -> 0", r, 0);
+
+		panutisysf_close(rfd);
+		panutisysf_close(wfd);
+	}
+
+	/* double close both ends */
+	{
+		int rfd, wfd;
+		panutisysf_pipe_create(&rfd, &wfd);
+		panutisysf_close(rfd);
+		panutisysf_close(wfd);
+		int32_t r1 = panutisysf_close(rfd);
+		int32_t r2 = panutisysf_close(wfd);
+		check(console, "double close read end -> BADFD", r1, PANUTIERRNO_BADFD);
+		check(console, "double close write end -> BADFD", r2, PANUTIERRNO_BADFD);
+	}
+
+	/* close write end while data still in buffer: read drains remainder, then EOF */
+	{
+		int rfd, wfd;
+		panutisysf_pipe_create(&rfd, &wfd);
+
+		panutisysf_write(wfd, "leftover", 8);
+		panutisysf_close(wfd);
+
+		char buf[16] = {0};
+		int32_t r = panutisysf_read(rfd, buf, sizeof(buf));
+		check(console, "read leftover after close(write)", r, 8);
+		check(console, "leftover data intact", memcmp(buf, "leftover", 8) == 0 ? 1 : 0, 1);
+
+		/* now EOF */
+		r = panutisysf_read(rfd, buf, sizeof(buf));
+		check(console, "EOF after draining leftover", r, 0);
+
+		panutisysf_close(rfd);
+	}
+
+	/* ---- 49. stream stress tests ---- */
+	section(console, "49. stream stress tests");
+
+	/* stream 0 round-trip via console */
+	{
+		const char msg[] = "stream0-test!\n";
+		int32_t r = panutisysf_stream_write(0, msg, sizeof(msg));
+		if (nout == 0) {
+			check(console, "stream_write(0) with no out-streams -> BADFD", r, PANUTIERRNO_BADFD);
+		} else {
+			check(console, "stream_write(0) via console", r, (int32_t)sizeof(msg));
+		}
+	}
+
+	/* stream index range validation: every index from nout..15 is out of range */
+	{
+		const char msg[] = "x";
+		int pass_count = 0;
+		int bad_expected = 0;
+		for (int i = nout; i < 16; i++) {
+			int32_t r = panutisysf_stream_write(i, msg, 1);
+			if ((int32_t)r == (int32_t)PANUTIERRNO_BADFD) pass_count++;
+			bad_expected++;
+		}
+		check(console, "stream_write(indices nout..15) all BADFD", pass_count, bad_expected);
+	}
+
+	/* read index range validation: every index from nin..15 is out of range */
+	{
+		char buf[4];
+		int pass_count = 0;
+		int bad_expected = 0;
+		for (int i = nin; i < 16; i++) {
+			int32_t r = panutisysf_stream_read(i, buf, 1);
+			if ((int32_t)r == (int32_t)PANUTIERRNO_BADFD) pass_count++;
+			bad_expected++;
+		}
+		check(console, "stream_read(indices nin..15) all BADFD", pass_count, bad_expected);
+	}
+
+	/* negative stream indices */
+	{
+		char buf[4];
+		int32_t r = panutisysf_stream_read(-1, buf, 1);
+		check(console, "stream_read(-1) -> BADFD", r, PANUTIERRNO_BADFD);
+		r = panutisysf_stream_write(-1, "x", 1);
+		check(console, "stream_write(-1) -> BADFD", r, PANUTIERRNO_BADFD);
+		r = panutisysf_stream_read(-100, buf, 1);
+		check(console, "stream_read(-100) -> BADFD", r, PANUTIERRNO_BADFD);
+	}
+
+	/* zero-length stream ops on valid index */
+	{
+		char buf[4];
+		int32_t r;
+		if (nin > 0) {
+			r = panutisysf_stream_read(0, buf, 0);
+			check_is_success(console, "stream_read(0, buf, 0) zero-length", r);
+		}
+		if (nout > 0) {
+			r = panutisysf_stream_write(0, "x", 0);
+			check(console, "stream_write(0, x, 0) zero-length -> 0", r, 0);
+		}
+	}
+
+	/* nstream stability: counts should not change after ops */
+	{
+		int counts[2] = { -1, -1 };
+		panutisysf_nstream(counts);
+		check(console, "nstream count stable (in)", counts[0], nin);
+		check(console, "nstream count stable (out)", counts[1], nout);
+	}
+
+	/* ---- 50. procreate: child writes to parent via pipe ---- */
+	section(console, "50. procreate + pipe: child writes to parent");
+	{
+		int rfd, wfd;
+		int32_t r = panutisysf_pipe_create(&rfd, &wfd);
+		check_is_success(console, "pipe for child->parent", r);
+
+		/* mount ISO to get pint.elf */
+		r = panutisysf_mkdir("/mnt");
+		r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		check_is_success(console, "mount /mnt", r);
+
+		/* pass wfd as child's out-stream 0 (which maps to parent's wfd)
+		   and rfd stays open in parent for reading */
+		char* child_argv[] = { "pint", "--write-parent" };
+		int child_out_streams[] = { wfd };
+		procreate_args_t cargs = {
+			.path = "/mnt/BOOT/PINT.ELF",
+			.argv = child_argv,
+			.argc = 2,
+			.in_streams = (int*)0,
+			.no_in_streams = 0,
+			.out_streams = child_out_streams,
+			.no_out_streams = 1,
+		};
+		pid_t child = panutisysf_procreate(&cargs);
+		write_str(console, "  child pid=");
+		write_int(console, (int)child);
+		write_str(console, "\n");
+		check(console, "procreate child (write-parent) ok", child > 0 ? 1 : 0, 1);
+
+		/* close write end in parent so child's fd is the only write end */
+		panutisysf_close(wfd);
+
+		/* wait for child to finish */
+		int ec = -1;
+		int32_t w = panutisysf_wait(child, &ec);
+		check_is_success(console, "wait for write-parent child", w);
+		check(console, "child exit code == 10", ec, 10);
+
+		/* read what the child wrote */
+		char buf[32] = {0};
+		r = panutisysf_read(rfd, buf, sizeof(buf));
+		check(console, "parent reads from pipe", r, 12);
+		check(console, "child wrote 'hello parent'", memcmp(buf, "hello parent", 12) == 0 ? 1 : 0, 1);
+
+		panutisysf_close(rfd);
+		r = panutisysf_unmount("/mnt");
+		check(console, "unmount /mnt", r, 0);
+	}
+
+	/* ---- 51. procreate: parent writes to child via pipe ---- */
+	section(console, "51. procreate + pipe: parent writes to child");
+	{
+		int rfd, wfd;
+		int32_t r = panutisysf_pipe_create(&rfd, &wfd);
+		check_is_success(console, "pipe for parent->child", r);
+
+		r = panutisysf_mkdir("/mnt");
+		r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		check_is_success(console, "mount /mnt", r);
+
+		/* pass rfd as child's in-stream 0 */
+		char* child_argv[] = { "pint", "--read-parent" };
+		int child_in_streams[] = { rfd };
+		procreate_args_t cargs = {
+			.path = "/mnt/BOOT/PINT.ELF",
+			.argv = child_argv,
+			.argc = 2,
+			.in_streams = child_in_streams,
+			.no_in_streams = 1,
+			.out_streams = (int*)0,
+			.no_out_streams = 0,
+		};
+		pid_t child = panutisysf_procreate(&cargs);
+		write_str(console, "  child pid=");
+		write_int(console, (int)child);
+		write_str(console, "\n");
+		check(console, "procreate child (read-parent) ok", child > 0 ? 1 : 0, 1);
+
+		/* close read end in parent so child's fd is the only read end */
+		panutisysf_close(rfd);
+
+		/* write data to the pipe for the child to read */
+		const char msg[] = "hello child!";
+		r = panutisysf_write(wfd, msg, sizeof(msg));
+		check(console, "parent writes to pipe", r, (int32_t)sizeof(msg));
+
+		/* close write end so child sees EOF after reading */
+		panutisysf_close(wfd);
+
+		/* wait for child */
+		int ec = -1;
+		int32_t w = panutisysf_wait(child, &ec);
+		check_is_success(console, "wait for read-parent child", w);
+		check(console, "child exit code == 11", ec, 11);
+
+		r = panutisysf_unmount("/mnt");
+		check(console, "unmount /mnt", r, 0);
+	}
+
+	/* ---- 52. procreate: inherited stream isolation ---- */
+	section(console, "52. procreate: inherited stream isolation");
+	{
+		/* child with no streams gets its own default console */
+		int32_t r2 = panutisysf_mkdir("/mnt");
+		r2 = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		check_is_success(console, "mount /mnt", r2);
+
+		char* child_argv[] = { "pint", "--stream-write" };
+		procreate_args_t cargs = {
+			.path = "/mnt/BOOT/PINT.ELF",
+			.argv = child_argv,
+			.argc = 2,
+			.in_streams = (int*)0,
+			.no_in_streams = 0,
+			.out_streams = (int*)0,
+			.no_out_streams = 0,
+		};
+		pid_t child = panutisysf_procreate(&cargs);
+		write_str(console, "  child pid=");
+		write_int(console, (int)child);
+		write_str(console, "\n");
+		check(console, "procreate child (stream-write, no pipes) ok", child > 0 ? 1 : 0, 1);
+
+		int ec = -1;
+		int32_t w = panutisysf_wait(child, &ec);
+		check_is_success(console, "wait for stream-write child", w);
+		check(console, "child exit code == 20", ec, 20);
+
+		r2 = panutisysf_unmount("/mnt");
+		check(console, "unmount /mnt", r2, 0);
+	}
+
+	/* child with streams: verify parent's fds not affected after child exits */
+	{
+		int rfd, wfd;
+		panutisysf_pipe_create(&rfd, &wfd);
+
+		int32_t r = panutisysf_mkdir("/mnt");
+		r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		check_is_success(console, "mount /mnt (isolation test)", r);
+
+		/* pass wfd to child as out-stream 0 */
+		char* child_argv[] = { "pint", "--write-parent" };
+		int child_out[] = { wfd };
+		procreate_args_t cargs = {
+			.path = "/mnt/BOOT/PINT.ELF",
+			.argv = child_argv,
+			.argc = 2,
+			.in_streams = (int*)0,
+			.no_in_streams = 0,
+			.out_streams = child_out,
+			.no_out_streams = 1,
+		};
+		pid_t child = panutisysf_procreate(&cargs);
+		check(console, "procreate for isolation test", child > 0 ? 1 : 0, 1);
+		panutisysf_close(wfd);
+
+		/* parent's console write should still work while child runs */
+		const char msg[] = "parent alive\n";
+		r = panutisysf_write(console, msg, sizeof(msg));
+		check(console, "parent console write during child", r, (int32_t)sizeof(msg));
+
+		int ec = -1;
+		int32_t w = panutisysf_wait(child, &ec);
+		check_is_success(console, "wait isolation child", w);
+
+		/* after child exits, parent's console still works */
+		r = panutisysf_write(console, "parent after child\n", 19);
+		check(console, "parent console write after child exit", r, 19);
+
+		/* read what child sent */
+		char buf[32] = {0};
+		r = panutisysf_read(rfd, buf, sizeof(buf));
+		check(console, "parent reads child data after child exit", r, 12);
+		check(console, "data intact after child exit", memcmp(buf, "hello parent", 12) == 0 ? 1 : 0, 1);
+
+		panutisysf_close(rfd);
+		r = panutisysf_unmount("/mnt");
+		check(console, "unmount /mnt (isolation cleanup)", r, 0);
 	}
 
 	/* ---- Summary ---- */

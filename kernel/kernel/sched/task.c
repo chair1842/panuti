@@ -1,6 +1,8 @@
 #include "kernel/handle/registry.h"
 #include <kernel/handle/fs.h>
+#include <kernel/handle/pipe.h>
 #include <kernel/sched/task.h>
+#include <kernel/klog.h>
 #include <kernel/memman/vmalloc.h>
 #include <kernel/memman/memman.h>
 #include <kernel/memman/slab.h>
@@ -154,6 +156,19 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 	return t;
 }
 
+// releases one task reference to a stream handle: pipe impls are refcounted
+// (they may be shared with children via install_stream), everything else is
+// pinned by its inode reference
+static void stream_unref(handle_t* h) {
+	if (h->type == INODE_PIPE) {
+		if (h->impl) {
+			pipe_end_unref((pipe_end_t*)h->impl);
+		}
+	} else if (h->inode) {
+		h->inode->refcount--;
+	}
+}
+
 void task_destroy(task_t* t) {
 	if (!t || t->state != TASK_TERMINATED) {
 		return;
@@ -170,14 +185,10 @@ void task_destroy(task_t* t) {
 	}
 
 	for (int i = 0; i < t->no_in_streams; i++) {
-		if (t->in_streams[i].inode) {
-			t->in_streams[i].inode->refcount--;
-		}
+		stream_unref(&t->in_streams[i]);
 	}
 	for (int i = 0; i < t->no_out_streams; i++) {
-		if (t->out_streams[i].inode) {
-			t->out_streams[i].inode->refcount--;
-		}
+		stream_unref(&t->out_streams[i]);
 	}
 
 	if (t->kernel_stack) {
@@ -204,14 +215,10 @@ static void procreate_cleanup(task_t* t) {
 	}
 
 	for (int i = 0; i < t->no_in_streams; i++) {
-		if (t->in_streams[i].inode) {
-			t->in_streams[i].inode->refcount--;
-		}
+		stream_unref(&t->in_streams[i]);
 	}
 	for (int i = 0; i < t->no_out_streams; i++) {
-		if (t->out_streams[i].inode) {
-			t->out_streams[i].inode->refcount--;
-		}
+		stream_unref(&t->out_streams[i]);
 	}
 
 	if (t->kernel_stack) {
@@ -275,7 +282,10 @@ static int install_stream(task_t* caller, int fd, handle_t* dest) {
 	}
 
 	*dest = caller->handles[fd];
-	if (dest->inode) {
+	if (dest->type == INODE_PIPE) {
+		/* pipe impls have no inode; keep the shared pipe_end alive instead */
+		pipe_end_ref((pipe_end_t*)dest->impl);
+	} else if (dest->inode) {
 		dest->inode->refcount++;
 	}
 

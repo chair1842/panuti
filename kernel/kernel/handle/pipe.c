@@ -103,9 +103,12 @@ int pipe_write(void* impl, const void* buf, size_t len) {
 	return (int)n;
 }
 
-int pipe_close(void* impl, struct task* self) {
-	(void)self;
-	pipe_end_t* end = impl;
+int pipe_end_ref(pipe_end_t* end) {
+	end->refcount++;
+	return 0;
+}
+
+int pipe_end_unref(pipe_end_t* end) {
 	pipe_t* p = end->pipe;
 
 	if (end->is_write_end) {
@@ -125,6 +128,19 @@ int pipe_close(void* impl, struct task* self) {
 	return 0;
 }
 
+int pipe_close(void* impl, struct task* self) {
+	(void)self;
+	pipe_end_t* end = impl;
+
+	// a pipe end may be shared with child tasks via install_stream(); only
+	// free it (and mark it closed) once every holder has released its ref
+	if (--end->refcount > 0) {
+		return 0;
+	}
+
+	return pipe_end_unref(end);
+}
+
 pipe_end_t* pipe_end_create(pipe_t* pipe, bool is_write_end) {
 	pipe_end_t* end = kmalloc(sizeof(pipe_end_t), alignof(pipe_end_t));
 	if (!end) {
@@ -133,6 +149,7 @@ pipe_end_t* pipe_end_create(pipe_t* pipe, bool is_write_end) {
 	
 	end->pipe = pipe;
 	end->is_write_end = is_write_end;
+	end->refcount = 1;
 	return end;
 }
 

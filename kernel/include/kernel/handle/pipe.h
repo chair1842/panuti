@@ -31,9 +31,12 @@ typedef struct pipe {
 typedef struct pipe_end {
 	pipe_t* pipe;
 	bool is_write_end;
+	int refcount;
 } pipe_end_t;
 
 pipe_end_t* pipe_end_create(pipe_t* pipe, bool is_write_end);
+int pipe_end_ref(pipe_end_t* end);
+int pipe_end_unref(pipe_end_t* end);
 int pipe_create_pair(task_t* t, int* out_read, int* out_write);
 
 #endif
