@@ -2,6 +2,7 @@
 #include "../pmm/pmm.h"
 #include <string.h>
 #include <kernel/klog.h>
+#include <kernel/irq.h>
 
 #define KERNEL_VIRT_OFFSET 0xC0000000
 #define RECURSIVE_TABLE_BASE 0xFFC00000
@@ -38,16 +39,6 @@ static uint32_t read_cr3(void) {
 
 static void write_cr3(uint32_t value) {
 	__asm__ __volatile__("mov %0, %%cr3" :: "r"(value) : "memory");
-}
-
-static uint32_t irq_save_disable(void) {
-	uint32_t flags;
-	__asm__ __volatile__("pushf\n\tpop %0\n\tcli" : "=r"(flags) :: "memory");
-	return flags;
-}
-
-static void irq_restore(uint32_t flags) {
-	__asm__ __volatile__("push %0\n\tpopf" :: "r"(flags) : "memory", "cc");
 }
 
 void vmm_init(void) {

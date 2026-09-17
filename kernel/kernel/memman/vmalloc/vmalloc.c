@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <kernel/klog.h>
 #include <kernel/memman/memman.h>
+#include <kernel/irq.h>
 
 #define PAGE_ALIGN_UP(addr) (((addr) + 0xFFF) & ~0xFFF)
 
@@ -19,16 +20,6 @@
 
 extern uint32_t _kernel_end;
 static uint32_t vmalloc_next;
-
-static uint32_t irq_save_disable(void) {
-	uint32_t flags;
-	__asm__ __volatile__("pushf\n\tpop %0\n\tcli" : "=r"(flags) :: "memory");
-	return flags;
-}
-
-static void irq_restore(uint32_t flags) {
-	__asm__ __volatile__("push %0\n\tpopf" :: "r"(flags) : "memory", "cc");
-}
 
 void vmalloc_init(void) {
 	vmalloc_next = PAGE_ALIGN_UP((uint32_t)&_kernel_end);

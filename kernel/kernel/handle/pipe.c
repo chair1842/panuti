@@ -2,6 +2,7 @@
 #include <kernel/handle/registry.h>
 #include <kernel/memman/slab.h>
 #include <kernel/sched/sched.h>
+#include <kernel/irq.h>
 #include <stdalign.h>
 #include <string.h>
 #include <panuti/errno.h>
@@ -53,18 +54,30 @@ int pipe_read(void* impl, void* buf, size_t len) {
 	
 	pipe_t* p = end->pipe;
 
-	while (p->count == 0) {
-		if (p->write_end_closed) {
-			return 0; // EOF, nothing more will ever arrive
+	// register-then-block must be atomic w.r.t. the timer: a writer (or the
+	// writer closing the pipe) could otherwise add data and wake us between
+	// the emptiness check and task_block, and we'd block forever. Under IRQs
+	// off, no other task can be scheduled in that window.
+	while (1) {
+		uint32_t flags = irq_save_disable();
+
+		if (p->count > 0 || p->write_end_closed) {
+			irq_restore(flags);
+			break;
 		}
-		
+
 		if (p->no_readers_waiting < PIPE_MAX_WAITERS) {
 			p->readers_waiting[p->no_readers_waiting++] = sched_current();
 		}
-		
+
 		task_block(sched_current());
-		
+
 		// resumes here once task_wake() is called on us
+		irq_restore(flags);
+	}
+
+	if (p->count == 0) {
+		return 0; // EOF, nothing more will ever arrive
 	}
 
 	size_t n = pipe_read_raw(p, buf, len);
@@ -85,16 +98,26 @@ int pipe_write(void* impl, const void* buf, size_t len) {
 		return -1; // broken pipe
 	}
 
-	while (p->count == p->capacity) {
-		if (p->read_end_closed) {
-			return -1; // reader disappeared while we waited
+	while (1) {
+		uint32_t flags = irq_save_disable();
+
+		if (p->count < p->capacity || p->read_end_closed) {
+			irq_restore(flags);
+			break;
 		}
-		
+
 		if (p->no_writers_waiting < PIPE_MAX_WAITERS) {
 			p->writers_waiting[p->no_writers_waiting++] = sched_current();
 		}
-		
+
 		task_block(sched_current());
+
+		// resumes here once task_wake() is called on us
+		irq_restore(flags);
+	}
+
+	if (p->count == p->capacity) {
+		return -1; // broken pipe: reader disappeared while we waited
 	}
 
 	size_t n = pipe_write_raw(p, buf, len);
