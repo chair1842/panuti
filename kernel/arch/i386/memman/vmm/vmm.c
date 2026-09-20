@@ -190,7 +190,7 @@ void* vmm_create_page_dir(void) {
 	uint32_t page_dir_phys = pmm_allocp();
 	klog(KLOG_INFO, "new page dir phys = 0x%x\n", page_dir_phys);
 	if (page_dir_phys == 0) {
-		return NULL;
+		return nullptr;
 	}
 
 	/*

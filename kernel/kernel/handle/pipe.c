@@ -166,7 +166,7 @@ int pipe_close(void* impl, struct task* self) {
 pipe_end_t* pipe_end_create(pipe_t* pipe, bool is_write_end) {
 	pipe_end_t* end = kmalloc(sizeof(pipe_end_t), alignof(pipe_end_t));
 	if (!end) {
-		return NULL;
+		return nullptr;
 	}
 	
 	end->pipe = pipe;
@@ -241,12 +241,12 @@ int pipe_create_pair(task_t* t, int* out_read, int* out_write) {
 	t->handles[r_des].type = INODE_PIPE;
 	t->handles[r_des].impl = read_end;
 	t->handles[r_des].ops = &pipe_ops;
-	t->handles[r_des].inode = NULL;
+	t->handles[r_des].inode = nullptr;
 
 	t->handles[w_des].type = INODE_PIPE;
 	t->handles[w_des].impl = write_end;
 	t->handles[w_des].ops = &pipe_ops;
-	t->handles[w_des].inode = NULL;
+	t->handles[w_des].inode = nullptr;
 
 	*out_read = r_des;
 	*out_write = w_des;

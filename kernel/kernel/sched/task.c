@@ -46,24 +46,24 @@ static task_t* task_find_free_slot(void) {
 			return &tasks[i];
 		}
 	}
-	return NULL;
+	return nullptr;
 }
 
 static task_t* task_alloc_common(void) {
 	task_t* t = task_find_free_slot();
 	if (!t) {
-		return NULL;
+		return nullptr;
 	}
 
 	t->kernel_stack = (uint32_t)vmalloc_pg();
 	if (!t->kernel_stack) {
-		return NULL;
+		return nullptr;
 	}
 
 	t->addr_space = memman_create_addr_space();
 	if (!t->addr_space) {
 		vmalloc_free((void*)t->kernel_stack);
-		return NULL;
+		return nullptr;
 	}
 
 	t->pid = next_pid++;
@@ -76,12 +76,12 @@ static task_t* task_alloc_common(void) {
 
 task_t* task_create(void (*entry)(void)) {
 	if (!entry) {
-		return NULL;
+		return nullptr;
 	}
 
 	task_t* t = task_alloc_common();
 	if (!t) {
-		return NULL;
+		return nullptr;
 	}
 
 	task_init_stack(t, entry);
@@ -94,7 +94,7 @@ task_t* task_create(void (*entry)(void)) {
 task_t* task_create_user(void (*entry)(void)) {
 	task_t* t = task_alloc_common();
 	if (!t) {
-		return NULL;
+		return nullptr;
 	}
 
 	uint32_t user_stack_phys = memman_alloc_frame();
@@ -102,7 +102,7 @@ task_t* task_create_user(void (*entry)(void)) {
 		vmalloc_free((void*)t->kernel_stack);
 		memman_destroy_addr_space(t->addr_space);
 		t->state = TASK_NONE; // release the slot back, since alloc_common already claimed it
-		return NULL;
+		return nullptr;
 	}
 
 	uint32_t user_stack_virt_base = USER_STACK_VIRT_TOP - PAGE_SIZE;
@@ -122,19 +122,19 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 	uint64_t entry;
 	elf_result_t result = elf32_parse(elf_data, elf_size, segs, 16, &nsegs, &entry);
 	if (result != ELF_OK) {
-		return NULL;
+		return nullptr;
 	}
 
 	task_t* t = task_alloc_common();
 	if (!t) {
-		return NULL;
+		return nullptr;
 	}
 
 	if (elf_load_segments(t->addr_space, elf_data, segs, nsegs) != 0) {
 		vmalloc_free((void*)t->kernel_stack);
 		memman_destroy_addr_space(t->addr_space);
 		t->state = TASK_NONE;
-		return NULL;
+		return nullptr;
 	}
 
 	uint32_t user_stack_phys = memman_alloc_frame();
@@ -142,7 +142,7 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 		vmalloc_free((void*)t->kernel_stack);
 		memman_destroy_addr_space(t->addr_space);
 		t->state = TASK_NONE;
-		return NULL;
+		return nullptr;
 	}
 
 	uint32_t user_stack_virt_base = USER_STACK_VIRT_TOP - PAGE_SIZE;
@@ -200,9 +200,9 @@ void task_destroy(task_t* t) {
 
 	t->esp = 0;
 	t->kernel_stack = 0;
-	t->addr_space = NULL;
-	t->cwd = NULL;
-	t->next = NULL;
+	t->addr_space = nullptr;
+	t->cwd = nullptr;
+	t->next = nullptr;
 	t->no_in_streams = 0;
 	t->no_out_streams = 0;
 	t->state = TASK_NONE;

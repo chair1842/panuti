@@ -25,12 +25,12 @@ void klog(enum klog_level level, const char *fmt, ...) {
 	}
 
 	if (level == KLOG_INFO) {
-		fctprintf(out, NULL, "[INFO] ");
+		fctprintf(out, nullptr, "[INFO] ");
 	} else {
-		fctprintf(out, NULL, "[WARN] ");
+		fctprintf(out, nullptr, "[WARN] ");
 	}
 	
-	vfctprintf(out, NULL, fmt, args);
+	vfctprintf(out, nullptr, fmt, args);
 	va_end(args);
 
 	terminal_fsetcolor(ANSI_COLOR_LIGHT_GREY, ANSI_COLOR_BLACK);

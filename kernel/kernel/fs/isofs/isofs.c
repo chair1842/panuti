@@ -169,7 +169,7 @@ static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* 
 	isofs_t* fs = fs_impl;
 	if (dir->type != INODE_DIR) {
 		// i hope my code never makes this happen
-		return NULL;
+		return nullptr;
 	}
 
 	// what's dir's extent?
@@ -187,20 +187,20 @@ static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* 
 	}
 
 	if (!isofs_lba_valid(fs, sd_lba, sd_len)) {
-		return NULL;
+		return nullptr;
 	}
 
 	uint8_t* buf = kmalloc(sd_len, 1);
 	if (!buf) {
-		return NULL;
+		return nullptr;
 	}
 
 	if (block_read_bytes(fs->block_device, (uint64_t)sd_lba * fs->block_size, sd_len, buf) != BLOCK_OK) {
 		kfree(buf);
-		return NULL;
+		return nullptr;
 	}
 
-	struct inode* result = NULL;
+	struct inode* result = nullptr;
 	uint32_t offset = 0;
 	while (offset < sd_len) {
 		uint8_t dr_len = buf[offset];
@@ -270,17 +270,17 @@ static void isofs_finish(void* fs_impl) {
 
 static void* isofs_open(void* fs_impl, struct inode* node) {
 	if (node->type != INODE_FILE) {
-		return NULL;
+		return nullptr;
 	}
 
 	isofs_dirent_t* fs_n = node->impl;
 	if (!fs_n) {
-		return NULL;
+		return nullptr;
 	}
 
 	isofs_file_t* f = kmalloc(sizeof(isofs_file_t), alignof(isofs_file_t));
 	if (!f) {
-		return NULL;
+		return nullptr;
 	}
 
 	f->fs = fs_impl;

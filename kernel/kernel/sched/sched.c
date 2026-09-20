@@ -4,8 +4,8 @@
 #include <stddef.h>
 #include <kernel/kpanic.h>
 
-static task_t* ready_queue = NULL;
-static task_t* current = NULL;
+static task_t* ready_queue = nullptr;
+static task_t* current = nullptr;
 static bool sched_initialized = false;
 
 void sched_add(task_t* task) {
@@ -26,13 +26,13 @@ void sched_remove(task_t* task) {
         return;
     }
 
-    if (ready_queue == NULL) {
+    if (ready_queue == nullptr) {
         return;
     }
 
     if (ready_queue == task && task->next == task) {
-        ready_queue = NULL;
-        task->next = NULL;
+        ready_queue = nullptr;
+        task->next = nullptr;
         return;
     }
 
@@ -49,7 +49,7 @@ void sched_remove(task_t* task) {
         ready_queue = n;
     }
 
-    task->next = NULL;
+    task->next = nullptr;
 }
 
 void sched_schedule(void) {

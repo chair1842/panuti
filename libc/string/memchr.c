@@ -9,5 +9,5 @@ void* memchr(const void* buf, int ch, size_t n) {
 			return (void*)(p + i);
 		}
 	}
-	return NULL;
+	return nullptr;
 }

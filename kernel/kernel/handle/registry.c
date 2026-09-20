@@ -13,40 +13,40 @@ inode_t* registry_inode_alloc(inode_type_t type) {
 			inodes[i].in_use = true;
 			inodes[i].type = type;
 			inodes[i].refcount = 1;
-			inodes[i].impl = NULL;
-			inodes[i].ops = NULL;
-			inodes[i].children = NULL;
-			inodes[i].mnt = NULL;
+			inodes[i].impl = nullptr;
+			inodes[i].ops = nullptr;
+			inodes[i].children = nullptr;
+			inodes[i].mnt = nullptr;
 			return &inodes[i];
 		}
 	}
 	
-	return NULL;
+	return nullptr;
 }
 
 static dirent_t* dirent_alloc(void) {
 	for (int i = 0; i < REG_MAX_DIRENTS; i++) {
 		if (!dirents[i].in_use) {
 			dirents[i].in_use = true;
-			dirents[i].next = NULL;
-			dirents[i].inode = NULL;
+			dirents[i].next = nullptr;
+			dirents[i].inode = nullptr;
 			dirents[i].name[0] = '\0';
 			return &dirents[i];
 		}
 	}
 	
-	return NULL;
+	return nullptr;
 }
 
 // links name -> target into dir's children list. does not check for collisions
 dirent_t* registry_linkdirent(inode_t* dir, const char* name, size_t len, inode_t* target) {
 	if (len >= REG_MAX_NAME_LEN) {
-		return NULL;
+		return nullptr;
 	}
 	
 	dirent_t* d = dirent_alloc();
 	if (!d) {
-		return NULL;
+		return nullptr;
 	}
 	
 	memcpy(d->name, name, len);
@@ -65,7 +65,7 @@ dirent_t* registry_finddirent(inode_t* dir, const char* name, size_t len) {
 		}
 	}
 	
-	return NULL;
+	return nullptr;
 }
 
 void registry_init(void) {
@@ -94,7 +94,7 @@ inode_t* registry_root(void) {
 // created as create_type instead of requiring it to already exist.
 static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_type_t create_type) {
 	if (!path || path[0] == '\0') {
-		return NULL;
+		return nullptr;
 	}
 
 	inode_t* current = (path[0] == '/') ? root : start;
@@ -113,11 +113,11 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 		bool is_last = (*p == '\0');
 
 		if (current->type != INODE_DIR) {
-			return NULL; // tried to descend into a non-directory
+			return nullptr; // tried to descend into a non-directory
 		}
 
 		mount_t* cmnt = current->mnt; // NULL -> registry tree, else we're inside a mount
-		inode_t* child = NULL;
+		inode_t* child = nullptr;
 		bool crossed_out = false;
 
 		if (cmnt) {
@@ -132,22 +132,22 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 					child->mnt = cmnt;
 				}
 			} else {
-				return NULL;
+				return nullptr;
 			}
 		} else {
 			// registry tree: look in the dirent list
 			dirent_t* d = registry_finddirent(current, seg_start, len);
-			child = d ? d->inode : NULL;
+			child = d ? d->inode : nullptr;
 
 			if (!child && is_last && create_last) {
 				inode_t* new_inode = registry_inode_alloc(create_type);
 				if (!new_inode) {
-					return NULL;
+					return nullptr;
 				}
 
 				if (!registry_linkdirent(current, seg_start, len, new_inode)) {
 					inode_unref(new_inode);
-					return NULL;
+					return nullptr;
 				}
 
 				if (create_type == INODE_DIR) {
@@ -160,9 +160,9 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 		}
 
 		if (!child) {
-			return NULL; // missing component
+			return nullptr; // missing component
 		} else if (is_last && create_last) {
-			return NULL; // name collision
+			return nullptr; // name collision
 		}
 
 		// descend into a mountpoint if this child is one (unless we just crossed
@@ -184,7 +184,7 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 	}
 
 	if (p > path + 1 && *(p - 1) == '/' && current->type != INODE_DIR) {
-		return NULL;
+		return nullptr;
 	}
 
 	return current;
@@ -329,7 +329,7 @@ static void registry_destroy(inode_t* inode) {
 			d->in_use = false;
 			d = next;
 		}
-		inode->children = NULL;
+		inode->children = nullptr;
 	}
 
 	inode->in_use = false;
@@ -383,17 +383,17 @@ int registry_splitpath(inode_t* start, const char* path, inode_t** parent,
 
 dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len) {
 	if (!dir || dir->type != INODE_DIR || !name) {
-		return NULL;
+		return nullptr;
 	}
 
 	if (dir->mnt && dir->mnt->fs_ops->unlink) {
 		int ret = dir->mnt->fs_ops->unlink(dir->mnt->fs_impl, dir, name, len);
 		if (ret < 0) {
-			return NULL;
+			return nullptr;
 		}
 	}
 
-	dirent_t* prev = NULL;
+	dirent_t* prev = nullptr;
 	dirent_t* curr = dir->children;
 
 	while (curr) {
@@ -406,14 +406,14 @@ dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len) {
 
 			inode_unref(curr->inode);
 			curr->in_use = false;
-			curr->next = NULL;
+			curr->next = nullptr;
 			return curr;
 		}
 		prev = curr;
 		curr = curr->next;
 	}
 
-	return NULL;
+	return nullptr;
 }
 
 void inode_unref(inode_t* inode) {

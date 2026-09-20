@@ -34,13 +34,13 @@ void* vmalloc_pg(void) {
 	if (vmalloc_next > VMALLOC_END - 4096) {
 		klog(KLOG_WARN, "vmalloc: heap exhausted at %p\n", (void*)vmalloc_next);
 		irq_restore(flags);
-		return 0;
+		return nullptr;
 	}
 
 	uint32_t phys = memman_alloc_frame();
 	if (phys == 0) {
 		irq_restore(flags);
-		return 0;
+		return nullptr;
 	}
 
 	uint32_t virt = vmalloc_next;
@@ -56,7 +56,7 @@ void* vmalloc_pg(void) {
 // atomic step so concurrent callers can never interleave and fragment the range.
 void* vmalloc_pages(uint32_t npages) {
 	if (npages == 0 || npages > 65536) {
-		return NULL;
+		return nullptr;
 	}
 
 	uint32_t flags = irq_save_disable();
@@ -65,7 +65,7 @@ void* vmalloc_pages(uint32_t npages) {
 	if (base > VMALLOC_END || npages > (VMALLOC_END - base) / 4096) {
 		klog(KLOG_WARN, "vmalloc: heap exhausted for %u pages\n", npages);
 		irq_restore(flags);
-		return NULL;
+		return nullptr;
 	}
 
 	for (uint32_t i = 0; i < npages; i++) {
@@ -76,7 +76,7 @@ void* vmalloc_pages(uint32_t npages) {
 				vmalloc_free((void*)(base + i * 4096));
 			}
 			irq_restore(flags);
-			return NULL;
+			return nullptr;
 		}
 		memman_map(base + i * 4096, phys, PAGE_PRESENT | PAGE_RW);
 	}

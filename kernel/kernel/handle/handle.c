@@ -46,9 +46,9 @@ void handle_free(task_t* t, int fd) {
 	}
 	
 	t->handles[fd].type = INODE_NONE;
-	t->handles[fd].impl = NULL;
-	t->handles[fd].ops = NULL;
-	t->handles[fd].inode = NULL;
+	t->handles[fd].impl = nullptr;
+	t->handles[fd].ops = nullptr;
+	t->handles[fd].inode = nullptr;
 }
 
 bool handle_build(const char* path, handle_t* out) {

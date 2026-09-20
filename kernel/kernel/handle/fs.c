@@ -57,12 +57,12 @@ const handle_ops_t fs_file_ops = {
 
 void* fs_open_file(void* fs_impl, const fs_ops_t* fs_ops, struct inode* node) {
 	if (!fs_ops->open) {
-		return NULL;
+		return nullptr;
 	}
 
 	void* file_impl = fs_ops->open(fs_impl, node);
 	if (!file_impl) {
-		return NULL;
+		return nullptr;
 	}
 
 	fs_file_t* f = kmalloc(sizeof(fs_file_t), alignof(fs_file_t));
@@ -70,7 +70,7 @@ void* fs_open_file(void* fs_impl, const fs_ops_t* fs_ops, struct inode* node) {
 		if (fs_ops->close) {
 			fs_ops->close(file_impl);
 		}
-		return NULL;
+		return nullptr;
 	}
 
 	f->file_impl = file_impl;

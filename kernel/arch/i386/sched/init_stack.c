@@ -98,7 +98,7 @@ int task_build_user_argv_stack(
 		string_cursor_user += len;
 	}
 
-	*(uint32_t*)header_write = 0; // argv[] NULL terminator
+	*(char**)header_write = nullptr; // argv[] NULL terminator
 
 	unmap_physical_temp(page, PAGE_SIZE);
 

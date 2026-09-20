@@ -7,7 +7,7 @@
 
 static struct inode* fatfs_lookup(void* fs_impl, struct inode* dir, const char* name, size_t len) {
 	(void)fs_impl; (void)dir; (void)name; (void)len;
-	return NULL;
+	return nullptr;
 }
 
 static int fatfs_create(void* fs_impl, struct inode* dir, const char* name, size_t len, inode_type_t type) {
@@ -22,7 +22,7 @@ static int fatfs_unlink(void* fs_impl, struct inode* dir, const char* name, size
 
 static void* fatfs_open(void* fs_impl, struct inode* node) {
 	(void)fs_impl; (void)node;
-	return NULL;
+	return nullptr;
 }
 
 static int fatfs_read(void* file_impl, void* buf, size_t len, size_t offset) {

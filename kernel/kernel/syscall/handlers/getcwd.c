@@ -48,7 +48,7 @@ int32_t syshandler_getcwd(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 
 		inode_t* parent = up->inode;
 
-		char* name = NULL;
+		char* name = nullptr;
 		for (dirent_t* d = parent->children; d; d = d->next) {
 			if (d->inode == cur) {
 				name = d->name;

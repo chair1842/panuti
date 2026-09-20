@@ -25,15 +25,15 @@ struct kmallocCache{
 };
 
 static kmallocCache_t caches[] = {
-	{ 8, NULL },
-	{ 16, NULL },
-	{ 32, NULL },
-	{ 64, NULL },
-	{ 128, NULL },
-	{ 256, NULL },
-	{ 512, NULL },
-	{ 1024, NULL },
-	{ 2048, NULL },
+	{ 8, nullptr },
+	{ 16, nullptr },
+	{ 32, nullptr },
+	{ 64, nullptr },
+	{ 128, nullptr },
+	{ 256, nullptr },
+	{ 512, nullptr },
+	{ 1024, nullptr },
+	{ 2048, nullptr },
 };
 
 #define NUM_CACHES (sizeof(caches) / sizeof(caches[0]))
@@ -72,20 +72,20 @@ static slab_t* slab_create(uint32_t obj_size) {
 	klog(KLOG_INFO, "slab_create: vmalloc_pg returned\n");
 	if (!slab) {
 		kpanic("slab_create: vmalloc_pg returned NULL\n");
-		return NULL;
+		return nullptr;
 	}
 
 	slab->magic = SLAB_MAGIC;
 	slab->obj_size = obj_size;
 	slab->used = 0;
-	slab->next = NULL;
+	slab->next = nullptr;
 
 	uint32_t header_size = align_up(sizeof(slab_t), obj_size);
 	slab->capacity = (PAGE_SIZE - header_size) / obj_size;
 
 	if (slab->capacity == 0) {
 		vmalloc_free(slab);
-		return NULL;
+		return nullptr;
 	}
 
 	for (uint32_t i = 0; i < slab->capacity - 1; i++) {
@@ -105,12 +105,12 @@ static kmallocCache_t* cache_for(uint32_t size, uint32_t align) {
 			return &caches[i];
 		}
 	}
-	return NULL;
+	return nullptr;
 }
 
 void* kmalloc(uint32_t size, uint32_t align) {
 	if (size == 0) {
-		return NULL;
+		return nullptr;
 	}
 
 	if (align == 0) {
@@ -119,7 +119,7 @@ void* kmalloc(uint32_t size, uint32_t align) {
 
 	if (size > 2048) {
 		if (align > PAGE_SIZE) {
-			return NULL;
+			return nullptr;
 		}
 
 		// compute the page count in 64 bits; a size near 2^32 would wrap the
@@ -127,7 +127,7 @@ void* kmalloc(uint32_t size, uint32_t align) {
 		uint64_t need = (uint64_t)size + PAGE_SIZE - 1;
 		if (need > 65535ULL * PAGE_SIZE) { // 65535 data pages + 1 header page
 			klog(KLOG_WARN, "kmalloc(%u): request too large\n", size);
-			return NULL;
+			return nullptr;
 		}
 		uint32_t npages = (uint32_t)(need / PAGE_SIZE);
 
@@ -136,14 +136,14 @@ void* kmalloc(uint32_t size, uint32_t align) {
 		if (size <= PAGE_SIZE) {
 			data = vmalloc_pg();
 			if (!data) {
-				return NULL;
+				return nullptr;
 			}
 			total_pages = 1;
 		} else {
 			void* range = vmalloc_pages(npages + 1);
 			if (!range) {
 				klog(KLOG_WARN, "kmalloc(%u): multi-page allocation failed\n", size);
-				return NULL;
+				return nullptr;
 			}
 
 			big_alloc_hdr_t* hdr = (big_alloc_hdr_t*)range;
@@ -168,7 +168,7 @@ void* kmalloc(uint32_t size, uint32_t align) {
 			} else {
 				vmalloc_free_pages((void*)((uint32_t)data - PAGE_SIZE), total_pages);
 			}
-			return NULL;
+			return nullptr;
 		}
 
 		big_allocs[slot].vaddr = (uint32_t)data;
@@ -180,7 +180,7 @@ void* kmalloc(uint32_t size, uint32_t align) {
 
 	kmallocCache_t* cache = cache_for(size, align);
 	if (!cache) {
-		return NULL;
+		return nullptr;
 	}
 
 	slab_t* slab = cache->slabs;
@@ -191,7 +191,7 @@ void* kmalloc(uint32_t size, uint32_t align) {
 	if (!slab) {
 		slab = slab_create(cache->obj_size);
 		if (!slab) {
-			return NULL;
+			return nullptr;
 		}
 
 		slab->next   = cache->slabs;

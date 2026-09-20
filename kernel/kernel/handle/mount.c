@@ -8,7 +8,7 @@ static uint32_t next_mount_id = 1;
 void mount_init(void) {
 	for (int i = 0; i < REG_MAX_MOUNTS; i++) {
 		mounts[i].in_use = false;
-		mounts[i].next = NULL;
+		mounts[i].next = nullptr;
 		mounts[i].refcount = 0;
 	}
 	next_mount_id = 1;
@@ -16,14 +16,14 @@ void mount_init(void) {
 
 mount_t* mount_find(struct inode* mountpoint) {
 	if (!mountpoint) {
-		return NULL;
+		return nullptr;
 	}
 	for (int i = 0; i < REG_MAX_MOUNTS; i++) {
 		if (mounts[i].in_use && mounts[i].mountpoint == mountpoint) {
 			return &mounts[i];
 		}
 	}
-	return NULL;
+	return nullptr;
 }
 
 int mount_attach(struct inode* mountpoint, const fs_ops_t* fs_ops, void* fs_impl, struct inode* root) {
@@ -39,7 +39,7 @@ int mount_attach(struct inode* mountpoint, const fs_ops_t* fs_ops, void* fs_impl
 		return -1; // inside an existing mount
 	}
 
-	mount_t* m = NULL;
+	mount_t* m = nullptr;
 	for (int i = 0; i < REG_MAX_MOUNTS; i++) {
 		if (!mounts[i].in_use) {
 			m = &mounts[i];
@@ -57,7 +57,7 @@ int mount_attach(struct inode* mountpoint, const fs_ops_t* fs_ops, void* fs_impl
 	m->fs_ops = fs_ops;
 	m->fs_impl = fs_impl;
 	m->refcount = 0;
-	m->next = NULL;
+	m->next = nullptr;
 
 	root->refcount++;
 	klog(KLOG_INFO, "mount: id=%u mp=%p root=%p\n", m->id, mountpoint, root);
@@ -82,19 +82,19 @@ int mount_detach(struct inode* mountpoint) {
 			m->root->refcount--;
 		}
 		// the mounted root no longer hangs off anything
-		m->root->mnt = NULL;
+		m->root->mnt = nullptr;
 	}
 	if (m->mountpoint) {
 		// just in case a walk ever left a stale pointer on the cover
-		m->mountpoint->mnt = NULL;
+		m->mountpoint->mnt = nullptr;
 	}
 
 	m->in_use = false;
-	m->mountpoint = NULL;
-	m->root = NULL;
-	m->fs_ops = NULL;
-	m->fs_impl = NULL;
+	m->mountpoint = nullptr;
+	m->root = nullptr;
+	m->fs_ops = nullptr;
+	m->fs_impl = nullptr;
 	m->refcount = 0;
-	m->next = NULL;
+	m->next = nullptr;
 	return 0;
 }

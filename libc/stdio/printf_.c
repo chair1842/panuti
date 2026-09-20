@@ -402,7 +402,7 @@ static inline void putchar_via_gadget(output_gadget_t* gadget, char c)
   if (write_pos >= gadget->max_chars) {
     return;
   }
-  if (gadget->function != NULL) {
+  if (gadget->function != nullptr) {
     /* No check for c == '\0' . */
     gadget->function(c, gadget->extra_function_arg);
   }
@@ -419,10 +419,10 @@ static inline void putchar_via_gadget(output_gadget_t* gadget, char c)
 static inline void append_termination_via_gadget(output_gadget_t* gadget)
 {
   printf_size_t null_char_pos;
-  if (gadget->function != NULL || gadget->max_chars == 0) {
+  if (gadget->function != nullptr || gadget->max_chars == 0) {
     return;
   }
-  if (gadget->buffer == NULL) {
+  if (gadget->buffer == nullptr) {
     return;
   }
   null_char_pos = gadget->pos < gadget->max_chars ? gadget->pos : gadget->max_chars - 1;
@@ -442,9 +442,9 @@ static inline void putchar_wrapper(char c, void* unused)
 static inline output_gadget_t discarding_gadget(void)
 {
   output_gadget_t gadget;
-  gadget.function = NULL;
-  gadget.extra_function_arg = NULL;
-  gadget.buffer = NULL;
+  gadget.function = nullptr;
+  gadget.extra_function_arg = nullptr;
+  gadget.buffer = nullptr;
   gadget.pos = 0;
   gadget.max_chars = 0;
   return gadget;
@@ -455,7 +455,7 @@ static inline output_gadget_t buffer_gadget(char* buffer, size_t buffer_size)
   printf_size_t usable_buffer_size = (buffer_size > PRINTF_MAX_POSSIBLE_BUFFER_SIZE) ?
     PRINTF_MAX_POSSIBLE_BUFFER_SIZE : (printf_size_t) buffer_size;
   output_gadget_t result = discarding_gadget();
-  if (buffer != NULL) {
+  if (buffer != nullptr) {
     result.buffer = buffer;
     result.max_chars = usable_buffer_size;
   }
@@ -473,7 +473,7 @@ static inline output_gadget_t function_gadget(void (*function)(char, void*), voi
 
 static inline output_gadget_t extern_putchar_gadget(void)
 {
-  return function_gadget(putchar_wrapper, NULL);
+  return function_gadget(putchar_wrapper, nullptr);
 }
 
 /*
@@ -1501,7 +1501,7 @@ static inline void format_string_loop(output_gadget_t* output, const char* forma
 
       case 's' : {
         const char* p = va_arg(args, char*);
-        if (p == NULL) {
+        if (p == nullptr) {
           out_rev_(output, ")llun(", 6, width, flags);
         }
         else {
@@ -1615,7 +1615,7 @@ int vsprintf_(char* s, const char* format, va_list arg)
 int vfctprintf(void (*out)(char c, void* extra_arg), void* extra_arg, const char* format, va_list arg)
 {
   output_gadget_t gadget;
-  if (out == NULL) { return 0; }
+  if (out == nullptr) { return 0; }
   gadget = function_gadget(out, extra_arg);
   return vsnprintf_impl(&gadget, format, arg);
 }

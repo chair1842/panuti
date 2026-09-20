@@ -98,7 +98,7 @@ const handle_ops_t block_handle_ops = {
 
 void* block_open_handle(block_dev_t* dev) {
 	block_handle_t* bh = kmalloc(sizeof(block_handle_t), alignof(block_handle_t));
-	if (!bh) return NULL;
+	if (!bh) return nullptr;
 	bh->dev = dev;
 	bh->offset = 0;
 	return bh;
@@ -106,11 +106,11 @@ void* block_open_handle(block_dev_t* dev) {
 
 block_dev_t* block_register(const char* registry_path, const block_ops_t* ops, void* impl, uint32_t block_size, uint64_t block_count) {
 	if (!ops || !registry_path || block_size == 0) {
-		return NULL;
+		return nullptr;
 	}
 
 	block_dev_t* dev = kmalloc(sizeof(block_dev_t), alignof(block_dev_t));
-	if (!dev) return NULL;
+	if (!dev) return nullptr;
 
 	dev->ops = ops;
 	dev->impl = impl;
@@ -119,7 +119,7 @@ block_dev_t* block_register(const char* registry_path, const block_ops_t* ops, v
 
 	if (registry_add(registry_path, INODE_BLOCK, dev, &block_handle_ops) != 0) {
 		kfree(dev);
-		return NULL;
+		return nullptr;
 	}
 
 	return dev;
@@ -127,6 +127,6 @@ block_dev_t* block_register(const char* registry_path, const block_ops_t* ops, v
 
 block_dev_t* block_find(const char* registry_path) {
 	inode_t* n = registry_find(registry_path);
-	if (!n || n->type != INODE_BLOCK) return NULL;
+	if (!n || n->type != INODE_BLOCK) return nullptr;
 	return (block_dev_t*)n->impl;
 }
