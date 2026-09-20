@@ -4,7 +4,6 @@
 
 #include "kernel/handle/registry.h"
 #include <kernel/block/block.h>
-#include <stdbool.h>
 
 #define ISOFS_BLOCKSIZE 2048
 

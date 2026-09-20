@@ -2,7 +2,6 @@
 #define ARCH_I386_DRIVERS_ATA_IDE_H
 
 #include <stdint.h>
-#include <stdbool.h>
 
 #define ATA_REG_DATA 0x00
 #define ATA_REG_ERROR 0x01

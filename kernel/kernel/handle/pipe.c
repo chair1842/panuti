@@ -3,7 +3,6 @@
 #include <kernel/memman/slab.h>
 #include <kernel/sched/sched.h>
 #include <kernel/irq.h>
-#include <stdalign.h>
 #include <string.h>
 #include <panuti/errno.h>
 

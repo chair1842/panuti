@@ -1,7 +1,6 @@
 #include <kernel/block/block.h>
 #include <kernel/memman/slab.h>
 #include <kernel/klog.h>
-#include <stdalign.h>
 #include <string.h>
 #include "ramblock.h"
 

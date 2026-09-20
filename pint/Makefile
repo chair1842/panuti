@@ -37,7 +37,7 @@ $(BINARY): $(OBJS) pint.ld ../libc/libc.a
 	$(CC) -T pint.ld -o $@ -nostdlib $(LINK_LIST) -lgcc
 
 .c.o:
-	$(CC) -MD -c $< -o $@ -std=gnu11 $(CFLAGS) $(CPPFLAGS)
+	$(CC) -MD -c $< -o $@ -std=gnu23 $(CFLAGS) $(CPPFLAGS)
 
 .S.o:
 	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)

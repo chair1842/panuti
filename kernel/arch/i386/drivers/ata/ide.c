@@ -1,5 +1,4 @@
 #include "ide.h"
-#include <stdbool.h>
 #include <stdint.h>
 #include "../../io.h"
 #include <kernel/timer.h>

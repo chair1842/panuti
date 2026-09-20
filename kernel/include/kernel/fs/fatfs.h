@@ -4,7 +4,7 @@
 #include <kernel/block/block.h>
 #include <stdint.h>
 
-typedef enum fatfs_type {
+typedef enum fatfs_type : uint8_t {
 	FATFSTY_FAT32,
 	FATFSTY_FAT16,
 	FATFSTY_FAT12,

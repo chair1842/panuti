@@ -4,7 +4,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <kernel/handle/inode_type.h>
-#include <stdbool.h>
 
 struct task;
 struct inode;

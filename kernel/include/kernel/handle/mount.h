@@ -1,7 +1,6 @@
 #ifndef _KERNEL_HANDLE_MOUNT_H
 #define _KERNEL_HANDLE_MOUNT_H
 
-#include <stdbool.h>
 #include <stdint.h>
 #include <kernel/handle/fs.h>
 

@@ -4,7 +4,6 @@
 #include <kernel/handle/handle.h>
 #include <kernel/handle/fs.h>
 #include <kernel/handle/mount.h>
-#include <stdbool.h>
 #include <kernel/handle/inode_type.h>
 
 #define REG_MAX_INODES 1024

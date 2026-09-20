@@ -14,7 +14,7 @@ typedef struct {
 	uint32_t flags;
 } elf_loadable_segment_t;
 
-typedef enum {
+typedef enum elf_result : uint8_t {
 	ELF_OK = 0,
 	ELF_ERR_TOO_SMALL,
 	ELF_ERR_BAD_MAGIC,

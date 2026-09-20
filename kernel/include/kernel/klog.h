@@ -1,11 +1,13 @@
 #ifndef _KERNEL_KLOG_H
 #define _KERNEL_KLOG_H
 
-enum klog_level {
+#include <stdint.h>
+
+typedef enum klog_level {
 	KLOG_INFO = 0,
 	KLOG_WARN = 1,
-};
+} klog_level_t;
 
-void klog(enum klog_level level, const char *fmt, ...);
+void klog(klog_level_t level, const char *fmt, ...);
 
 #endif

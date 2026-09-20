@@ -1,9 +1,9 @@
 #ifndef _PANUTI_KEYBOARD_H
 #define _PANUTI_KEYBOARD_H
 
-#include <stdbool.h>
+#include <stdint.h>
 
-typedef enum keycode {
+typedef enum keycode : uint8_t {
 	KEYCODE_NONE,
 	KEYCODE_A,
 	KEYCODE_B,

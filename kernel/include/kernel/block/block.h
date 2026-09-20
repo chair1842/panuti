@@ -13,7 +13,7 @@ typedef struct {
 	uint64_t (*count)(void* impl);
 } block_ops_t;
 
-typedef enum {
+typedef enum block_err : int8_t {
 	BLOCK_OK = 0,
 	BLOCK_ERR_INVAL = -1,
 	BLOCK_ERR_IO = -2,

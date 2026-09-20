@@ -5,7 +5,6 @@
 #include <kernel/fs/isofs.h>
 #include <kernel/handle/fs.h>
 #include <panuti/errno.h>
-#include <stdalign.h>
 #include <kernel/memman/slab.h>
 #include <string.h>
 

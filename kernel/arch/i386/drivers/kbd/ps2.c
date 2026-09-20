@@ -1,6 +1,5 @@
 #include "ps2.h"
 #include "../../io.h"
-#include <stdbool.h>
 #include <stdint.h>
 #include "../../intpt/handlers/main.h"
 //#include <kernel/kernel/drivers/kbd/core.h>

@@ -1,7 +1,9 @@
 #ifndef _KERNEL_HANDLE_INODE_TYPE_H
 #define _KERNEL_HANDLE_INODE_TYPE_H
 
-typedef enum {
+#include <stdint.h>
+
+typedef enum : uint8_t {
     INODE_NONE = 0,
     INODE_DIR,
     INODE_FILE,

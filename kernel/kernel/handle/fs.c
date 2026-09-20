@@ -1,7 +1,6 @@
 #include <kernel/handle/fs.h>
 #include <kernel/handle/registry.h>
 #include <kernel/memman/slab.h>
-#include <stdalign.h>
 
 typedef struct fs_file {
 	void* file_impl;

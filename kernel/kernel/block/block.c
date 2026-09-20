@@ -2,7 +2,6 @@
 #include <kernel/handle/registry.h>
 #include <kernel/handle/handle.h>
 #include <kernel/memman/slab.h>
-#include <stdalign.h>
 #include <string.h>
 
 typedef struct block_handle {

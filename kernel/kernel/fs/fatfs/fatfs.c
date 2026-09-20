@@ -4,7 +4,6 @@
 #include <kernel/handle/fs.h>
 #include <panuti/errno.h>
 #include <kernel/memman/slab.h>
-#include <stdalign.h>
 
 static struct inode* fatfs_lookup(void* fs_impl, struct inode* dir, const char* name, size_t len) {
 	(void)fs_impl; (void)dir; (void)name; (void)len;

@@ -2,7 +2,6 @@
 #include <kernel/sched/sched.h>
 #include <kernel/sched/task.h>
 #include <stddef.h>
-#include <stdbool.h>
 #include <kernel/kpanic.h>
 
 static task_t* ready_queue = NULL;
