@@ -17,6 +17,54 @@ static inline uint32_t read_le32(const uint8_t* p) {
 	return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
+static int rr_apply_name(const uint8_t* dir_record, char* out_name, size_t out_size) {
+	uint8_t dr_len = dir_record[0];
+	uint8_t len_fi = dir_record[32];
+
+	uint32_t su_offset = 33 + len_fi;
+	if (su_offset & 1) {
+		su_offset++; // padding field: present exactly when len_fi is even
+	}
+
+	size_t name_len = 0;
+	bool found = false;
+
+	while (su_offset + 4 <= dr_len) {
+		uint8_t sig1 = dir_record[su_offset];
+		uint8_t sig2 = dir_record[su_offset + 1];
+		uint8_t entry_len = dir_record[su_offset + 2];
+
+		if (entry_len < 4 || su_offset + entry_len > dr_len) {
+			break; // malformed SUA -- stop rather than read out of bounds
+		}
+
+		if (sig1 == 'N' && sig2 == 'M' && entry_len >= 5) {
+			uint8_t flags = dir_record[su_offset + 4];
+			uint8_t data_len = entry_len - 5; // NM header is SIG+LEN+VER+FLAGS = 5 bytes
+			const uint8_t* data = &dir_record[su_offset + 5];
+
+			if (name_len + data_len < out_size) {
+				memcpy(out_name + name_len, data, data_len);
+				name_len += data_len;
+				found = true;
+			}
+
+			if (!(flags & 0x01)) {
+				break; // bit 0 clear -- name does NOT continue, we're done
+			}
+		}
+
+		su_offset += entry_len;
+	}
+
+	if (!found) {
+		return -1;
+	}
+
+	out_name[name_len] = '\0';
+	return 0;
+}
+
 static int parse_dirent_basename(const uint8_t* dir_record, char* out_name, size_t out_size) {
 	uint8_t len_fi = dir_record[32];
 	const uint8_t* raw_name = &dir_record[33];
@@ -29,6 +77,11 @@ static int parse_dirent_basename(const uint8_t* dir_record, char* out_name, size
 
 	if (len_fi == 1 && raw_name[0] == 0x01) {
 		strcpy(out_name, "..");
+		return 0;
+	}
+	
+	// prefer the real Rock Ridge filename over ISO9660's 8.3-style name
+	if (rr_apply_name(dir_record, out_name, out_size) == 0) {
 		return 0;
 	}
 
