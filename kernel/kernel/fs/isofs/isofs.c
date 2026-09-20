@@ -17,7 +17,39 @@ static inline uint32_t read_le32(const uint8_t* p) {
 	return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
-static int rr_apply_name(const uint8_t* dir_record, char* out_name, size_t out_size) {
+static bool rr_check_sp(const uint8_t* root_dot_record, uint8_t* out_len_skp) {
+	uint8_t dr_len = root_dot_record[0];
+	uint8_t len_fi = root_dot_record[32];
+
+	uint32_t su_offset = 33 + len_fi;
+	if (su_offset & 1) {
+		su_offset++;
+	}
+
+	if (su_offset + 7 > dr_len) {
+		return false; // not enough room for an SP entry at all
+	}
+
+	if (root_dot_record[su_offset] == 'S' &&
+	    root_dot_record[su_offset + 1] == 'P' &&
+	    root_dot_record[su_offset + 2] == 7 &&
+	    root_dot_record[su_offset + 4] == 0xBE &&
+	    root_dot_record[su_offset + 5] == 0xEF) {
+		if (out_len_skp) {
+			*out_len_skp = root_dot_record[su_offset + 6];
+		}
+		
+		return true;
+	}
+
+	return false;
+}
+
+static int rr_apply_name(const uint8_t* dir_record, char* out_name, size_t out_size, const isofs_t* fs) {
+	if (!fs->is_rock_ridge) {
+		return -1;
+	}
+
 	uint8_t dr_len = dir_record[0];
 	uint8_t len_fi = dir_record[32];
 
@@ -25,6 +57,8 @@ static int rr_apply_name(const uint8_t* dir_record, char* out_name, size_t out_s
 	if (su_offset & 1) {
 		su_offset++; // padding field: present exactly when len_fi is even
 	}
+	
+	su_offset += fs->rr_len_skip;
 
 	size_t name_len = 0;
 	bool found = false;
@@ -35,7 +69,7 @@ static int rr_apply_name(const uint8_t* dir_record, char* out_name, size_t out_s
 		uint8_t entry_len = dir_record[su_offset + 2];
 
 		if (entry_len < 4 || su_offset + entry_len > dr_len) {
-			break; // malformed SUA -- stop rather than read out of bounds
+			break; // malformed SUA
 		}
 
 		if (sig1 == 'N' && sig2 == 'M' && entry_len >= 5) {
@@ -50,7 +84,7 @@ static int rr_apply_name(const uint8_t* dir_record, char* out_name, size_t out_s
 			}
 
 			if (!(flags & 0x01)) {
-				break; // bit 0 clear -- name does NOT continue, we're done
+				break; // bit 0 clear. break up with her.
 			}
 		}
 
@@ -65,7 +99,12 @@ static int rr_apply_name(const uint8_t* dir_record, char* out_name, size_t out_s
 	return 0;
 }
 
-static int parse_dirent_basename(const uint8_t* dir_record, char* out_name, size_t out_size) {
+static int parse_dirent_basename(
+	const uint8_t* dir_record,
+	char* out_name,
+	size_t out_size,
+	const isofs_t* fs
+) {
 	uint8_t len_fi = dir_record[32];
 	const uint8_t* raw_name = &dir_record[33];
 
@@ -81,7 +120,7 @@ static int parse_dirent_basename(const uint8_t* dir_record, char* out_name, size
 	}
 	
 	// prefer the real Rock Ridge filename over ISO9660's 8.3-style name
-	if (rr_apply_name(dir_record, out_name, out_size) == 0) {
+	if (rr_apply_name(dir_record, out_name, out_size, fs) == 0) {
 		return 0;
 	}
 
@@ -106,7 +145,7 @@ static int parse_dirent_basename(const uint8_t* dir_record, char* out_name, size
 	return 0;
 }
 
-static int parse_dir_record(const uint8_t* dir_record, isofs_dirent_t* out_dirent) {
+static int parse_dir_record(const uint8_t* dir_record, isofs_dirent_t* out_dirent, const isofs_t* fs) {
 	*out_dirent = (isofs_dirent_t){0};
 
 	out_dirent->start_lba = read_le32(&dir_record[2]);
@@ -114,7 +153,7 @@ static int parse_dir_record(const uint8_t* dir_record, isofs_dirent_t* out_diren
 	// this works for bool bc true expands to 1 and false respectively.
 	out_dirent->is_dir = (dir_record[25] >> 1) & 1; // 2nd bit flag
 
-	return parse_dirent_basename(dir_record, out_dirent->name, sizeof(out_dirent->name));
+	return parse_dirent_basename(dir_record, out_dirent->name, sizeof(out_dirent->name), fs);
 }
 
 static inline bool isofs_lba_valid(const isofs_t* fs, uint32_t lba, uint32_t len) {
@@ -184,7 +223,7 @@ static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* 
 		}
 
 		isofs_dirent_t dirent;
-		if (parse_dir_record(&buf[offset], &dirent) == 0
+		if (parse_dir_record(&buf[offset], &dirent, fs) == 0
 			&&
 			// check if this is what we are looking for
 			strlen(dirent.name) == len 
@@ -365,8 +404,11 @@ int isofs_mount(const char *mountp, const char *blkdev) {
 		kfree(fs);
 		return PANUTIERRNO_PLAINERR;
 	}
+
+	fs->is_rock_ridge = false;
+	fs->rr_len_skip = 0;
 	
-	if (parse_dir_record(&pvd[156], &fs->root) != 0) {
+	if (parse_dir_record(&pvd[156], &fs->root, fs) != 0) {
 		kfree(fs);
 		return PANUTIERRNO_PLAINERR;
 	}
@@ -374,6 +416,29 @@ int isofs_mount(const char *mountp, const char *blkdev) {
 	if (!isofs_lba_valid(fs, fs->root.start_lba, fs->root.length)) {
 		kfree(fs);
 		return PANUTIERRNO_PLAINERR;
+	}
+
+	{
+		uint8_t root_first_block[ISOFS_BLOCKSIZE];
+		if (fs->block_size > sizeof(root_first_block)) {
+			kfree(fs);
+			return PANUTIERRNO_PLAINERR; // shouldn't happen given the block_size cap above, but stay safe
+		}
+
+		if (block_read_bytes(
+			fs->block_device,
+			(uint64_t)fs->root.start_lba * fs->block_size,
+			fs->block_size, root_first_block) == BLOCK_OK
+		) {
+			uint8_t len_skp;
+			if (rr_check_sp(root_first_block, &len_skp)) {
+				fs->is_rock_ridge = true;
+				fs->rr_len_skip = len_skp;
+			}
+		}
+		
+		// if this read fails, we just proceed without Rock Ridge rather
+		// than failing the whole mount over a cosmetic feature
 	}
 
 	inode_t* mountpoint = registry_resolve(registry_root(), mountp);

@@ -22,6 +22,9 @@ typedef struct isofs {
 	uint32_t volume_space_size;
 
 	isofs_dirent_t root;
+	
+	bool is_rock_ridge;
+	uint8_t rr_len_skip;
 } isofs_t;
 
 typedef struct isofs_file {
