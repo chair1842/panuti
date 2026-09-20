@@ -21,11 +21,11 @@ int32_t syshandler_mount(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 
-	if (strcmp(fstype, "iso9660") == 0) {
+	if (strcmp(fstype, "isofs") == 0) {
 		return isofs_mount(mountp, blkdev);
 	}
 
-	if (strcmp(fstype, "vfat") == 0) {
+	if (strcmp(fstype, "fatfs") == 0) {
 		return fatfs_mount(mountp, blkdev);
 	}
 

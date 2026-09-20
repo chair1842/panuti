@@ -990,14 +990,14 @@ int main(int argc, char** argv) {
 	}
 
 	{
-		/* mount the boot ISO (iso9660 on the atapi cdrom) */
-		int32_t r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
-		check_is_success(console, "mount /mnt iso9660 /dvc/cdrom0", r);
+		/* mount the boot ISO (isofs on the atapi cdrom) */
+		int32_t r = panutisysf_mount("/mnt", "isofs", "/dvc/cdrom0");
+		check_is_success(console, "mount /mnt isofs /dvc/cdrom0", r);
 	}
 
 	{
 		/* mounting over an already-mounted point fails */
-		int32_t r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		int32_t r = panutisysf_mount("/mnt", "isofs", "/dvc/cdrom0");
 		check_is_error(console, "mount over existing mountpoint -> error", r);
 	}
 
@@ -1009,13 +1009,13 @@ int main(int argc, char** argv) {
 
 	{
 		/* nonexistent block device */
-		int32_t r = panutisysf_mount("/mnt2", "iso9660", "/dvc/ghost");
+		int32_t r = panutisysf_mount("/mnt2", "isofs", "/dvc/ghost");
 		check(console, "mount missing blkdev -> NOTFOUND", r, PANUTIERRNO_NOTFOUND);
 	}
 
 	{
 		/* mounting onto a non-directory mountpoint */
-		int32_t r = panutisysf_mount("/dvc/console", "iso9660", "/dvc/cdrom0");
+		int32_t r = panutisysf_mount("/dvc/console", "isofs", "/dvc/cdrom0");
 		check_is_error(console, "mount onto non-dir mountpoint -> error", r);
 	}
 
@@ -1035,7 +1035,7 @@ int main(int argc, char** argv) {
 
 	{
 		/* mount + unmount cycle works */
-		int32_t r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		int32_t r = panutisysf_mount("/mnt", "isofs", "/dvc/cdrom0");
 		check_is_success(console, "re-mount /mnt", r);
 		r = panutisysf_unmount("/mnt");
 		check(console, "unmount /mnt (after re-mount) -> success", r, 0);
@@ -1043,11 +1043,11 @@ int main(int argc, char** argv) {
 
 	{
 		/* garbage pointers are rejected before touching anything */
-		int32_t r = panuti_syscall(SYSHANDLER_MOUNT, 0xDEAD0000, (uint32_t)"iso9660", (uint32_t)"/dvc/cdrom0", 0);
+		int32_t r = panuti_syscall(SYSHANDLER_MOUNT, 0xDEAD0000, (uint32_t)"isofs", (uint32_t)"/dvc/cdrom0", 0);
 		check(console, "mount(badptr mountp) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
 		r = panuti_syscall(SYSHANDLER_MOUNT, (uint32_t)"/mnt", 0xDEAD0000, (uint32_t)"/dvc/cdrom0", 0);
 		check(console, "mount(badptr fstype) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
-		r = panuti_syscall(SYSHANDLER_MOUNT, (uint32_t)"/mnt", (uint32_t)"iso9660", 0xDEAD0000, 0);
+		r = panuti_syscall(SYSHANDLER_MOUNT, (uint32_t)"/mnt", (uint32_t)"isofs", 0xDEAD0000, 0);
 		check(console, "mount(badptr blkdev) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
 		r = panuti_syscall(SYSHANDLER_UNMOUNT, 0xDEAD0000, 0, 0, 0);
 		check(console, "unmount(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
@@ -1235,8 +1235,8 @@ int main(int argc, char** argv) {
 		write_int(console, r);
 		write_str(console, "\n");
 
-		r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
-		check_is_success(console, "mount /mnt iso9660 /dvc/cdrom0", r);
+		r = panutisysf_mount("/mnt", "isofs", "/dvc/cdrom0");
+		check_is_success(console, "mount /mnt isofs /dvc/cdrom0", r);
 
 		/* procreate pint.elf with --child so it exits immediately */
 		char* child_argv[] = { "pint", "--child" };
@@ -1560,7 +1560,7 @@ int main(int argc, char** argv) {
 
 		/* mount ISO to get pint.elf */
 		r = panutisysf_mkdir("/mnt");
-		r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		r = panutisysf_mount("/mnt", "isofs", "/dvc/cdrom0");
 		check_is_success(console, "mount /mnt", r);
 
 		/* pass wfd as child's out-stream 0 (which maps to parent's wfd)
@@ -1568,7 +1568,7 @@ int main(int argc, char** argv) {
 		char* child_argv[] = { "pint", "--write-parent" };
 		int child_out_streams[] = { wfd };
 		procreate_args_t cargs = {
-			.path = "/mnt/BOOT/PINT.ELF",
+			.path = "/mnt/boot/pint.elf",
 			.argv = child_argv,
 			.argc = 2,
 			.in_streams = (int*)0,
@@ -1610,14 +1610,14 @@ int main(int argc, char** argv) {
 		check_is_success(console, "pipe for parent->child", r);
 
 		r = panutisysf_mkdir("/mnt");
-		r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		r = panutisysf_mount("/mnt", "isofs", "/dvc/cdrom0");
 		check_is_success(console, "mount /mnt", r);
 
 		/* pass rfd as child's in-stream 0 */
 		char* child_argv[] = { "pint", "--read-parent" };
 		int child_in_streams[] = { rfd };
 		procreate_args_t cargs = {
-			.path = "/mnt/BOOT/PINT.ELF",
+			.path = "/mnt/boot/pint.elf",
 			.argv = child_argv,
 			.argc = 2,
 			.in_streams = child_in_streams,
@@ -1657,12 +1657,12 @@ int main(int argc, char** argv) {
 	{
 		/* child with no streams gets its own default console */
 		int32_t r2 = panutisysf_mkdir("/mnt");
-		r2 = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		r2 = panutisysf_mount("/mnt", "isofs", "/dvc/cdrom0");
 		check_is_success(console, "mount /mnt", r2);
 
 		char* child_argv[] = { "pint", "--stream-write" };
 		procreate_args_t cargs = {
-			.path = "/mnt/BOOT/PINT.ELF",
+			.path = "/mnt/boot/pint.elf",
 			.argv = child_argv,
 			.argc = 2,
 			.in_streams = (int*)0,
@@ -1691,14 +1691,14 @@ int main(int argc, char** argv) {
 		panutisysf_pipe_create(&rfd, &wfd);
 
 		int32_t r = panutisysf_mkdir("/mnt");
-		r = panutisysf_mount("/mnt", "iso9660", "/dvc/cdrom0");
+		r = panutisysf_mount("/mnt", "isofs", "/dvc/cdrom0");
 		check_is_success(console, "mount /mnt (isolation test)", r);
 
 		/* pass wfd to child as out-stream 0 */
 		char* child_argv[] = { "pint", "--write-parent" };
 		int child_out[] = { wfd };
 		procreate_args_t cargs = {
-			.path = "/mnt/BOOT/PINT.ELF",
+			.path = "/mnt/boot/pint.elf",
 			.argv = child_argv,
 			.argc = 2,
 			.in_streams = (int*)0,
