@@ -73,7 +73,9 @@ kernel/syscall/handlers/nstream.o \
 kernel/syscall/handlers/stream_read.o \
 kernel/syscall/handlers/stream_write.o \
 kernel/syscall/handlers/procreate.o \
-kernel/syscall/handlers/wait.o
+kernel/syscall/handlers/wait.o \
+kernel/drivers/kbd/core.o \
+kernel/drivers/kbd/line.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

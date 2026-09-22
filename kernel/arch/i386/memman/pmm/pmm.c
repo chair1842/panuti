@@ -1,5 +1,5 @@
 #include "pmm.h"
-#include <stdlib.h>
+#include <kernel/kpanic.h>
 
 #define PMM_BITMAP_SIZE 131072
 #define PMM_PAGE_SIZE 4096
@@ -33,8 +33,9 @@ void pmm_setp(uint32_t page) {
 void pmm_init(multiboot_info_t* mbi) {
 	uint8_t mbi_imp = (mbi->flags >> 6) & 1;
 	if (!mbi_imp) {
-		// No memory map provided by the bootloader. Abort and curse the bootloader with the souls of a thosand devils.
-		abort();
+		// No memory map provided by the bootloader.
+		// Panic and curse the bootloader with the souls of a million devils.
+		kpanic("PMM: Memory map not provided by bootloader");
 		return;
 	}
 

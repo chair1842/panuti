@@ -4,6 +4,7 @@
 #include <kernel/handle/registry.h>
 #include <panuti/kbd.h>
 #include <string.h>
+#include <kernel/kbd/dvc.h>
 
 #define KBD_LINE_MAX 256
 

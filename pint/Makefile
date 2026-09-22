@@ -15,6 +15,7 @@ INCLUDEDIR?=$(PREFIX)/include
 
 CFLAGS:=$(CFLAGS) -Wall -Wextra -Wa,--noexecstack
 CPPFLAGS:=$(CPPFLAGS) -I../libc/include
+LIBS:=$(LIBS) -lc -lgcc
 
 OBJS=\
 crt0.o \
@@ -23,7 +24,6 @@ main.o \
 LINK_LIST=\
 $(LDFLAGS) \
 $(OBJS) \
-../libc/libc.a \
 $(LIBS) \
 
 BINARY=pint.elf
@@ -34,7 +34,7 @@ BINARY=pint.elf
 all: $(BINARY)
 
 $(BINARY): $(OBJS) pint.ld ../libc/libc.a
-	$(CC) -T pint.ld -o $@ -nostdlib $(LINK_LIST) -lgcc
+	$(CC) -T pint.ld -o $@ -nostdlib $(LINK_LIST)
 
 .c.o:
 	$(CC) -MD -c $< -o $@ -std=gnu23 $(CFLAGS) $(CPPFLAGS)
