@@ -9,6 +9,7 @@
 #include <kernel/ata/atapi.h>
 #include "drivers/vga/vga.h"
 #include "drivers/ramblock/ramblock.h"
+#include <kernel/kbd/dvc.h>
 
 static void idle_task_entry(void) {
     while (1) {
@@ -22,6 +23,9 @@ void kernel_main(void) {
 	
 	registry_mkdir("/dvc");
 	vga_register_console();
+	
+	kbd_line_init();
+	
 	ramblock_init("/dvc/ram0", 512, 1024);
 	atapi_init();
 

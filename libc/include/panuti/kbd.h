@@ -63,7 +63,8 @@ typedef enum keycode : uint8_t {
 	KEYCODE_SPACE,
 	KEYCODE_TAB,
 	KEYCODE_BACKSPACE,
-	KEYCODE_ENTER
+	KEYCODE_ENTER,
+	KEYCODE_BACKTICK
 } keycode_t;
 
 typedef struct keypacket {

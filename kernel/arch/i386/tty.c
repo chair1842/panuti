@@ -39,12 +39,24 @@ void terminal_putentryat(unsigned char c, uint8_t color, size_t x, size_t y) {
 
 void terminal_putchar(char c) {
 	unsigned char uc = c;
+
 	if (c == '\n') {
 		terminal_column = 0;
 		if (++terminal_row == VGA_HEIGHT) {
 			terminal_scroll();
 			terminal_row = VGA_HEIGHT - 1;
 		}
+		return;
+	}
+
+	if (c == '\b') {
+		if (terminal_column > 0) {
+			terminal_column--;
+		} else if (terminal_row > 0) {
+			terminal_row--;
+			terminal_column = VGA_WIDTH - 1;
+		}
+		
 		return;
 	}
 

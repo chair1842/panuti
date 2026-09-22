@@ -29,7 +29,7 @@ static void task_init_default_streams(task_t* t) {
 		t->no_out_streams = 0;
 	}
 
-	if (handle_build("/dvc/kbd", &t->in_streams[0])) {
+	if (handle_build("/dvc/kbd/line", &t->in_streams[0])) {
 		t->no_in_streams = 1;
 	} else {
 		t->no_in_streams = 0;
