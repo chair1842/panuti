@@ -3,6 +3,7 @@
 #include "intpt/handlers/handlers.h"
 #include <kernel/klog.h>
 #include <kernel/serial.h>
+#include "drivers/kbd/ps2.h"
 
 #define TIMER_FREQ 100
 
@@ -14,13 +15,9 @@ void kearly(void) {
 	register_handler(13, gpf_handler);
 	register_handler(14, page_fault_handler);
 
+	kbd_ps2_init();
+
 	timer_init(TIMER_FREQ);
 	klog(KLOG_INFO, "kearly: timer initialized\n");
 	__asm__ __volatile__("sti");
-	for (volatile int i = 0; i < 5000000; i++) {
-		if (timer_get_ticks() > 0) {
-			klog(KLOG_INFO, "tick fired! %d\n", timer_get_ticks());
-			break;
-		}
-	}
 }

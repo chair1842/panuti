@@ -2,7 +2,7 @@
 #include "../../io.h"
 #include <stdint.h>
 #include "../../intpt/handlers/main.h"
-//#include <kernel/kernel/drivers/kbd/core.h>
+#include <kernel/kbd/core.h>
 #include <panuti/kbd.h>
 
 #define PS2_DATA_PORT 0x60
@@ -18,12 +18,12 @@ static const keycode_t scancode_table[128] = {
 	[0x1A] = KEYCODE_LBRACKET, [0x1B] = KEYCODE_RBRACKET, [0x1C] = KEYCODE_ENTER, [0x1D] = KEYCODE_LCTRL,
 	[0x1E] = KEYCODE_A, [0x1F] = KEYCODE_S, [0x20] = KEYCODE_D, [0x21] = KEYCODE_F, [0x22] = KEYCODE_G,
 	[0x23] = KEYCODE_H, [0x24] = KEYCODE_J, [0x25] = KEYCODE_K, [0x26] = KEYCODE_L,
-	[0x27] = KEYCODE_SEMICOLON, [0x28] = KEYCODE_QUOTE, [0x29] = KEYCODE_TILDE,
+	[0x27] = KEYCODE_SEMICOLON, [0x28] = KEYCODE_APOSTROPHE, [0x29] = KEYCODE_NONE,
 	[0x2A] = KEYCODE_LSHIFT, [0x2B] = KEYCODE_BACKSLASH,
 	[0x2C] = KEYCODE_Z, [0x2D] = KEYCODE_X, [0x2E] = KEYCODE_C, [0x2F] = KEYCODE_V, [0x30] = KEYCODE_B,
 	[0x31] = KEYCODE_N, [0x32] = KEYCODE_M, [0x33] = KEYCODE_COMMA, [0x34] = KEYCODE_PERIOD, 
 	[0x35] = KEYCODE_SLASH, [0x36] = KEYCODE_RSHIFT,
-	[0x37] = KEYCODE_STAR, [0x38] = KEYCODE_LALT, [0x39] = KEYCODE_SPACE, [0x3A] = KEYCODE_CAPS_LOCK,
+	[0x37] = KEYCODE_NONE, [0x38] = KEYCODE_LALT, [0x39] = KEYCODE_SPACE, [0x3A] = KEYCODE_CAPS_LOCK,
 	[0x3B] = KEYCODE_NONE, [0x3C] = KEYCODE_NONE, [0x3D] = KEYCODE_NONE, [0x3E] = KEYCODE_NONE,
 	[0x3F] = KEYCODE_NONE, [0x40] = KEYCODE_NONE, [0x41] = KEYCODE_NONE, [0x42] = KEYCODE_NONE,
 	[0x43] = KEYCODE_NONE, [0x44] = KEYCODE_NONE,
@@ -69,17 +69,18 @@ static void ps2_irq1_handler(registers_t* regs) {
 		num_lock_on = !num_lock_on;
 	}
 
-	//	keypacket_t pkt = {
-//		.keycode = kc,
-//		.pressed = pressed,
-//		.shift = shift_held,
-//		.ctrl = ctrl_held,
-//		.alt = alt_held,
-//		.caps_lock = caps_lock_on,
-//		.scroll_lock = scroll_lock_on,
-//		.num_lock = num_lock_on,
-//	};
-//	kbd_core_push(pkt);
+	keypacket_t pkt = {
+		.keycode = kc,
+		.pressed = pressed,
+		.shift = shift_held,
+		.ctrl = ctrl_held,
+		.alt = alt_held,
+		.caps_lock = caps_lock_on,
+		.scroll_lock = scroll_lock_on,
+		.num_lock = num_lock_on,
+	};
+	
+	kbd_core_push(pkt);
 }
 
 void kbd_ps2_init(void) {
