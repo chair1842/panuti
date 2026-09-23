@@ -57,7 +57,7 @@ index 743421768ea..44c2352b53d 100644
  	gas=yes
  	;;
 +i[34567]86-*-panuti*)
-+    tm_file="${tm_file} i386/unix.h i386/att.h elfos.h glibc-stdint.h i386/i386elf.h panuti.h gnu-user.h"
++    tm_file="${tm_file} i386/unix.h i386/att.h elfos.h glibc-stdint.h i386/i386elf.h gnu-user.h panuti.h"
 +    ;;
  i[34567]86-*-rtems*)
  	tm_file="${tm_file} i386/unix.h i386/att.h elfos.h i386/i386elf.h i386/rtemself.h rtems.h newlib-stdint.h"
@@ -86,9 +86,13 @@ index 00000000000..5998e86c4f3
 +#define ENDFILE_SPEC "crtend.o%s crtn.o%s"
 +
 +/* Default userspace linker script -- only applies to hosted builds,
-+   and only if the caller hasn't already passed an explicit -T. */
++   and only if the caller hasn't already passed an explicit -T.
++   Uses %R (the active --sysroot path) to give ld a fully-qualified
++   path, since a bare filename here is only resolved against -L
++   directories that appear BEFORE -T on the command line -- which
++   ours don't, since collect2 emits -T ahead of all -L flags. */
 +#undef LINK_SPEC
-+#define LINK_SPEC "%{!T*: %{!ffreestanding: -T panuti.ld}}"
++#define LINK_SPEC "%{!T*: %{!ffreestanding: -T %R/usr/lib/panuti.ld}}"
 +
 +/* Additional predefined macros. */
 +#undef TARGET_OS_CPP_BUILTINS
