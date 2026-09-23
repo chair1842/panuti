@@ -67,28 +67,35 @@ new file mode 100644
 index 00000000000..5998e86c4f3
 --- /dev/null
 +++ b/gcc/config/panuti.h
-@@ -0,0 +1,22 @@
+@@ -0,0 +1,29 @@
 +#undef TARGET_PANUTI
 +#define TARGET_PANUTI 1
 +
 +#undef LIB_SPEC
-+#define LIB_SPEC "-lc" /* link against C standard library */
++#define LIB_SPEC "%{!ffreestanding: -lc -lgcc}" /* link against C standard library */
 +
 +/* Files that are linked before user code.
-+   The %s tells GCC to look for these files in the library directory. */
++   The %s tells GCC to look for these files in the library directory.
++   crt0.o only applies to hosted (non-freestanding) builds -- the kernel
++   provides its own entry point and must never link this in. */
 +#undef STARTFILE_SPEC
-+#define STARTFILE_SPEC "crt0.o%s crti.o%s crtbegin.o%s"
++#define STARTFILE_SPEC "%{!shared: %{!ffreestanding: crt0.o%s}} crti.o%s crtbegin.o%s"
 +
 +/* Files that are linked after user code. */
 +#undef ENDFILE_SPEC
 +#define ENDFILE_SPEC "crtend.o%s crtn.o%s"
 +
++/* Default userspace linker script -- only applies to hosted builds,
++   and only if the caller hasn't already passed an explicit -T. */
++#undef LINK_SPEC
++#define LINK_SPEC "%{!T*: %{!ffreestanding: -T panuti.ld}}"
++
 +/* Additional predefined macros. */
 +#undef TARGET_OS_CPP_BUILTINS
 +#define TARGET_OS_CPP_BUILTINS()      \
 +  do {                                \
-+    builtin_define ("__myos__");      \
-+    builtin_assert ("system=myos");   \
++    builtin_define ("__panuti__");    \
++    builtin_assert ("system=panuti"); \
 +  } while(0);
 diff --git a/libgcc/config.host b/libgcc/config.host
 index c725c9effca..eb50f853b78 100644

@@ -59,16 +59,23 @@ LIBK_OBJS=$(FREEOBJS:.o=.libk.o)
 
 BINARIES=libk.a libc.a
 
+CRT0_SRC=$(ARCHDIR)/panuti/crt0.S
+CRT0_OBJ=$(ARCHDIR)/panuti/crt0.o
+LDSCRIPT=$(ARCHDIR)/panuti/panuti.ld
+
 .PHONY: all clean install install-headers install-libs
 .SUFFIXES: .o .libk.o .c .S
 
-all: $(BINARIES)
+all: $(BINARIES) $(CRT0_OBJ)
 
 libc.a: $(OBJS)
 	$(AR) rcs $@ $(OBJS)
 
 libk.a: $(LIBK_OBJS)
 	$(AR) rcs $@ $(LIBK_OBJS)
+
+$(CRT0_OBJ): $(CRT0_SRC)
+	$(CC) -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
 
 .c.o:
 	$(CC) -MD -c $< -o $@ -std=gnu23 $(CFLAGS) $(CPPFLAGS)
@@ -86,6 +93,7 @@ clean:
 	rm -f $(BINARIES) *.a
 	rm -f $(OBJS) $(LIBK_OBJS) *.o */*.o */*/*.o
 	rm -f $(OBJS:.o=.d) $(LIBK_OBJS:.o=.d) *.d */*.d */*/*.d
+	rm -f $(CRT0_OBJ)
 
 install: install-headers install-libs
 
@@ -93,9 +101,11 @@ install-headers:
 	mkdir -p $(DESTDIR)$(INCLUDEDIR)
 	cp -R --preserve=timestamps include/. $(DESTDIR)$(INCLUDEDIR)/.
 
-install-libs: $(BINARIES)
+install-libs: $(BINARIES) $(CRT0_OBJ)
 	mkdir -p $(DESTDIR)$(LIBDIR)
 	cp $(BINARIES) $(DESTDIR)$(LIBDIR)
+	cp $(CRT0_OBJ) $(DESTDIR)$(LIBDIR)/crt0.o
+	cp $(LDSCRIPT) $(DESTDIR)$(LIBDIR)/panuti.ld
 
 -include $(OBJS:.o=.d)
 -include $(LIBK_OBJS:.o=.d)

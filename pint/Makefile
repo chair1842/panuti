@@ -14,17 +14,9 @@ BOOTDIR?=$(EXEC_PREFIX)/boot
 INCLUDEDIR?=$(PREFIX)/include
 
 CFLAGS:=$(CFLAGS) -Wall -Wextra -Wa,--noexecstack
-CPPFLAGS:=$(CPPFLAGS) -I../libc/include
-LIBS:=$(LIBS) -lc -lgcc
 
 OBJS=\
-crt0.o \
 main.o \
-
-LINK_LIST=\
-$(LDFLAGS) \
-$(OBJS) \
-$(LIBS) \
 
 BINARY=pint.elf
 
@@ -33,8 +25,8 @@ BINARY=pint.elf
 
 all: $(BINARY)
 
-$(BINARY): $(OBJS) pint.ld ../libc/libc.a
-	$(CC) -T pint.ld -o $@ -nostdlib $(LINK_LIST)
+$(BINARY): $(OBJS)
+	$(CC) -o $@ $(LDFLAGS) $(OBJS)
 
 .c.o:
 	$(CC) -MD -c $< -o $@ -std=gnu23 $(CFLAGS) $(CPPFLAGS)
