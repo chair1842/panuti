@@ -22,6 +22,7 @@ void kernel_main(void) {
 	terminal_initialize();
 	
 	registry_mkdir("/dvc");
+	registry_mkdir("/dvc/kbd");
 	vga_register_console();
 	
 	kbd_line_init();
