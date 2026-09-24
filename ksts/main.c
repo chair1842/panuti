@@ -590,7 +590,20 @@ int main(int argc, char** argv) {
 		check(console, "final write", r, 17);
 		panutisysf_close(fd);
 	}
-	
+
+	/* ---- 32. getpid ---- */
+	section(console, "32. getpid");
+
+	{
+		uint32_t p1 = panutisysf_getpid();
+		uint32_t p2 = panutisysf_getpid();
+		write_str(console, "  pid=");
+		write_int(console, (int)p1);
+		write_str(console, "\n");
+		check(console, "getpid is positive", p1 > 0 ? 1 : 0, 1);
+		check(console, "getpid stable across calls", p1 == p2 ? 1 : 0, 1);
+	}
+
 	/* ---- 33. timesb (time since boot) ---- */
 	section(console, "33. timesb (time since boot)");
 
