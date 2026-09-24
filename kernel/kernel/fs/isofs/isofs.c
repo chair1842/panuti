@@ -344,13 +344,22 @@ int isofs_mount(const char *mountp, const char *blkdev) {
 		return PANUTIERRNO_NOTFOUND;
 	}
 
-	uint8_t pvd[ISOFS_BLOCKSIZE];
+	uint8_t* desc = kmalloc(ISOFS_BLOCKSIZE, 1);
+	if (!desc) {
+		return PANUTIERRNO_PLAINERR;
+	}
+	uint8_t* pvd = kmalloc(ISOFS_BLOCKSIZE, 1);
+	if (!pvd) {
+		kfree(desc);
+		return PANUTIERRNO_PLAINERR;
+	}
 	bool pvd_found = false;
 
 	for (uint64_t lba = 16; lba < dev->block_count; lba++) {
-		uint8_t desc[ISOFS_BLOCKSIZE];
 		int rc = block_read_bytes(dev, lba * ISOFS_BLOCKSIZE, ISOFS_BLOCKSIZE, desc);
 		if (rc != BLOCK_OK) {
+			kfree(pvd);
+			kfree(desc);
 			return rc;
 		}
 
@@ -360,27 +369,35 @@ int isofs_mount(const char *mountp, const char *blkdev) {
 		}
 
 		if (desc[0] == 1 && !pvd_found) {
-			memcpy(pvd, desc, sizeof(desc));
+			memcpy(pvd, desc, ISOFS_BLOCKSIZE);
 			pvd_found = true;
 		}
 	}
 
 	if (!pvd_found) {
+		kfree(pvd);
+		kfree(desc);
 		return PANUTIERRNO_PLAINERR;
 	}
 
 	// check magic string
 	if (memcmp(&pvd[1], "CD001", 5) != 0) {
+		kfree(pvd);
+		kfree(desc);
 		return PANUTIERRNO_PLAINERR;
 	}
 
 	// realistically 1 anywhere but just to make sure...
 	if (pvd[6] != 1 || pvd[881] != 1) {
+		kfree(pvd);
+		kfree(desc);
 		return PANUTIERRNO_PLAINERR;
 	}
 	
 	isofs_t* fs = kmalloc(sizeof(isofs_t), alignof(isofs_t));
 	if (!fs) {
+		kfree(pvd);
+		kfree(desc);
 		return PANUTIERRNO_PLAINERR;
 	}
 	
@@ -393,6 +410,8 @@ int isofs_mount(const char *mountp, const char *blkdev) {
 	if (fs->block_size == 0 || (fs->block_size & (fs->block_size - 1)) != 0 ||
 	    fs->block_size > 65536) {
 		kfree(fs);
+		kfree(pvd);
+		kfree(desc);
 		return PANUTIERRNO_PLAINERR;
 	}
 	
@@ -401,6 +420,8 @@ int isofs_mount(const char *mountp, const char *blkdev) {
 
 	if (iso_bytes > dev_bytes) {
 		kfree(fs);
+		kfree(pvd);
+		kfree(desc);
 		return PANUTIERRNO_PLAINERR;
 	}
 
@@ -409,36 +430,43 @@ int isofs_mount(const char *mountp, const char *blkdev) {
 	
 	if (parse_dir_record(&pvd[156], &fs->root, fs) != 0) {
 		kfree(fs);
+		kfree(pvd);
+		kfree(desc);
 		return PANUTIERRNO_PLAINERR;
 	}
 	
 	if (!isofs_lba_valid(fs, fs->root.start_lba, fs->root.length)) {
 		kfree(fs);
+		kfree(pvd);
+		kfree(desc);
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	{
-		uint8_t root_first_block[ISOFS_BLOCKSIZE];
-		if (fs->block_size > sizeof(root_first_block)) {
-			kfree(fs);
-			return PANUTIERRNO_PLAINERR; // shouldn't happen given the block_size cap above, but stay safe
-		}
-
-		if (block_read_bytes(
-			fs->block_device,
-			(uint64_t)fs->root.start_lba * fs->block_size,
-			fs->block_size, root_first_block) == BLOCK_OK
-		) {
-			uint8_t len_skp;
-			if (rr_check_sp(root_first_block, &len_skp)) {
-				fs->is_rock_ridge = true;
-				fs->rr_len_skip = len_skp;
-			}
-		}
-		
-		// if this read fails, we just proceed without Rock Ridge rather
-		// than failing the whole mount over a cosmetic feature
+	// the desc buffer is dead after the PVD scan, so reuse it for the root
+	// block read and keep the heap footprint to two CD sectors
+	if (fs->block_size > ISOFS_BLOCKSIZE) {
+		kfree(pvd);
+		kfree(desc);
+		return PANUTIERRNO_PLAINERR; // shouldn't happen given the block_size cap above, but stay safe
 	}
+
+	if (block_read_bytes(
+		fs->block_device,
+		(uint64_t)fs->root.start_lba * fs->block_size,
+		fs->block_size, desc) == BLOCK_OK
+	) {
+		uint8_t len_skp;
+		if (rr_check_sp(desc, &len_skp)) {
+			fs->is_rock_ridge = true;
+			fs->rr_len_skip = len_skp;
+		}
+	}
+	
+	// if this read fails, we just proceed without Rock Ridge rather
+	// than failing the whole mount over a cosmetic feature
+
+	kfree(pvd);
+	kfree(desc);
 
 	inode_t* mountpoint = registry_resolve(registry_root(), mountp);
 	if (!mountpoint || mountpoint->type != INODE_DIR) {

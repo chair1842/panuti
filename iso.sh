@@ -11,6 +11,8 @@ cp sysroot/boot/panuti_kern isodir/boot/panuti_kern
 cp sysroot/boot/pint isodir/boot/pint
 cp sysroot/usr/bin/ksts isodir/usr/bin/ksts
 cat > isodir/boot/grub/grub.cfg << EOF
+set timeout=2
+set default=0
 menuentry "panuti" {
 	multiboot /boot/panuti_kern
 	module /boot/pint
