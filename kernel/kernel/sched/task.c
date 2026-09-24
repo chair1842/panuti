@@ -55,14 +55,14 @@ static task_t* task_alloc_common(void) {
 		return nullptr;
 	}
 
-	t->kernel_stack = (uint32_t)vmalloc_pg();
+	t->kernel_stack = (uint32_t)vmalloc_pages(TASK_KERNEL_STACK_PAGES);
 	if (!t->kernel_stack) {
 		return nullptr;
 	}
 
 	t->addr_space = memman_create_addr_space();
 	if (!t->addr_space) {
-		vmalloc_free((void*)t->kernel_stack);
+		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
 		return nullptr;
 	}
 
@@ -99,7 +99,7 @@ task_t* task_create_user(void (*entry)(void)) {
 
 	uint32_t user_stack_phys = memman_alloc_frame();
 	if (!user_stack_phys) {
-		vmalloc_free((void*)t->kernel_stack);
+		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
 		memman_destroy_addr_space(t->addr_space);
 		t->state = TASK_NONE; // release the slot back, since alloc_common already claimed it
 		return nullptr;
@@ -131,7 +131,7 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 	}
 
 	if (elf_load_segments(t->addr_space, elf_data, segs, nsegs) != 0) {
-		vmalloc_free((void*)t->kernel_stack);
+		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
 		memman_destroy_addr_space(t->addr_space);
 		t->state = TASK_NONE;
 		return nullptr;
@@ -139,7 +139,7 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 
 	uint32_t user_stack_phys = memman_alloc_frame();
 	if (!user_stack_phys) {
-		vmalloc_free((void*)t->kernel_stack);
+		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
 		memman_destroy_addr_space(t->addr_space);
 		t->state = TASK_NONE;
 		return nullptr;
@@ -192,7 +192,7 @@ void task_destroy(task_t* t) {
 	}
 
 	if (t->kernel_stack) {
-		vmalloc_free((void*)t->kernel_stack);
+		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
 	}
 	if (t->addr_space) {
 		memman_destroy_addr_space(t->addr_space);
@@ -222,7 +222,7 @@ static void procreate_cleanup(task_t* t) {
 	}
 
 	if (t->kernel_stack) {
-		vmalloc_free((void*)t->kernel_stack);
+		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
 	}
 	if (t->addr_space) {
 		memman_destroy_addr_space(t->addr_space);

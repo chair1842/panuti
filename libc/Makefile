@@ -46,7 +46,10 @@ string/strncpy.o \
 string/strcmp.o \
 string/strncmp.o \
 string/memchr.o \
-string/strcpy.o
+string/strcpy.o \
+panuti/process/procreate.o \
+panuti/mount/mount.o \
+panuti/process/wait.o
 
 HOSTEDOBJS=\
 $(ARCH_HOSTEDOBJS) \

@@ -336,7 +336,7 @@ Mount a filesystem from a block device onto a mountpoint directory.
 
 **Parameters:**
 - `mountp` -- path to an existing directory to serve as mountpoint
-- `fstype` -- filesystem type string (`"iso9660"` or `"vfat"`)
+- `fstype` -- filesystem type string (`"isofs"` or `"fatfs"`)
 - `blkdev` -- path to a block device
 
 **Returns:** 0 on success, or error code.

@@ -18,7 +18,7 @@ CFLAGS:=$(CFLAGS) -Wall -Wextra -Wa,--noexecstack
 OBJS=\
 main.o \
 
-BINARY=pint
+BINARY=ksts
 
 .PHONY: all clean install install-pint
 .SUFFIXES: .o .c .S
@@ -39,10 +39,10 @@ clean:
 	rm -f $(OBJS)
 	rm -f $(OBJS:.o=.d)
 
-install: install-pint
+install: install-ksts
 
-install-pint: $(BINARY)
-	mkdir -p $(DESTDIR)$(BOOTDIR)
-	cp $(BINARY) $(DESTDIR)$(BOOTDIR)/$(BINARY)
+install-ksts: $(BINARY)
+	mkdir -p $(DESTDIR)$(BINDIR)
+	cp $(BINARY) $(DESTDIR)$(BINDIR)/$(BINARY)
 
 -include $(OBJS:.o=.d)

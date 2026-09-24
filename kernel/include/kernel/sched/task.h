@@ -7,7 +7,8 @@
 #include <kernel/handle/registry.h>
 #include <panuti/syscall/procreate.h>
 
-#define TASK_KERNEL_STACK_SIZE 4096
+#define TASK_KERNEL_STACK_PAGES 4
+#define TASK_KERNEL_STACK_SIZE (TASK_KERNEL_STACK_PAGES * 4096)
 #define MAX_STREAMS 16
 
 typedef uint32_t pid_t;
