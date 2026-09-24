@@ -18,9 +18,9 @@ CFLAGS:=$(CFLAGS) -Wall -Wextra -Wa,--noexecstack
 OBJS=\
 main.o \
 
-BINARY=ksts
+BINARY=pur
 
-.PHONY: all clean install install-ksts
+.PHONY: all clean install install-pur
 .SUFFIXES: .o .c .S
 
 all: $(BINARY)
@@ -39,9 +39,9 @@ clean:
 	rm -f $(OBJS)
 	rm -f $(OBJS:.o=.d)
 
-install: install-ksts
+install: install-pur
 
-install-ksts: $(BINARY)
+install-pur: $(BINARY)
 	mkdir -p $(DESTDIR)$(BINDIR)
 	cp $(BINARY) $(DESTDIR)$(BINDIR)/$(BINARY)
 
