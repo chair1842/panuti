@@ -49,7 +49,11 @@ string/memchr.o \
 string/strcpy.o \
 panuti/process/procreate.o \
 panuti/mount/mount.o \
-panuti/process/wait.o
+panuti/process/wait.o \
+panuti/handle/write.o \
+panuti/handle/read.o \
+panuti/handle/close.o \
+panuti/handle/open.o
 
 HOSTEDOBJS=\
 $(ARCH_HOSTEDOBJS) \

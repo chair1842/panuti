@@ -11,6 +11,7 @@ pid_t procreate(
 	int* out_streams, int no_out_streams
 );
 
-int32_t wait(pid_t pid, int* ec_out);
+// block until the waited-on process exits and then output the exit code to ec_out
+int wait(pid_t pid, int* ec_out);
 
 #endif
