@@ -100,6 +100,18 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 	inode_t* current = (path[0] == '/') ? root : start;
 	const char* p = (path[0] == '/') ? path + 1 : path;
 
+	// if resolution *begins* at a mountpoint (a filesystem mounted over the
+	// root, or over the caller's cwd), step into the mount so its tree is the
+	// namespace the path gets resolved against. this also makes a bare "/"
+	// resolve to the mounted root when the root is covered.
+	if (!current->mnt) {
+		mount_t* m = mount_find(current);
+		if (m) {
+			current = m->root;
+			current->mnt = m;
+		}
+	}
+
 	while (*p) {
 		const char* seg_start = p;
 		while (*p && *p != '/') p++;
@@ -284,6 +296,16 @@ int registry_mount(const char* path, const fs_ops_t* fs_ops, void* fs_impl) {
 int registry_unmount(const char* path) {
 	if (!path) {
 		return -1;
+	}
+
+	// the root has no parent dirent to resolve by name; the registry root
+	// inode *is* the mountpoint, so find the covering mount directly
+	if (path[0] == '/' && path[1] == '\0') {
+		mount_t* m = mount_find(registry_root());
+		if (!m) {
+			return -1;
+		}
+		return mount_detach(m->mountpoint);
 	}
 
 	// resolve the mountpoint inode itself: walking the full path crosses into
