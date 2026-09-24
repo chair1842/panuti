@@ -16,6 +16,9 @@
 #define RECURSIVE_PDE_INDEX 1023
 #define PAGE_DIR_ENTRIES 1024
 
+// top of the vmalloc heap window; must match VMALLOC_END in vmalloc.c
+#define KERNEL_HEAP_END 0xC0800000
+
 #define PAGE_PRESENT 0x1
 #define PAGE_RW 0x2
 #define PAGE_USER 0x4
@@ -43,6 +46,31 @@ static void write_cr3(uint32_t value) {
 
 void vmm_init(void) {
 	boot_page_dir[0] = 0;
+
+	/*
+	 * boot.S only maps the first 4 MB of the higher half (PDE 768). vmalloc
+	 * grows past that into PDE 769+ (0xc0400000..KERNEL_HEAP_END), where
+	 * vmm_map would lazily allocate the page table into whichever directory
+	 * is active at the time. Task directories snapshot the kernel PDEs once
+	 * in vmm_create_page_dir(), so a lazily created table would be visible
+	 * only to tasks cloned after that point -- everything older would then
+	 * fault on kmalloc() touching a slab beyond the stale PDE. Pre-create
+	 * these tables now, before any task exists, so all address spaces share
+	 * the same kernel heap mappings.
+	 */
+	for (uint32_t pde_i = KERNEL_PDE_START; pde_i < (KERNEL_HEAP_END >> 22); pde_i++) {
+		if (boot_page_dir[pde_i] & PAGE_PRESENT) {
+			continue;
+		}
+		uint32_t pgtable_phys = pmm_allocp();
+		if (pgtable_phys == 0) {
+			break;
+		}
+		boot_page_dir[pde_i] = pgtable_phys | PAGE_PRESENT | PAGE_RW;
+		uint32_t* pgtable_virt = pte_get_table(pde_i);
+		__asm__ __volatile__("invlpg (%0)" :: "r"(pgtable_virt) : "memory");
+		memset(pgtable_virt, 0, PAGE_SIZE);
+	}
 
 	__asm__ __volatile__("mov %%cr3, %%eax\n" "mov %%eax, %%cr3\n" ::: "eax");
 }
