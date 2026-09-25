@@ -1,7 +1,7 @@
-/* SPDX-License-Identifier: GPL-2.0-or-later */
+/* SPDX-License-Identifier: BSD-3-Clause */
 
-#ifndef _KERNEL_HANDLE_INODE_TYPE_H
-#define _KERNEL_HANDLE_INODE_TYPE_H
+#ifndef _PANUTI_INODE_TYPE_H
+#define _PANUTI_INODE_TYPE_H
 
 #include <stdint.h>
 

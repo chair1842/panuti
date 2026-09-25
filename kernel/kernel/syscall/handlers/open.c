@@ -10,6 +10,8 @@
 #include <stdint.h>
 #include <kernel/syscall/handlers.h>
 #include <kernel/mem/usr.h>
+#include <kernel/handle/dir.h>
+#include <kernel/memman/slab.h>
 
 int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	(void)a2; (void)a3; (void)a4;
@@ -25,13 +27,27 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	if (!n) {
 		return PANUTIERRNO_NOTFOUND;
 	}
-	if (n->type == INODE_DIR) {
-		return PANUTIERRNO_UNSUPPORTEDOP; // no directory-open semantics yet
-	}
 
 	int des = handle_alloc(t, n->type);
 	if (des < 0) {
 		return PANUTIERRNO_NOFDS;
+	}
+	
+	if (n->type == INODE_DIR) {
+		dir_handle_t* dh = kmalloc(sizeof(dir_handle_t), alignof(dir_handle_t));
+		if (!dh) {
+			handle_free(t, des);
+			return PANUTIERRNO_PLAINERR;
+		}
+		dh->cursor = 0;
+		dh->next_inode = n->children; // NULL for a mounted dir, real for native
+
+		t->handles[des].type = n->type;
+		t->handles[des].impl = dh;
+		t->handles[des].ops = &dir_handle_ops;
+		t->handles[des].inode = n;
+		n->refcount++;
+		return des;
 	}
 
 	if (n->type == INODE_BLOCK) {

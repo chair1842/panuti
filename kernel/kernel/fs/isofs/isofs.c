@@ -329,6 +329,80 @@ static int isofs_unlink(void* fs_impl, struct inode* dir, const char* name, size
 	return -1;
 }
 
+static int isofs_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, size_t* cursor) {
+	isofs_t* fs = fs_impl;
+
+	uint32_t sd_lba;
+	uint32_t sd_len;
+	if (dir->impl) {
+		isofs_dirent_t* di = dir->impl;
+		sd_lba = di->start_lba;
+		sd_len = di->length;
+	} else {
+		sd_lba = fs->root.start_lba;
+		sd_len = fs->root.length;
+	}
+
+	if (!isofs_lba_valid(fs, sd_lba, sd_len)) {
+		return -1;
+	}
+
+	if (*cursor >= sd_len) {
+		return 1; // end of directory
+	}
+
+	uint8_t* buf = kmalloc(sd_len, 1);
+	if (!buf) {
+		return -1;
+	}
+
+	if (block_read_bytes(fs->block_device, (uint64_t)sd_lba * fs->block_size, sd_len, buf) != BLOCK_OK) {
+		kfree(buf);
+		return -1;
+	}
+
+	int result = 1; // default: nothing more found
+	uint32_t offset = (uint32_t)*cursor;
+
+	while (offset < sd_len) {
+		uint8_t dr_len = buf[offset];
+
+		if (dr_len == 0) {
+			break; // no more records in this sector
+		}
+
+		if (dr_len < 34 || (offset + dr_len) > sd_len) {
+			offset++;
+			continue;
+		}
+
+		if ((uint32_t)buf[offset + 32] > (uint32_t)dr_len - 33) {
+			offset++;
+			continue;
+		}
+
+		isofs_dirent_t dirent;
+		if (parse_dir_record(&buf[offset], &dirent, fs) == 0) {
+			strncpy(out->name, dirent.name, sizeof(out->name) - 1);
+			out->name[sizeof(out->name) - 1] = '\0';
+			out->type = dirent.is_dir ? INODE_DIR : INODE_FILE;
+
+			*cursor = offset + dr_len; // resume here next call
+			result = 0;
+			break;
+		}
+
+		offset += dr_len;
+	}
+
+	if (result == 1) {
+		*cursor = sd_len; // pin the cursor at the end so future calls short-circuit immediately
+	}
+
+	kfree(buf);
+	return result;
+}
+
 static const fs_ops_t isofs_ops = {
 	.lookup = isofs_lookup,
 	.create = isofs_create,
@@ -338,6 +412,7 @@ static const fs_ops_t isofs_ops = {
 	.write = isofs_write,
 	.close = isofs_close,
 	.finish = isofs_finish,
+	.readdir = isofs_readdir,
 };
 
 int isofs_mount(const char *mountp, const char *blkdev) {

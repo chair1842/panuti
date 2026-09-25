@@ -1,11 +1,11 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
-#ifndef KERNEL_HANDLE_H
-#define KERNEL_HANDLE_H
+#ifndef _KERNEL_HANDLE_H
+#define _KERNEL_HANDLE_H
 
 #include <stddef.h>
 #include <stdint.h>
-#include <kernel/handle/inode_type.h>
+#include <panuti/inode_type.h>
 
 struct task;
 struct inode;
