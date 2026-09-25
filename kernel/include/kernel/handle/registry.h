@@ -6,7 +6,7 @@
 #include <kernel/handle/handle.h>
 #include <kernel/handle/fs.h>
 #include <kernel/handle/mount.h>
-#include <kernel/handle/inode_type.h>
+#include <panuti/inode_type.h>
 
 #define REG_MAX_INODES 1024
 #define REG_MAX_DIRENTS 2048

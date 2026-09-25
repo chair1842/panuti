@@ -2,7 +2,7 @@
 
 #include "kernel/block/block.h"
 #include "kernel/block/utils.h"
-#include "kernel/handle/inode_type.h"
+#include <panuti/inode_type.h>
 #include "kernel/handle/registry.h"
 #include <kernel/fs/isofs.h>
 #include <kernel/handle/fs.h>

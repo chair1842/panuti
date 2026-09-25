@@ -78,7 +78,8 @@ kernel/syscall/handlers/procreate.o \
 kernel/syscall/handlers/wait.o \
 kernel/drivers/kbd/core.o \
 kernel/drivers/kbd/line.o \
-kernel/handle/dir.o
+kernel/handle/dir.o \
+kernel/syscall/handlers/readdir.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

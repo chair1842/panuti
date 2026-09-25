@@ -3,6 +3,7 @@
 #ifndef _PANUTI_SYSCALLSF_H
 #define _PANUTI_SYSCALLSF_H
 
+#include "panuti/dirent.h"
 #include "syscall.h"
 #include "syscallno.h"
 #include <stddef.h>
@@ -122,6 +123,10 @@ static inline pid_t panutisysf_procreate(const procreate_args_t* args) {
 
 static inline int32_t panutisysf_wait(pid_t pid, int* ec_out) {
 	return panuti_syscall(SYSHANDLER_WAIT, (uint32_t)pid, (uint32_t)ec_out, 0, 0);
+}
+
+static inline int32_t panutisysf_readdir(int fd, dirent_entry_t* dirent_out) {
+	return panuti_syscall(SYSHANDLER_READDIR, (uint32_t)fd, (uint32_t)dirent_out, 0, 0);
 }
 
 #endif

@@ -31,6 +31,7 @@ Errors are returned with bit 31 set (i.e. negative when interpreted as signed):
 | `PANUTIERRNO_INVALIDADDR` | `0x80000006` | Invalid userspace address |
 | `PANUTIERRNO_NOTSUPPORTED` | `0x80000007` | Filesystem type not supported |
 | `PANUTIERRNO_EXISTS` | `0x80000008` | Name already exists |
+| `PANUTIERRNO_BUSY` | `0x80000009` | Resource is busy (e.g. keyboard line already claimed) |
 
 All user pointers are validated to lie within `0x08048000`--`0xC0000000`.
 
@@ -82,7 +83,7 @@ Terminate the current process.
 int32_t panutisysf_open(const char* path);
 ```
 
-Open a file, device, or block device by path and obtain a file descriptor.
+Open a file, device, block device, or directory by path and obtain a file descriptor.
 
 **Parameters:**
 - `path` -- null-terminated path string
@@ -92,9 +93,10 @@ Open a file, device, or block device by path and obtain a file descriptor.
 **Errors:**
 - `PANUTIERRNO_INVALIDADDR` -- `path` is not a valid userspace pointer
 - `PANUTIERRNO_NOTFOUND` -- path does not resolve
-- `PANUTIERRNO_UNSUPPORTEDOP` -- path is a directory
 - `PANUTIERRNO_NOFDS` -- all 32 handle slots are in use
-- `PANUTIERRNO_PLAINERR` -- open failed internally
+- `PANUTIERRNO_PLAINERR` -- open failed internally (e.g. could not allocate a directory handle)
+
+**Note:** Opening a directory returns a *directory handle*: it does not support `READ`/`WRITE`, but it can be passed to `READDIR` to iterate its entries, and to `CLOSE` afterwards.
 
 ---
 
@@ -519,6 +521,46 @@ Block until a target process exits and retrieve its exit code.
 
 ---
 
+### 23 -- READDIR
+
+```c
+int32_t panutisysf_readdir(int fd, dirent_entry_t* dirent_out);
+```
+
+Read the next directory entry from an open directory handle.
+
+Open a directory with `OPEN` first; each `READDIR` call returns one entry and advances the directory's internal cursor, so entries are streamed in order. The caller loops until `1` is returned, indicating end of directory.
+
+**Parameters:**
+- `fd` -- file descriptor of an open directory handle
+- `dirent_out` -- userspace pointer to a `dirent_entry_t` that receives the entry
+
+The `dirent_entry_t` struct is defined in `libc/include/panuti/dirent.h`:
+
+```c
+#define DIRENT_NAME_MAX 256
+
+typedef struct {
+    char name[DIRENT_NAME_MAX];  // entry name, NUL-terminated
+    inode_type_t type;           // INODE_DIR or INODE_FILE
+} dirent_entry_t;
+```
+
+`inode_type_t` values: `INODE_NONE = 0`, `INODE_DIR = 1`, `INODE_FILE = 2`,
+`INODE_BLOCK = 3`, `INODE_PIPE = 4`. Directory entries always have type
+`INODE_DIR` or `INODE_FILE`.
+
+**Returns:** 0 on success (entry written to `dirent_out`), 1 on end of directory (no entry written), or error code.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `dirent_out` is not a valid userspace pointer
+- `PANUTIERRNO_BADFD` -- `fd` is out of range or empty
+- `PANUTIERRNO_UNSUPPORTEDOP` -- `fd` is not a directory handle
+
+**Note:** Native (registry) directories stream their entries in dirent-list order and include the special entries `"."` and `".."`. Directories mounted from a filesystem are streamed by the filesystem itself; IsoFS emits the on-disk directory records (also including `"."` and `".."`). Closing the handle with `CLOSE` frees the directory cursor.
+
+---
+
 ## Quick Reference
 
 | # | Name | Registered |
@@ -546,6 +588,7 @@ Block until a target process exits and retrieve its exit code.
 | 20 | `STREAM_WRITE` | Yes |
 | 21 | `PROCREATE` | Yes |
 | 22 | `WAIT` | Yes |
+| 23 | `READDIR` | Yes |
 
 ## Limits
 

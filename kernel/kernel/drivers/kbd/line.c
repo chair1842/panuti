@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
-#include "kernel/handle/inode_type.h"
+#include <panuti/inode_type.h>
 #include <kernel/kbd/core.h>
 #include <kernel/handle/handle.h>
 #include <kernel/handle/registry.h>

@@ -18,7 +18,7 @@ typedef struct fs_ops {
 	void* (*open)(void* fs_impl, struct inode* node);
 	int (*read)(void* file_impl, void* buf, size_t len, size_t offset);
 	int (*write)(void* file_impl, const void* buf, size_t len, size_t offset);
-	int (*readdir)(void* fs_impl, struct inode* dir, dirent_entry* out, size_t* cursor);
+	int (*readdir)(void* fs_impl, struct inode* dir, dirent_entry_t* out, size_t* cursor);
 	void (*close)(void* file_impl);
 	void (*finish)(void* fs_impl);
 } fs_ops_t;
