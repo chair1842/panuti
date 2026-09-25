@@ -3,8 +3,25 @@
 #include <string.h>
 #include <panuti/syscall/syscallsf.h>
 #include <panuti/errno.h>
+#include <panuti/process.h>
+#include <panuti/handle.h>
+#include <unistd.h>
 
-int shbt_help(int argc, char** argv) {
+#define PUR_PATH "/cd/usr/bin"
+
+static int file_exists(const char* path) {
+	int fd = handle_open(path);
+	if (fd >= 0) {
+		handle_close(fd);
+		return 1;
+	}
+	
+	if (fd == PANUTIERRNO_NOTFOUND) return 0;
+	if (fd == PANUTIERRNO_UNSUPPORTEDOP) return 2;
+	return -1;
+}
+
+static int shbt_help(int argc, char** argv) {
 	printf("Available shell built-ins:\n");
 	printf("  help - i mean, you're looking at this rn\n");
 	printf("  exit - exit pur, it will come back anyways\n");
@@ -13,7 +30,7 @@ int shbt_help(int argc, char** argv) {
 	return 0;
 }
 
-int shbt_cd(int argc, char** argv) {
+static int shbt_cd(int argc, char** argv) {
 	if (argc < 2) {
 		printf("pur: no path provided for cd\n");
 		return -1;
@@ -38,7 +55,56 @@ int shbt_cd(int argc, char** argv) {
 	}
 }
 
-int tokenize(char* str, char** out_argv, int max_argv) {
+static bool is_explicit_path(const char* s) {
+	if (s[0] == '.') {
+		return true;
+	}
+	
+	for (const char* p = s; *p; p++) {
+		if (*p == '/') {
+			return true;
+		}
+	}
+	
+	return false;
+}
+
+static int run_external(const char* path, char** argv, int argc) {
+	int fx = file_exists(path);
+	switch (fx) {
+		case 1:
+			break;
+		case 0:
+			printf("pur: %s: command not found\n", path);
+			return -1;
+		case 2:
+			printf("pur: %s: command provided is a directory\n", path);
+			return -1;
+		default:
+			// we can't tell, continue.
+			break;
+	}
+	
+	pid_t pid = procreate(path, argv, argc, nullptr, 0, nullptr, 0);
+	
+	if (pid < 0) {
+		if (pid == PANUTIERRNO_NOTFOUND) {
+			// this shouldnt be reached
+			printf("pur: %s: command not found\n", path);
+		} else {
+			printf("pur: %s: no thriving way my pointers are wrong\n", path);
+		}
+		
+		return -1;
+	}
+
+	int exit_code;
+	wait(pid, &exit_code);
+	
+	return exit_code;
+}
+
+static int tokenize(char* str, char** out_argv, int max_argv) {
 	int argc = 0;
 	char* p = str;
 
@@ -90,6 +156,10 @@ int input_command(int argc, char** argv) {
 		return 0;
 	}
 
+	if (is_explicit_path(argv[0])) {
+		return run_external(argv[0], argv, argc);
+	}
+
 	// shell built-ins first
 	if (strcmp(argv[0], "help") == 0) {
 		return shbt_help(argc, argv);
@@ -97,10 +167,31 @@ int input_command(int argc, char** argv) {
 		panutisysf_exit(0);
 	} else if (strcmp(argv[0], "cd") == 0) {
 		return shbt_cd(argc, argv);
-	} else {
-		printf("pur: unrecognized shell built-in\n");
+	}
+
+	// fall back to PATH resolution
+	char resolved[256];
+	size_t path_len = strlen(PUR_PATH);
+	size_t name_len = strlen(argv[0]);
+
+	if (path_len + 1 + name_len + 1 > sizeof(resolved)) {
+		printf("pur: %s: name too long\n", argv[0]);
 		return -1;
 	}
+
+	size_t i = 0;
+	for (size_t j = 0; j < path_len; j++) {
+		resolved[i++] = PUR_PATH[j];
+	}
+	
+	resolved[i++] = '/';
+	for (size_t j = 0; j < name_len; j++) {
+		resolved[i++] = argv[0][j];
+	}
+	
+	resolved[i] = '\0';
+
+	return run_external(resolved, argv, argc);
 }
 
 int main(int argc, char** argv) {
