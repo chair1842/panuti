@@ -30,10 +30,10 @@ $HOME/.local/cross is where the toolchain is installed to, so preferably add "yo
 
 in the build folder, run in order:
 
-`
+```
 make -j$(nproc)
 make install -j$(nproc)
-`
+```
 
 ## gcc
 
@@ -43,7 +43,7 @@ you must have the panuti repo cloned in your machine already for this/
 
 1. clone `https://gcc.gnu.org/git/gcc.git`
 2. switch to the `releases/gcc-16` branch.
-3. copy toolchain/panuti-gcc.patch to your cloned gcc repo
+3. copy `toolchain/panuti-gcc.patch` to your cloned gcc repo
 4. change your current directory to the cloned repo
 5. run `git apply panuti-gcc.patch`
 
@@ -69,7 +69,27 @@ in the panuti repo, run `./headers.sh` to copy headers to sysroot/ so that they 
 
 in the build folder, run in order (don't worry if gcc takes a long time to build, its like that):
 
-`
+```
 make all-gcc all-target-libgcc -j$(nproc)
 make install-gcc install-target-libgcc -j$(nproc)
-`
+```
+
+### updating
+
+when you are updating your patch, do these:
+
+1. go to the gcc directory
+
+to remove your original patches
+
+2. run `git reset --hard HEAD`
+3. run `git clean -fd`
+4. run `rm -r build`
+
+5. copy the new `toolchain/panuti-gcc.patch` to the gcc dir
+6. run `git apply panuti-gcc.patch`
+7. run `mkdir build`
+8. change your dir to build
+9. do the configurting section
+10. do the copying headers to sysroot section
+11. do the building section

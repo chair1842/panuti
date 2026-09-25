@@ -2,7 +2,7 @@
 
 ## You need these packages to build panuti:
 
-- the i686-panuti binutils and gcc toolchain, look at [toolchain.md] for build instructions. required to build everything here
+- the i686-panuti binutils and gcc toolchain, look at `toolchain.md` for build instructions. required to build everything here
 - GRUB, you dont need it as your bootloader, you just need it installed. requierd for `./build.sh` and `./iso.sh`
 - xorriso, for making the panuti iso. required for `./iso.sh`
 - qemu, or more specific qemu-system-i386. used for emulation and testing. required for `./qemu.sh`
