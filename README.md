@@ -8,3 +8,7 @@ go to the build instructions over here:
 👇
 
 [building.md](doc/building.md)
+
+## Making programs
+
+[link here](doc/mkapps.md)
