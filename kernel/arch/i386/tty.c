@@ -67,6 +67,22 @@ void terminal_putchar(char c) {
 			terminal_scroll();
 			terminal_row = VGA_HEIGHT - 1;
 		}
+	} else if (c == '\f') {
+		terminal_clear();
+		terminal_row = 0;
+		terminal_column = 0;
+	} else if (c == '\t') {
+		size_t spaces = 4 - (terminal_column % 4);
+		for (size_t i = 0; i < spaces; i++) {
+			terminal_putentryat(' ', terminal_color, terminal_column, terminal_row);
+			if (++terminal_column == VGA_WIDTH) {
+				terminal_column = 0;
+				if (++terminal_row == VGA_HEIGHT) {
+					terminal_scroll();
+					terminal_row = VGA_HEIGHT - 1;
+				}
+			}
+		}
 	} else if (c == '\b') {
 		if (terminal_column > 0) {
 			terminal_column--;

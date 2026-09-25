@@ -101,6 +101,25 @@ static void clear_line(void) {
 	line_state.line_pos = 0;
 }
 
+static void backspace(void) {
+	if (line_state.line_len == 0) {
+		return;
+	}
+
+	if (line_state.line_buffer[line_state.line_len - 1] == '\t') {
+		for (int i = 0; i < 4; i++) {
+			console_erase_last();
+		}
+	} else {
+		console_erase_last();
+	}
+
+	line_state.line_len--;
+	if (line_state.line_pos > line_state.line_len) {
+		line_state.line_pos = line_state.line_len;
+	}
+}
+
 static int line_claim(void) {
 	uint32_t flags = irq_save_disable();
 
@@ -185,13 +204,7 @@ static int kbd_line_read(void* impl, void* buf, size_t len) {
 				clear_line();
 				continue;
 			case KEYCODE_H:
-				if (line_state.line_len > 0) {
-					line_state.line_len--;
-					if (line_state.line_pos > line_state.line_len) {
-						line_state.line_pos = line_state.line_len;
-					}
-					console_erase_last();
-				}
+				backspace();
 				continue;
 			default:
 				continue;
@@ -199,20 +212,26 @@ static int kbd_line_read(void* impl, void* buf, size_t len) {
 		}
 
 		if (pkt.keycode == KEYCODE_BACKSPACE) {
-			if (line_state.line_len > 0) {
-				line_state.line_len--;
-				if (line_state.line_pos > line_state.line_len) {
-					line_state.line_pos = line_state.line_len;
-				}
-				console_erase_last();
-			}
-
+			backspace();
 			continue;
 		}
 
 		if (pkt.keycode == KEYCODE_ENTER) {
 			console_putchar('\n');
 			return deliver_line(buf, len);
+		}
+
+		if (pkt.keycode == KEYCODE_TAB) {
+			if (line_state.line_len < KBD_LINE_CAP) {
+				line_state.line_buffer[line_state.line_len++] = '\t';
+				for (int i = 0; i < 4; i++) {
+					console_putchar(' ');
+				}
+			} else {
+				console_bell();
+			}
+
+			continue;
 		}
 
 		char c = keycode_to_char(pkt.keycode, pkt.shift, pkt.caps_lock);

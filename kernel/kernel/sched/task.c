@@ -320,6 +320,8 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 		return PANUTIERRNO_NOFDS;
 	}
 
+	t->cwd = caller->cwd;
+
 	if (elf_load_segments(t->addr_space, elf_data, segs, nsegs) != 0) {
 		kfree(elf_data);
 		procreate_cleanup(t);
