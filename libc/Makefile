@@ -53,7 +53,10 @@ panuti/process/wait.o \
 panuti/handle/write.o \
 panuti/handle/read.o \
 panuti/handle/close.o \
-panuti/handle/open.o
+panuti/handle/open.o \
+panuti/stream/stream_write.o \
+panuti/stream/stream_read.o \
+panuti/stream/nstream.o
 
 HOSTEDOBJS=\
 $(ARCH_HOSTEDOBJS) \
