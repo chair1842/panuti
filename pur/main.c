@@ -75,10 +75,10 @@ static int run_external(const char* path, char** argv, int argc) {
 		case 1:
 			break;
 		case 0:
-			printf("pur: %s: command not found\n", path);
+			printf("pur: %s: command not found\n", argv[0]);
 			return -1;
 		case 2:
-			printf("pur: %s: command provided is a directory\n", path);
+			printf("pur: %s: command provided is a directory\n", argv[0]);
 			return -1;
 		default:
 			// we can't tell, continue.
@@ -90,9 +90,9 @@ static int run_external(const char* path, char** argv, int argc) {
 	if (pid < 0) {
 		if (pid == PANUTIERRNO_NOTFOUND) {
 			// this shouldnt be reached
-			printf("pur: %s: command not found\n", path);
+			printf("pur: %s: command not found\n", argv[0]);
 		} else {
-			printf("pur: %s: no thriving way my pointers are wrong\n", path);
+			printf("pur: %s: no thriving way my pointers are wrong\n", argv[0]);
 		}
 		
 		return -1;
