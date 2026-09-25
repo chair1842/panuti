@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #ifndef _KERNEL_FS_ISOFS_H
 #define _KERNEL_FS_ISOFS_H
 // isofs is the filesystem implementation for iso9660 or lesser known, ecma 119

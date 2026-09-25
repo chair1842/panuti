@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #ifndef _KERNEL_SCHED_TASK_H
 #define _KERNEL_SCHED_TASK_H
 

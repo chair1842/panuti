@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #ifndef _KERNEL_SYSCALL_SYSCALL_H
 #define _KERNEL_SYSCALL_SYSCALL_H
 

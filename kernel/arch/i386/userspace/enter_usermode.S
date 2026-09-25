@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 .global enter_usermode_trampoline
 enter_usermode_trampoline:
 	popl %eax        # entry

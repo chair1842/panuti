@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #ifndef KERNEL_HANDLE_H
 #define KERNEL_HANDLE_H
 

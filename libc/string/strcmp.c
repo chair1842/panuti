@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 int strcmp(const char* a, const char* b) {
 	while (*a != '\0' && *a == *b) {
 		a++;

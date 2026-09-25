@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include <stdio.h>
 #include <panuti/mount.h>
 #include <panuti/process.h>

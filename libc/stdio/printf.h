@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 /**
  * @author (c) Eyal Rozenberg <eyalroz1@gmx.com>
  *             2021-2024, Haifa, Palestine/Israel

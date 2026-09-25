@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include "handlers.h"
 
 void page_fault_handler(registers_t* regs) {

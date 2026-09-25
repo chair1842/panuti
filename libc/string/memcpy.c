@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 #include <string.h>
 
 void* memcpy(void* restrict dstptr, const void* restrict srcptr, size_t size) {

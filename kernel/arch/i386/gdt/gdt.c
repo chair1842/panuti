@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #define GDT_ENTRIES 6
 
 #include "gdt.h"

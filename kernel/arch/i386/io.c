@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include "io.h"
 
 void outb(uint16_t port, uint8_t value) {

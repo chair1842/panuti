@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include "kernel/block/block.h"
 #include "kernel/block/utils.h"
 #include "kernel/handle/inode_type.h"

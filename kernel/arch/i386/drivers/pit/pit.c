@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include "pit.h"
 #include "../../io.h"
 #include <stdint.h>

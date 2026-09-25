@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include <kernel/block/block.h>
 #include <kernel/memman/slab.h>
 #include <kernel/klog.h>

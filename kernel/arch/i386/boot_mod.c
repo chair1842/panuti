@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include <kernel/boot_mod.h>
 #include <kernel/memman/tempmap.h>
 #include "memman/pmm/pmm.h"

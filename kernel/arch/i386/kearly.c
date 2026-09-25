@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include <kernel/timer.h>
 #include "intpt/handlers/main.h"
 #include "intpt/handlers/handlers.h"

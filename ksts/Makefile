@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: BSD-3-Clause
+
 DEFAULT_HOST!=../default-host.sh
 HOST?=DEFAULT_HOST
 HOSTARCH!=../target-triplet-to-arch.sh $(HOST)

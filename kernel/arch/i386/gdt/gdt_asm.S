@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 .global gdt_load
 gdt_load:
 	mov 4(%esp), %eax

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #ifndef _KERNEL_ELF_H
 #define _KERNEL_ELF_H
 #include "kernel/memman/memman.h"

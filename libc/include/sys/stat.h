@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 #ifndef _SYS_STAT_H
 #define _SYS_STAT_H 1
 

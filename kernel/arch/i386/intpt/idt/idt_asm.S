@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 /* macro for exceptions without an error code */
 .macro ISR_NOERR n
 .global isr\n

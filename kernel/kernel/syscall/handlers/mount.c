@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include <kernel/handle/registry.h>
 #include <kernel/fs/isofs.h>
 #include <kernel/fs/fatfs.h>

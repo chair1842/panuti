@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include <kernel/sched/task.h>
 #include <stdint.h>
 #include <kernel/memman/tempmap.h>

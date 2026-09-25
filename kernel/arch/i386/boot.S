@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #define KERNEL_VIRTUAL_OFFSET 0xC0000000
 #define PHYS(x) ((x) - KERNEL_VIRTUAL_OFFSET)
 

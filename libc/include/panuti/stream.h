@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 #ifndef _PANUTI_STREAM_H
 #define _PANUTI_STREAM_H
 

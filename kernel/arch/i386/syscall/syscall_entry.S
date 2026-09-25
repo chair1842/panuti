@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 .section .text
 .global sysenter_entry
 .extern syscall_dispatch

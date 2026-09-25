@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include <kernel/klog.h>
 #include <kernel/tty.h>
 #include <kernel/serial.h>

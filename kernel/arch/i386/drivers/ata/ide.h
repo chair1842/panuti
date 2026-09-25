@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #ifndef ARCH_I386_DRIVERS_ATA_IDE_H
 #define ARCH_I386_DRIVERS_ATA_IDE_H
 

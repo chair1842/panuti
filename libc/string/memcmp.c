@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 #include <string.h>
 
 int memcmp(const void* aptr, const void* bptr, size_t size) {

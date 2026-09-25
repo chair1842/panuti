@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 #include <string.h>
 
 void* memchr(const void* buf, int ch, size_t n) {

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 #ifndef _PANUTI_KEYBOARD_H
 #define _PANUTI_KEYBOARD_H
 

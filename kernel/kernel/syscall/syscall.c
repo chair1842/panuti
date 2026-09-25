@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include <kernel/syscall/syscall.h>
 #include <panuti/errno.h>
 #include <panuti/syscall/syscallno.h>

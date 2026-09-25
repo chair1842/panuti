@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include <kernel/syscall/handlers.h>
 #include <kernel/mem/usr.h>
 #include <panuti/errno.h>

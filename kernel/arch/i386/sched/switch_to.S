@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 # void task_switch_to(task_t* old, task_t* new)
 .global task_switch_to
 task_switch_to:

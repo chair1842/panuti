@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 #include <string.h>
 
 void* memmove(void* dstptr, const void* srcptr, size_t size) {

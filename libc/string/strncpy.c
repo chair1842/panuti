@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 #include <stddef.h>
 
 char* strncpy(char* dest, const char* src, size_t n) {

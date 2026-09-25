@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 // slab.h
 #ifndef _KERNEL_MEMMAN_SLAB_H
 #define _KERNEL_MEMMAN_SLAB_H

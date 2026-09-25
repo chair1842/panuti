@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: BSD-3-Clause */
+
 #include <panuti/handle.h>
 #include <panuti/syscall/syscallsf.h>
 

@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
 #include "msr.h"
 
 void rdmsr(uint32_t msr, uint32_t* lo, uint32_t* hi) {
