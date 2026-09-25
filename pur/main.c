@@ -28,6 +28,7 @@ static int shbt_help(int argc, char** argv) {
 	printf("  help - i mean, you're looking at this rn\n");
 	printf("  exit - exit pur, it will come back anyways\n");
 	printf("  cd - change the current working directory\n");
+	printf("  -v - print a version message\n");
 
 	return 0;
 }
@@ -197,6 +198,15 @@ int input_command(int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
+	if (argc > 1 && strcmp(argv[1], "-v") == 0) {
+		printf("pur 0.1 - the panuti shell\n");
+		return 0;
+	} else if (argc > 1 && strcmp(argv[1], "-h") == 0) {
+		char* h_argv = "help";
+		shbt_help(1, &h_argv);
+		return 0;
+	}
+
 	while (1) {
 		printf("# ");
 		
