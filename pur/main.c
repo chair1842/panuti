@@ -1,12 +1,36 @@
 #include <panuti/stream.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
+#include <panuti/syscall/syscallsf.h>
+#include <panuti/errno.h>
 
 int shbt_help(int argc, char** argv) {
 	printf("Available shell built-ins:\n");
-	printf("  help - i mean, you're looking at this rn.\n");
+	printf("  help - i mean, you're looking at this rn\n");
+	printf("  exit - exit pur, it will come back anyways\n");
+	printf("  cd - change the current working directory\n");
 
 	return 0;
+}
+
+int shbt_cd(int argc, char** argv) {
+	// i will switch this for a "proper" wrapper sometime.
+	int rc = panutisysf_chdir(argv[1]);
+	switch (rc) {
+		case PANUTIERRNO_NOTFOUND:
+			printf("pur: path not found\n");
+			return -1;
+		case PANUTIERRNO_UNSUPPORTEDOP:
+			printf("pur: path not a directory\n");
+			return -1;
+		case PANUTIERRNO_INVALIDADDR:
+			printf("pur: what the chicken is this.\n");
+			printf("by my pure coding skills, how does cd pass an invalid cowimpregnating pointer\n");
+			return -1;
+		default:
+			return 0;
+	}
 }
 
 int tokenize(char* str, char** out_argv, int max_argv) {
@@ -64,6 +88,10 @@ int input_command(int argc, char** argv) {
 	// shell built-ins first
 	if (strcmp(argv[0], "help") == 0) {
 		return shbt_help(argc, argv);
+	} else if (strcmp(argv[0], "exit") == 0) {
+		abort();
+	} else if (strcmp(argv[0], "cd") == 0) {
+		return shbt_cd(argc, argv);
 	} else {
 		printf("pur: unrecognized shell built-in\n");
 		return -1;
@@ -77,8 +105,17 @@ int main(int argc, char** argv) {
 		char buf[256];
 		int n = stream_read(0, buf, sizeof(buf));
 		if (n < 0) {
-			printf("read from in0 failed\n");
-			continue;
+			switch (n) {
+				case PANUTIERRNO_INVALIDADDR:
+					printf("\npur: no way ts is happening, this cannot be real. buf is invalid\n");
+					return -1;
+				case PANUTIERRNO_BADFD:
+					printf("\npur: on my balls i swear that 0 is in in_stream's range.\n");
+					return -1;
+				default:
+					printf("\npur: did you forgot to update me you sunn of a female dog\n");
+					return -1;
+			}
 		}
 		
 		buf[n] = '\0';
