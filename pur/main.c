@@ -9,6 +9,8 @@ int main(int argc, char** argv) {
 	}
 
 	while (1) {
+		printf("# ");
+		
 		char buf[256];
 		int n = handle_read(klfd, buf, sizeof(buf));
 		if (n < 0) {
@@ -16,6 +18,6 @@ int main(int argc, char** argv) {
 			return -1;
 		}
 
-		printf("%.*s", n, buf);
+		printf("%.*s\n", n, buf);
 	}
 }
