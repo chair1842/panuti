@@ -82,7 +82,6 @@ void sched_schedule(void) {
 	current->state = TASK_RUNNING;
 
 	if (prev != current) {
-		klog(KLOG_INFO, "sched_schedule: switching from %p to %p\n", prev, current);
 		task_activate(current);
 		task_switch_to(prev, current);
 	}
