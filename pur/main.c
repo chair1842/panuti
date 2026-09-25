@@ -1,7 +1,6 @@
 #include <panuti/stream.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 #include <panuti/syscall/syscallsf.h>
 #include <panuti/errno.h>
 
@@ -15,7 +14,13 @@ int shbt_help(int argc, char** argv) {
 }
 
 int shbt_cd(int argc, char** argv) {
-	// i will switch this for a "proper" wrapper sometime.
+	if (argc < 2) {
+		printf("pur: no path provided for cd\n");
+		return -1;
+	} else if (argc > 2) {
+		printf("pur: why do you have more than one arg?\n");
+	}
+	
 	int rc = panutisysf_chdir(argv[1]);
 	switch (rc) {
 		case PANUTIERRNO_NOTFOUND:
@@ -89,7 +94,7 @@ int input_command(int argc, char** argv) {
 	if (strcmp(argv[0], "help") == 0) {
 		return shbt_help(argc, argv);
 	} else if (strcmp(argv[0], "exit") == 0) {
-		abort();
+		panutisysf_exit(0);
 	} else if (strcmp(argv[0], "cd") == 0) {
 		return shbt_cd(argc, argv);
 	} else {
