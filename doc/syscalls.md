@@ -36,14 +36,33 @@ Errors are returned with bit 31 set (i.e. negative when interpreted as signed):
 All user pointers are validated to lie within `0x08048000`--`0xC0000000`.
 The lower bound is inclusive and the upper bound is exclusive, so `0xC0000000`
 itself is rejected. A *range* whose end lands exactly on `0xC0000000` is accepted.
+A zero-length range bypasses the bounds check entirely and is always accepted.
 
 ### Non-errno return values
 
-A few syscalls can return a raw `-1` (`0xFFFFFFFF`) instead of a
-`PANUTIERRNO_*` code. This value is **not** in the table above, so a test for
-`PANUTIERRNO_PLAINERR` will not catch it; check for `-1` explicitly.
-The syscalls affected are `ACTIVATE` (4), `MKDIR` (6), and `READDIR` (23) --
-each is documented individually below.
+**Assume any return value may be a negative number outside the table above.**
+Several syscalls delegate to a filesystem or driver op that signals failure with
+a plain `-1` rather than a `PANUTIERRNO_*` code, and the kernel forwards it
+untouched. Testing only against the codes in the table is therefore unsound;
+treat *any* negative result as an error.
+
+The syscalls that can return an out-of-table value, and what they return:
+
+| # | Syscall | Out-of-table value | Cause |
+|---|---|---|---|
+| 0 | `WRITE` | `-1` | writing to a directory, a pipe's read end, or any IsoFS file |
+| 3 | `READ` | `-1` | reading a directory, a pipe's write end, or on IsoFS I/O failure |
+| 4 | `ACTIVATE` | `-1` | all handle types except console and kbd |
+| 6 | `MKDIR` | `-1` | every failure mode (see below) |
+| 15 | `MOUNT` | `-1`, `-2` | IsoFS volume scan hits an invalid block or an I/O error |
+| 19 | `STREAM_READ` | `-1` | the bound stream is a directory, pipe, or IsoFS file |
+| 20 | `STREAM_WRITE` | `-1` | likewise |
+| 23 | `READDIR` | `-1` | an IsoFS directory record could not be read |
+
+`MOUNT` is the one syscall that can return a value other than `-1`: the
+IsoFS mount path returns the block layer's `BLOCK_ERR_IO` (`-2`) on an I/O
+error. This is reachable in practice -- mounting a small RAM block device as
+IsoFS walks the PVD scan off the end of the device and returns `-1`.
 
 **Note:** errors are reported *in the return value*, not through a global
 `errno`. `libc` does define an `int errno`, but nothing ever assigns to it.
@@ -54,14 +73,23 @@ each is documented individually below.
 
 Return values are not uniform across the API. Check the shape before comparing:
 
-| Shape | Example | Test |
+| Shape | Syscalls | Test |
 |---|---|---|
-| Byte count | `READ` (3), `WRITE` (0), `STREAM_READ` (19) | `>= 0` is a count; `< 0` is an error |
+| Byte count | `WRITE` (0), `READ` (3), `STREAM_READ` (19), `STREAM_WRITE` (20) | `> 0` is a count; `<= 0` is an error or EOF -- see below |
 | Status `0` | `CLOSE` (5), `MKDIR` (6), `GETCWD` (11), `PIPE_CREATE` (17) | `== 0` is success |
 | Opaque value | `GETPID` (9), `TIMESB` (10) | cannot fail; no error case |
 | PID | `PROCREATE` (21) | `>= 0` is a PID; `< 0` is an error |
-| Two-state | `READDIR` (23) | `0` = entry written, `1` = end of directory |
-| Unobservable | `NSTREAM` (18) | see its entry -- the wrapper is `void` |
+| Multi-valued | `READDIR` (23) | `0` = entry, `1` = end of directory, negative = error |
+| Unobservable | `NSTREAM` (18) | the wrapper is `void`; see its entry |
+
+**Caveats on the byte-count shape:**
+
+- `0` is genuinely ambiguous. For a pipe it means EOF; for IsoFS it also means
+  EOF; but for a **block device** it means the read or write *failed* -- the
+  block ops return `0` on allocation and I/O errors, so a failed transfer is
+  indistinguishable from an empty one.
+- Because a failed op may surface as `-1` rather than a `PANUTIERRNO_*` code,
+  test `< 0` for errors rather than comparing against a specific code.
 
 ---
 
@@ -85,6 +113,12 @@ Write data to an open file descriptor.
 **Errors:**
 - `PANUTIERRNO_INVALIDADDR` -- `data` is not a valid userspace pointer
 - `PANUTIERRNO_BADFD` -- `handle` is out of range or empty
+- `-1` -- the target rejected the write: it is a directory, the read end of a
+  pipe, or a file on a mounted filesystem. Raw `-1`, not an errno code.
+
+**Note:** on a **block device** a return of `0` means the write *failed*
+(allocation or I/O error), not that zero bytes were written. A zero-length
+write is a no-op and also returns `0`.
 
 ---
 
@@ -97,17 +131,16 @@ void panutisysf_exit(uint32_t code);
 Terminate the current process.
 
 **Parameters:**
-- `code` -- exit code, retrievable by a parent via `WAIT`
+- `code` -- exit code, retrievable by any task that later calls `WAIT` on this PID
 
 **Returns:** does not return (process is terminated immediately).
 
 **Errors:** none.
 
-**Note:** `code` is stored in the task and delivered to whichever process
-later calls `WAIT` on this PID, which receives it via its `ec_out` argument.
-It is *not* discarded. `WAIT` is single-shot per PID: the first waiter reaps
-the task and frees it, so a second `WAIT` on the same PID returns
-`PANUTIERRNO_NOTFOUND`.
+**Note:** `code` is stored in the task and delivered via the `ec_out` argument
+of a later `WAIT` on this PID. It is *not* discarded. Panuti has no notion of a
+parent or of process ownership: `WAIT` performs no ownership check, so any task
+may wait on -- and reap -- any PID except its own.
 
 ---
 
@@ -152,6 +185,13 @@ Read data from an open file descriptor.
 **Errors:**
 - `PANUTIERRNO_INVALIDADDR` -- `data` is not a valid userspace pointer
 - `PANUTIERRNO_BADFD` -- `handle` is out of range or empty
+- `-1` -- the target rejected the read: it is a directory, the write end of a
+  pipe, or a file on a mounted filesystem whose block read failed. Raw `-1`,
+  not an errno code.
+
+**Note:** as with `WRITE`, a `0` return on a **block device** means the read
+*failed*, not that end-of-file was reached. `0` means EOF only for pipes and
+IsoFS files.
 
 ---
 
@@ -232,6 +272,10 @@ Create a new directory in the in-memory VFS registry.
   - the directory entry table is full (2048 entries)
   - the parent is inside a mounted filesystem (no filesystem implements
     directory creation, so this always fails)
+
+**Note:** one failure is not reported. If the directory entry table fills up
+after the new entry itself has been linked, the `"."` and `".."` links fail
+silently and `MKDIR` still returns `0`, leaving a half-initialised directory.
 
 ---
 
@@ -404,6 +448,11 @@ Mount a filesystem from a block device onto a mountpoint directory.
 - `PANUTIERRNO_INVALIDADDR` -- any pointer is not a valid userspace pointer
 - `PANUTIERRNO_NOTSUPPORTED` -- `fstype` is not recognized
 - `PANUTIERRNO_NOTFOUND` -- block device or mountpoint path does not resolve
+- `-1` / `-2` -- the IsoFS volume scan read an invalid block (`-1`) or hit an
+  I/O error (`-2`). These are raw block-layer codes, not `PANUTIERRNO_*` ones,
+  and are returned unchanged. Reachable in practice: the scan reads 2 KiB per
+  LBA and walks off the end of a small block device rather than reporting a
+  filesystem error.
 
 ---
 
@@ -497,8 +546,10 @@ Read data from one of the calling task's input streams.
 - `PANUTIERRNO_INVALIDADDR` -- `buf`/`len` is not a valid userspace range
 - `PANUTIERRNO_BADFD` -- `stream_no` is out of range for the task's input streams
 - `PANUTIERRNO_UNSUPPORTEDOP` -- the underlying stream does not support reading
+- `-1` -- the bound stream rejected the read (it is a directory, the write end
+  of a pipe, or a file on a mounted filesystem). Raw `-1`, not an errno code.
 
-**Note:** The result is produced by the underlying device's read operation, so its value is device-specific.
+**Note:** The result is produced by the underlying device's read operation, so its value is device-specific. The same caveat as `READ` applies: on a block device a `0` return signals a failed transfer, not EOF.
 
 ---
 
@@ -521,8 +572,10 @@ Write data to one of the calling task's output streams.
 - `PANUTIERRNO_INVALIDADDR` -- `buf`/`len` is not a valid userspace range
 - `PANUTIERRNO_BADFD` -- `stream_no` is out of range for the task's output streams
 - `PANUTIERRNO_UNSUPPORTEDOP` -- the underlying stream does not support writing
+- `-1` -- the bound stream rejected the write (it is a directory, the read end
+  of a pipe, or a file on a mounted filesystem). Raw `-1`, not an errno code.
 
-**Note:** The result is produced by the underlying device's write operation, so its value is device-specific.
+**Note:** The result is produced by the underlying device's write operation, so its value is device-specific. As with `WRITE`, a `0` return on a **block device** means the transfer failed.
 
 ---
 
@@ -576,14 +629,24 @@ Block until a target process exits and retrieve its exit code.
 **Errors:**
 - `PANUTIERRNO_INVALIDADDR` -- `ec_out` is not a valid userspace pointer
 - `PANUTIERRNO_PLAINERR` -- attempting to wait on the calling process itself
-- `PANUTIERRNO_NOTFOUND` -- target process does not exist
+- `PANUTIERRNO_NOTFOUND` -- target process does not exist, or has already been
+  reaped by an earlier `WAIT`
 
-**Note:** The caller blocks until the target process terminates. If the target is still running, the caller is put to sleep and retried when the target exits. The `ec_out` value is the exit code passed to `EXIT` (1).
+**Note:** the caller blocks until the target process terminates. If the target is still running, the caller is put to sleep and retried when the target exits. The `ec_out` value is the exit code passed to `EXIT` (1).
 
-**Note:** `WAIT` is single-shot per PID. The first waiter to succeed reaps the
-task and destroys it, so any subsequent `WAIT` on the same PID returns
-`PANUTIERRNO_NOTFOUND`. There is no way to wait on a PID more than once, and
-no way to detect a child exiting other than by calling `WAIT` on its PID.
+**Note:** `WAIT` is single-shot per PID. The successful waiter reaps the task and
+its slot is recycled, so any subsequent `WAIT` on the same PID returns
+`PANUTIERRNO_NOTFOUND`. If several tasks wait on the same PID they are all woken
+on exit, but exactly one receives the exit code and the rest get
+`PANUTIERRNO_NOTFOUND` -- a waiter cannot tell that it lost the race. (PIDs are
+never reused, so the guarantee holds for the lifetime of the system.)
+
+**Note:** Panuti exposes no dedicated exit-notification mechanism -- no
+signals, no `kill`, no process-status syscall, and `GETPID` reports only the
+caller. `WAIT` is the only kernel-provided way to observe a specific task's
+exit. Applications that need to notice a child's death without consuming its
+exit status must arrange their own signal, e.g. by holding a pipe's write end
+and watching for EOF.
 
 ---
 
@@ -608,15 +671,19 @@ The `dirent_entry_t` struct is defined in `libc/include/panuti/dirent.h`:
 
 typedef struct {
     char name[DIRENT_NAME_MAX];  // entry name, NUL-terminated
-    inode_type_t type;           // INODE_DIR or INODE_FILE
+    inode_type_t type;           // see the type discussion below
 } dirent_entry_t;
 ```
 
 `inode_type_t` values: `INODE_NONE = 0`, `INODE_DIR = 1`, `INODE_FILE = 2`,
-`INODE_BLOCK = 3`, `INODE_PIPE = 4`. For **native (registry) directories** the
-reported type is the entry's inode type verbatim, so it may be any of the above
--- listing `/dvc`, for example, yields `INODE_BLOCK` for block devices.
-Entries sourced from **IsoFS** are always `INODE_DIR` or `INODE_FILE`.
+`INODE_BLOCK = 3`, `INODE_PIPE = 4`.
+
+For **native (registry) directories** the reported type is the entry's inode
+type verbatim, so a switch on it must handle `INODE_DIR`, `INODE_FILE`, *and*
+`INODE_BLOCK` -- listing `/dvc`, for example, yields `INODE_BLOCK` for block
+devices. `INODE_NONE` and `INODE_PIPE` are not reachable here: pipes exist only
+as handle slots and are never registered as directory entries. Entries sourced
+from **IsoFS** are always `INODE_DIR` or `INODE_FILE`.
 
 **Returns:** 0 on success (entry written to `dirent_out`), 1 on end of directory (no entry written), or error code.
 
@@ -624,20 +691,32 @@ Entries sourced from **IsoFS** are always `INODE_DIR` or `INODE_FILE`.
 - `PANUTIERRNO_INVALIDADDR` -- `dirent_out` is not a valid userspace pointer
 - `PANUTIERRNO_BADFD` -- `fd` is out of range or empty
 - `PANUTIERRNO_UNSUPPORTEDOP` -- `fd` is not a directory handle
-- `-1` -- an IsoFS-backed directory could not be read (corrupt or truncated
-  directory record, or a read failure against the underlying block device).
-  This is a **raw** `-1`, not a `PANUTIERRNO_*` code, and is propagated
-  unchanged from the filesystem.
+- `-1` -- an IsoFS-backed directory could not be read. This is a **raw** `-1`,
+  not a `PANUTIERRNO_*` code, propagated unchanged from the filesystem. It
+  occurs when the directory's extent is invalid or runs past the end of the
+  volume, when the record buffer cannot be allocated, or when the underlying
+  block read fails. Malformed or truncated records do *not* cause this -- they
+  are silently skipped and iteration continues.
 
 **Note:** Native (registry) directories stream their entries in dirent-list order and include the special entries `"."` and `".."`. Directories mounted from a filesystem are streamed by the filesystem itself; IsoFS emits the on-disk directory records (also including `"."` and `".."`). Closing the handle with `CLOSE` frees the directory cursor.
+
+**Traps when looping:**
+
+- On an IsoFS `-1` the cursor is left unchanged, so a naive
+  `while (panutisysf_readdir(fd, &e) == 0)` loop spins forever. Break on *any*
+  non-zero return, not just on `1`.
+- Only IsoFS implements the `readdir` filesystem op. Mounting a FAT filesystem
+  and listing the mountpoint dereferences a null op pointer and panics, so
+  `READDIR` is only usable on native and IsoFS directories.
 
 ---
 
 ## Quick Reference
 
-All 24 syscalls below are registered in the kernel dispatch table. Numbers are
-defined in `libc/include/panuti/syscall/syscallno.h`; any number outside this
-range returns `PANUTIERRNO_INVALIDSYSCALL`.
+All 24 syscalls listed here are registered in the kernel dispatch table and
+documented in detail above. Numbers are defined in
+`libc/include/panuti/syscall/syscallno.h`; any number outside this range
+returns `PANUTIERRNO_INVALIDSYSCALL`.
 
 | # | Name | # | Name |
 |---|---|---|---|
