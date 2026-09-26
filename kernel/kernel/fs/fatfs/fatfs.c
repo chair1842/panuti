@@ -22,6 +22,11 @@ static int fatfs_unlink(void* fs_impl, struct inode* dir, const char* name, size
 	return -1;
 }
 
+static int64_t fatfs_size(void* fs_impl, struct inode* node) {
+	(void)fs_impl; (void)node;
+	return -1; // fatfs is not implemented yet, so no length to report
+}
+
 static void* fatfs_open(void* fs_impl, struct inode* node) {
 	(void)fs_impl; (void)node;
 	return nullptr;
@@ -45,6 +50,7 @@ static const fs_ops_t fatfs_ops = {
 	.lookup = fatfs_lookup,
 	.create = fatfs_create,
 	.unlink = fatfs_unlink,
+	.size = fatfs_size,
 	.open = fatfs_open,
 	.read = fatfs_read,
 	.write = fatfs_write,

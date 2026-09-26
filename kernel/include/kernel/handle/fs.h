@@ -15,6 +15,7 @@ typedef struct fs_ops {
 	struct inode* (*lookup)(void* fs_impl, struct inode* dir, const char* name, size_t len);
 	int (*create)(void* fs_impl, struct inode* dir, const char* name, size_t len, inode_type_t type);
 	int (*unlink)(void* fs_impl, struct inode* dir, const char* name, size_t len);
+	int64_t (*size)(void* fs_impl, struct inode* node);
 	void* (*open)(void* fs_impl, struct inode* node);
 	int (*read)(void* file_impl, void* buf, size_t len, size_t offset);
 	int (*write)(void* file_impl, const void* buf, size_t len, size_t offset);

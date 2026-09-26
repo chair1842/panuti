@@ -270,6 +270,23 @@ static void isofs_finish(void* fs_impl) {
 	kfree(fs_impl);
 }
 
+static int64_t isofs_size(void* fs_impl, struct inode* node) {
+	(void)fs_impl;
+
+	if (!node || node->type != INODE_FILE) {
+		return -1;
+	}
+
+	// the length is already recorded on the dirent when the directory is read,
+	// so this costs nothing and needs no open
+	isofs_dirent_t* fs_n = node->impl;
+	if (!fs_n) {
+		return -1;
+	}
+
+	return (int64_t)fs_n->length;
+}
+
 static void* isofs_open(void* fs_impl, struct inode* node) {
 	if (node->type != INODE_FILE) {
 		return nullptr;
@@ -407,6 +424,7 @@ static const fs_ops_t isofs_ops = {
 	.lookup = isofs_lookup,
 	.create = isofs_create,
 	.unlink = isofs_unlink,
+	.size = isofs_size,
 	.open = isofs_open,
 	.read = isofs_read,
 	.write = isofs_write,

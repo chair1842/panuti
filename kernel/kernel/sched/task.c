@@ -10,6 +10,7 @@
 #include <kernel/memman/slab.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 #include <kernel/sched/sched.h>
 #include <kernel/elf.h>
 #include <panuti/errno.h>
@@ -294,8 +295,20 @@ static void procreate_cleanup(task_t* t) {
 }
 
 static int elf_read_whole_file(inode_t* n, void** out_data, size_t* out_size) {
-	if (!n->mnt->fs_ops->open) {
+	if (!n->mnt->fs_ops->open || !n->mnt->fs_ops->read) {
 		return -1;
+	}
+
+	// size the buffer from what the filesystem says the file holds, so a small
+	// program does not pay to allocate a worst-case one. ELF_READ_MAX still
+	// caps the request, so a bogus length cannot become a huge allocation.
+	size_t alloc = ELF_READ_MAX;
+	if (n->mnt->fs_ops->size) {
+		int64_t reported = n->mnt->fs_ops->size(n->mnt->fs_impl, n);
+
+		if (reported > 0 && (uint64_t)reported < (uint64_t)ELF_READ_MAX) {
+			alloc = (size_t)reported;
+		}
 	}
 
 	void* file_impl = n->mnt->fs_ops->open(n->mnt->fs_impl, n);
@@ -303,7 +316,7 @@ static int elf_read_whole_file(inode_t* n, void** out_data, size_t* out_size) {
 		return -1;
 	}
 
-	uint8_t* buf = kmalloc(ELF_READ_MAX, 1);
+	uint8_t* buf = kmalloc(alloc, 1);
 	if (!buf) {
 		if (n->mnt->fs_ops->close) {
 			n->mnt->fs_ops->close(file_impl);
@@ -312,13 +325,44 @@ static int elf_read_whole_file(inode_t* n, void** out_data, size_t* out_size) {
 	}
 
 	size_t total = 0;
-	while (total < ELF_READ_MAX) {
-		int n_read = n->mnt->fs_ops->read(file_impl, buf + total, ELF_READ_MAX - total, total);
+	while (total < alloc) {
+		int n_read = n->mnt->fs_ops->read(file_impl, buf + total, alloc - total, total);
 		if (n_read <= 0) {
 			break;
 		}
 		
 		total += (size_t)n_read;
+	}
+
+	// a reported length is only ever a hint. if the filesystem handed us a
+	// short one we would silently truncate the program, so probe for a byte
+	// past the end and grow if there is one, still bounded by ELF_READ_MAX.
+	if (total == alloc && alloc < ELF_READ_MAX) {
+		uint8_t probe;
+
+		if (n->mnt->fs_ops->read(file_impl, &probe, 1, total) > 0) {
+			size_t bigger = alloc * 2;
+			if (bigger > ELF_READ_MAX) {
+				bigger = ELF_READ_MAX;
+			}
+
+			uint8_t* grown = kmalloc(bigger, 1);
+			if (grown) {
+				memcpy(grown, buf, total);
+				kfree(buf);
+				buf = grown;
+				alloc = bigger;
+
+				while (total < alloc) {
+					int n_read = n->mnt->fs_ops->read(file_impl, buf + total, alloc - total, total);
+					if (n_read <= 0) {
+						break;
+					}
+					
+					total += (size_t)n_read;
+				}
+			}
+		}
 	}
 
 	if (total == 0) {
