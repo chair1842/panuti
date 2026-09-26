@@ -17,7 +17,7 @@
 #define MAX_TASKS 64
 #define USER_STACK_VIRT_TOP 0xB0000000
 #define PAGE_SIZE 0x1000
-#define MAX_ARGV_BYTES 512
+#define MAX_ARGV_BYTES (TASK_USER_STACK_SIZE - TASK_USER_CONTEXT_BYTES)
 #define ELF_READ_MAX (256 * 1024)
 
 static pid_t next_pid = 1;
@@ -93,25 +93,50 @@ task_t* task_create(void (*entry)(void)) {
 	return t;
 }
 
+// a user stack is a run of frames ending at USER_STACK_VIRT_TOP, growing down.
+// the frames are allocated one at a time and mapped individually, so they do
+// not need to be physically contiguous. vmm_destroy_page_dir frees every frame
+// it finds mapped when the address space is torn down, so a partially built
+// stack needs no unwinding of its own.
+typedef struct {
+	uint32_t esp; // initial user esp, just below the top of the stack
+	uint32_t pages[TASK_USER_STACK_PAGES]; // physical address of each frame, top frame first
+} user_stack_t;
+
+static int user_stack_setup(addr_space_t as, user_stack_t* out) {
+	uint32_t base = USER_STACK_VIRT_TOP - TASK_USER_STACK_SIZE;
+
+	out->esp = 0;
+
+	for (uint32_t i = 0; i < TASK_USER_STACK_PAGES; i++) {
+		uint32_t phys = memman_alloc_frame();
+		if (!phys) {
+			return -1;
+		}
+
+		memman_map_in(as, base + i * PAGE_SIZE, phys, MEMMAN_PRESENT | MEMMAN_RW | MEMMAN_USER);
+		out->pages[TASK_USER_STACK_PAGES - 1 - i] = phys;
+	}
+
+	out->esp = USER_STACK_VIRT_TOP - 4;
+	return 0;
+}
+
 task_t* task_create_user(void (*entry)(void)) {
 	task_t* t = task_alloc_common();
 	if (!t) {
 		return nullptr;
 	}
 
-	uint32_t user_stack_phys = memman_alloc_frame();
-	if (!user_stack_phys) {
+	user_stack_t us;
+	if (user_stack_setup(t->addr_space, &us) != 0) {
 		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
 		memman_destroy_addr_space(t->addr_space);
 		t->state = TASK_NONE; // release the slot back, since alloc_common already claimed it
 		return nullptr;
 	}
 
-	uint32_t user_stack_virt_base = USER_STACK_VIRT_TOP - PAGE_SIZE;
-	memman_map_in(t->addr_space, user_stack_virt_base, user_stack_phys, MEMMAN_PRESENT | MEMMAN_RW | MEMMAN_USER);
-	uint32_t user_esp = user_stack_virt_base + PAGE_SIZE - 4;
-
-	task_init_user_stack(t, entry, user_esp);
+	task_init_user_stack(t, entry, us.esp);
 	task_count++;
 	sched_add(t);
 
@@ -139,19 +164,15 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 		return nullptr;
 	}
 
-	uint32_t user_stack_phys = memman_alloc_frame();
-	if (!user_stack_phys) {
+	user_stack_t us;
+	if (user_stack_setup(t->addr_space, &us) != 0) {
 		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
 		memman_destroy_addr_space(t->addr_space);
 		t->state = TASK_NONE;
 		return nullptr;
 	}
 
-	uint32_t user_stack_virt_base = USER_STACK_VIRT_TOP - PAGE_SIZE;
-	memman_map_in(t->addr_space, user_stack_virt_base, user_stack_phys, MEMMAN_PRESENT | MEMMAN_RW | MEMMAN_USER);
-	uint32_t user_esp = user_stack_virt_base + PAGE_SIZE - 4;
-
-	task_init_user_stack(t, (void (*)(void))(uint32_t)entry, user_esp);
+	task_init_user_stack(t, (void (*)(void))(uint32_t)entry, us.esp);
 	task_count++;
 	sched_add(t);
 
@@ -330,14 +351,11 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 	
 	kfree(elf_data);
 
-	uint32_t user_stack_phys = memman_alloc_frame();
-	if (!user_stack_phys) {
+	user_stack_t us;
+	if (user_stack_setup(t->addr_space, &us) != 0) {
 		procreate_cleanup(t);
 		return PANUTIERRNO_PLAINERR;
 	}
-
-	uint32_t user_stack_virt_base = USER_STACK_VIRT_TOP - PAGE_SIZE;
-	memman_map_in(t->addr_space, user_stack_virt_base, user_stack_phys, MEMMAN_PRESENT | MEMMAN_RW | MEMMAN_USER);
 
 	char* synth_argv[1];
 	char** real_argv = args->argv;
@@ -349,7 +367,7 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 	}
 
 	uint32_t user_esp;
-	if (task_build_user_argv_stack(user_stack_phys, USER_STACK_VIRT_TOP, real_argv, real_argc, MAX_ARGV_BYTES, &user_esp) != 0) {
+	if (task_build_user_argv_stack(us.pages, TASK_USER_STACK_PAGES, USER_STACK_VIRT_TOP, real_argv, real_argc, MAX_ARGV_BYTES, &user_esp) != 0) {
 		procreate_cleanup(t);
 		return PANUTIERRNO_PLAINERR;
 	}

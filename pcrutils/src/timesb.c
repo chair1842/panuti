@@ -12,19 +12,19 @@ int main(int argc, char** argv) {
 			printf("args (only the first arg is considered):\n");
 			printf("  -h - prints this help message\n");
 			printf("  -s - converts the time since boot to seconds\n");
-			printf("  -mm - converts the time since boot to milliseconds\n");
-			printf("  -m - converts the time scince boot to minutes\n");
+			printf("  -l - converts the time since boot to milliseconds\n");
+			printf("  -m - converts the time since boot to minutes\n");
 
-			return 1;
+			return 0;
 		} else if (strcmp(argv[1], "-s") == 0) {
 			printf("%d\n", panutisysf_timesb() / 100);
-			return 2;
-		} else if (strcmp(argv[1], "-mm") == 0) {
+			return 0;
+		} else if (strcmp(argv[1], "-l") == 0) {
 			printf("%d\n", panutisysf_timesb() * 10);
-			return 3;
+			return 0;
 		} else if (strcmp(argv[1], "-m") == 0) {
 			printf("%d\n", panutisysf_timesb() / (100 * 60));
-			return 4;
+			return 0;
 		}
 	} else {
 		printf("%d\n", panutisysf_timesb());

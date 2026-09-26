@@ -43,8 +43,79 @@ void task_init_user_stack(task_t* t, void (*entry)(void), uint32_t user_esp) {
 	t->user_stack = user_esp;
 }
 
+#define NO_FRAME UINT32_MAX
+
+// the stack's frames are allocated one at a time, so they are not physically
+// contiguous and a multi frame argv block cannot be written through a single
+// mapping. instead every write is split at frame boundaries and routed to
+// whichever frame backs the address, using the one temp mapping window for as
+// long as consecutive writes stay inside the same frame.
+typedef struct {
+	const uint32_t* pages; // physical address of each frame, top frame first
+	uint32_t page_count;
+	uint32_t virt_top;
+	void* window; // temp mapping of the frame under the cursor
+	uint32_t window_page; // which frame that is, or NO_FRAME when unmapped
+} argv_writer_t;
+
+// returns a kernel-usable pointer for a user address, mapping its frame first
+static void* argv_writer_at(argv_writer_t* w, uint32_t user_addr) {
+	uint32_t page = (w->virt_top - 1 - user_addr) / PAGE_SIZE;
+	if (page >= w->page_count) {
+		return nullptr;
+	}
+
+	if (w->window_page != page) {
+		if (w->window) {
+			unmap_physical_temp(w->window, PAGE_SIZE);
+			w->window = nullptr;
+		}
+
+		w->window = map_physical_temp(w->pages[page], PAGE_SIZE);
+		if (!w->window) {
+			w->window_page = NO_FRAME;
+			return nullptr;
+		}
+
+		w->window_page = page;
+	}
+
+	return (uint8_t*)w->window + (user_addr & (PAGE_SIZE - 1));
+}
+
+// copies len bytes from a kernel address to a user address on the stack
+static int argv_writer_put(argv_writer_t* w, uint32_t user_addr, const void* src, size_t len) {
+	const uint8_t* s = src;
+
+	while (len > 0) {
+		void* dst = argv_writer_at(w, user_addr);
+		if (!dst) {
+			return -1;
+		}
+
+		size_t room = PAGE_SIZE - (user_addr & (PAGE_SIZE - 1));
+		size_t chunk = len < room ? len : room;
+
+		memcpy(dst, s, chunk);
+		user_addr += chunk;
+		s += chunk;
+		len -= chunk;
+	}
+
+	return 0;
+}
+
+static void argv_writer_finish(argv_writer_t* w) {
+	if (w->window) {
+		unmap_physical_temp(w->window, PAGE_SIZE);
+		w->window = nullptr;
+		w->window_page = NO_FRAME;
+	}
+}
+
 int task_build_user_argv_stack(
-	uint32_t stack_phys,
+	const uint32_t* stack_pages,
+	uint32_t stack_page_count,
 	uint32_t stack_virt_top,
     char** argv,
     int argc,
@@ -68,41 +139,50 @@ int task_build_user_argv_stack(
 		total_u64 += sl + 1;
 	}
 
-	if (total_u64 > max_bytes || total_u64 > PAGE_SIZE) {
+	if (total_u64 > max_bytes || total_u64 > (uint64_t)stack_page_count * PAGE_SIZE) {
 		return -1;
 	}
 
 	size_t total_size = (size_t)total_u64;
 
-	void* page = map_physical_temp(stack_phys, PAGE_SIZE);
-	if (!page) {
+	uint32_t user_esp = stack_virt_top - total_size;
+	uint32_t string_cursor = user_esp + header_size;
+
+	argv_writer_t w;
+	w.pages = stack_pages;
+	w.page_count = stack_page_count;
+	w.virt_top = stack_virt_top;
+	w.window = nullptr;
+	w.window_page = NO_FRAME;
+
+	uint32_t argc32 = (uint32_t)argc;
+	int rc = argv_writer_put(&w, user_esp, &argc32, sizeof(argc32));
+
+	for (int i = 0; rc == 0 && i < argc; i++) {
+		uint32_t arg_ptr = string_cursor;
+		rc = argv_writer_put(&w, user_esp + sizeof(uint32_t) + (size_t)i * sizeof(uint32_t), &arg_ptr, sizeof(arg_ptr));
+
+		// reuse the length kernel_user_strlen already validated rather than
+		// walking the user string again with an unbounded strlen
+		size_t len = kernel_user_strlen(argv[i]) + 1;
+		if (rc == 0) {
+			rc = argv_writer_put(&w, string_cursor, argv[i], len);
+		}
+
+		string_cursor += len;
+	}
+
+	if (rc == 0) {
+		uint32_t terminator = 0;
+		uint32_t arg_table_end = user_esp + sizeof(uint32_t) + (size_t)argc * sizeof(uint32_t);
+		rc = argv_writer_put(&w, arg_table_end, &terminator, sizeof(terminator));
+	}
+
+	argv_writer_finish(&w);
+
+	if (rc != 0) {
 		return -1;
 	}
-
-	uint32_t content_offset = PAGE_SIZE - total_size;
-	uint32_t user_esp = stack_virt_top - total_size;
-	uint32_t user_strings_base = user_esp + header_size;
-
-	uint8_t* header_write = (uint8_t*)page + content_offset;
-	uint8_t* string_write = (uint8_t*)page + content_offset + header_size;
-	uint32_t string_cursor_user = user_strings_base;
-
-	*(uint32_t*)header_write = (uint32_t)argc;
-	header_write += sizeof(uint32_t);
-
-	for (int i = 0; i < argc; i++) {
-		*(uint32_t*)header_write = string_cursor_user;
-		header_write += sizeof(uint32_t);
-
-		size_t len = strlen(argv[i]) + 1;
-		memcpy(string_write, argv[i], len);
-		string_write += len;
-		string_cursor_user += len;
-	}
-
-	*(char**)header_write = nullptr; // argv[] NULL terminator
-
-	unmap_physical_temp(page, PAGE_SIZE);
 
 	*out_esp = user_esp;
 	return 0;
