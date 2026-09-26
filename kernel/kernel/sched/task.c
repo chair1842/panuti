@@ -20,7 +20,6 @@
 #define MAX_ARGV_BYTES (TASK_USER_STACK_SIZE - TASK_USER_CONTEXT_BYTES)
 #define ELF_READ_MAX (256 * 1024)
 
-static pid_t next_pid = 1;
 static uint32_t task_count = 0;
 static task_t tasks[MAX_TASKS] = {0};
 
@@ -39,16 +38,46 @@ static void task_init_default_streams(task_t* t) {
 }
 
 // finds a free slot: one that's never been used (state == 0 / TASK_NONE,
-// assuming that's the zero-value of task_state_t) or has been fully
-// reaped (TASK_TERMINATED with everything already torn down by
-// task_destroy). Returns NULL if every slot is occupied.
+// assuming that's the zero-value of task_state_t). A TASK_TERMINATED task
+// is a zombie whose parent hasn't reaped it yet — it still holds a live PID
+// that task_wait_pid must be able to find, so its slot is not free until
+// task_destroy resets it to TASK_NONE.
+// Returns NULL if every slot is occupied.
 static task_t* task_find_free_slot(void) {
 	for (int i = 0; i < MAX_TASKS; i++) {
-		if (tasks[i].state == TASK_NONE || tasks[i].state == TASK_TERMINATED) {
+		if (tasks[i].state == TASK_NONE) {
 			return &tasks[i];
 		}
 	}
 	return nullptr;
+}
+
+// hands out the lowest pid no live task is using, so pids get recycled instead
+// of climbing forever. with at most MAX_TASKS live tasks this keeps every pid
+// inside [1, MAX_TASKS], so there is no wraparound case to get wrong.
+//
+// a TASK_TERMINATED slot still owns its pid until task_destroy clears the
+// slot, so a pid is never handed to a new task while a parent could still be
+// blocked in wait() on it -- task_find_free_slot keeps zombies out of the free
+// pool for exactly that reason. pid 0 is never handed out, so it doubles as
+// the failure return.
+static pid_t task_alloc_pid(void) {
+	for (pid_t candidate = 1; candidate <= MAX_TASKS; candidate++) {
+		bool taken = false;
+
+		for (int i = 0; i < MAX_TASKS; i++) {
+			if (tasks[i].state != TASK_NONE && tasks[i].pid == candidate) {
+				taken = true;
+				break;
+			}
+		}
+
+		if (!taken) {
+			return candidate;
+		}
+	}
+
+	return 0;
 }
 
 static task_t* task_alloc_common(void) {
@@ -68,7 +97,17 @@ static task_t* task_alloc_common(void) {
 		return nullptr;
 	}
 
-	t->pid = next_pid++;
+	// assign the pid before publishing the slot, so task_alloc_pid's scan
+	// never sees this slot claiming a pid it is in the middle of picking
+	t->pid = task_alloc_pid();
+	if (t->pid == 0) {
+		// unreachable: a free slot means fewer than MAX_TASKS live tasks, so
+		// some pid in [1, MAX_TASKS] is always free
+		memman_destroy_addr_space(t->addr_space);
+		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
+		return nullptr;
+	}
+
 	t->state = TASK_READY;
 	t->cwd = registry_root();
 	task_init_default_streams(t);
