@@ -167,6 +167,50 @@ static inline bool isofs_lba_valid(const isofs_t* fs, uint32_t lba, uint32_t len
 	return true;
 }
 
+// Returns the directory extent's raw bytes, reading from the device on a
+// miss. The result is owned by the cache: do not free it, and do not hold it
+// across another isofs_dir_data call, since a later miss may evict it.
+static const uint8_t* isofs_dir_data(isofs_t* fs, uint32_t start_lba, uint32_t length) {
+	for (int i = 0; i < ISOFS_DIRCACHE_SLOTS; i++) {
+		isofs_dircache_entry_t* e = &fs->dircache[i];
+		if (e->data && e->start_lba == start_lba && e->length == length) {
+			return e->data;
+		}
+	}
+
+	uint8_t* buf = kmalloc(length, 1);
+	if (!buf) {
+		return nullptr;
+	}
+
+	if (block_read_bytes(fs->block_device, (uint64_t)start_lba * fs->block_size, length, buf) != BLOCK_OK) {
+		kfree(buf);
+		return nullptr;
+	}
+
+	// replace the round-robin victim
+	uint32_t slot = fs->dircache_next;
+	fs->dircache_next = (fs->dircache_next + 1) % ISOFS_DIRCACHE_SLOTS;
+	if (fs->dircache[slot].data) {
+		kfree(fs->dircache[slot].data);
+	}
+
+	fs->dircache[slot].start_lba = start_lba;
+	fs->dircache[slot].length = length;
+	fs->dircache[slot].data = buf;
+	return buf;
+}
+
+static void isofs_dircache_clear(isofs_t* fs) {
+	for (int i = 0; i < ISOFS_DIRCACHE_SLOTS; i++) {
+		if (fs->dircache[i].data) {
+			kfree(fs->dircache[i].data);
+			fs->dircache[i].data = nullptr;
+		}
+	}
+	fs->dircache_next = 0;
+}
+
 static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* name, size_t len) {
 	isofs_t* fs = fs_impl;
 	if (dir->type != INODE_DIR) {
@@ -192,13 +236,8 @@ static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* 
 		return nullptr;
 	}
 
-	uint8_t* buf = kmalloc(sd_len, 1);
+	const uint8_t* buf = isofs_dir_data(fs, sd_lba, sd_len);
 	if (!buf) {
-		return nullptr;
-	}
-
-	if (block_read_bytes(fs->block_device, (uint64_t)sd_lba * fs->block_size, sd_len, buf) != BLOCK_OK) {
-		kfree(buf);
 		return nullptr;
 	}
 
@@ -258,7 +297,6 @@ static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* 
 		offset += dr_len;
 	}
 
-	kfree(buf);
 	return result;
 }
 
@@ -267,6 +305,7 @@ static void isofs_close(void* file_impl) {
 }
 
 static void isofs_finish(void* fs_impl) {
+	isofs_dircache_clear(fs_impl);
 	kfree(fs_impl);
 }
 
@@ -368,13 +407,8 @@ static int isofs_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, 
 		return 1; // end of directory
 	}
 
-	uint8_t* buf = kmalloc(sd_len, 1);
+	const uint8_t* buf = isofs_dir_data(fs, sd_lba, sd_len);
 	if (!buf) {
-		return -1;
-	}
-
-	if (block_read_bytes(fs->block_device, (uint64_t)sd_lba * fs->block_size, sd_len, buf) != BLOCK_OK) {
-		kfree(buf);
 		return -1;
 	}
 
@@ -416,7 +450,6 @@ static int isofs_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, 
 		*cursor = sd_len; // pin the cursor at the end so future calls short-circuit immediately
 	}
 
-	kfree(buf);
 	return result;
 }
 

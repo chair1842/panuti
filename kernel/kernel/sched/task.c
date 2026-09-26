@@ -148,14 +148,34 @@ static int user_stack_setup(addr_space_t as, user_stack_t* out) {
 
 	out->esp = 0;
 
+	// collect the frames before mapping any of them, so the whole run can go
+	// through one cr3 switch instead of two per frame. the flip side is that
+	// a short allocation leaves nothing mapped yet, so those frames are freed
+	// here rather than left for vmm_destroy_page_dir to find.
+	uint32_t phys[TASK_USER_STACK_PAGES];
+	uint32_t got = 0;
+
 	for (uint32_t i = 0; i < TASK_USER_STACK_PAGES; i++) {
-		uint32_t phys = memman_alloc_frame();
-		if (!phys) {
-			return -1;
+		phys[i] = memman_alloc_frame();
+		if (!phys[i]) {
+			break;
 		}
 
-		memman_map_in(as, base + i * PAGE_SIZE, phys, MEMMAN_PRESENT | MEMMAN_RW | MEMMAN_USER);
-		out->pages[TASK_USER_STACK_PAGES - 1 - i] = phys;
+		got++;
+	}
+
+	if (got != TASK_USER_STACK_PAGES) {
+		for (uint32_t i = 0; i < got; i++) {
+			memman_free_frame(phys[i]);
+		}
+
+		return -1;
+	}
+
+	memman_map_in_run(as, base, phys, TASK_USER_STACK_PAGES, MEMMAN_PRESENT | MEMMAN_RW | MEMMAN_USER);
+
+	for (uint32_t i = 0; i < TASK_USER_STACK_PAGES; i++) {
+		out->pages[TASK_USER_STACK_PAGES - 1 - i] = phys[i];
 	}
 
 	out->esp = USER_STACK_VIRT_TOP - 4;

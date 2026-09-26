@@ -9,6 +9,12 @@ void vmm_init(void);
 void vmm_map(uint32_t virt_addr, uint32_t phys_addr, uint32_t flags);
 void vmm_unmap(uint32_t virt_addr);
 void vmm_map_in(void* addr_space, uint32_t virt_addr, uint32_t phys_addr, uint32_t flags);
+
+// map `count` consecutive virtual pages starting at `virt_addr` onto the
+// frames listed in phys[0..count), switching cr3 at most once. every cr3
+// write flushes the tlb, so mapping a run through vmm_map_in pays two
+// flushes per page.
+void vmm_map_in_run(void* addr_space, uint32_t virt_addr, const uint32_t* phys, uint32_t count, uint32_t flags);
 void vmm_unmap_in(void* addr_space, uint32_t virt_addr);
 uint32_t vmm_get_phys(uint32_t virt_addr);
 /* Returns an opaque address-space handle containing the page directory's CR3 address. */

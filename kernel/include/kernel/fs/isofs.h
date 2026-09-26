@@ -16,6 +16,17 @@ typedef struct isofs_dirent {
 	char name[REG_MAX_NAME_LEN];
 } isofs_dirent_t;
 
+// directory extents are immutable on a read-only image, so reading one
+// from the device once is enough. a small ring covers the depth of a path
+// walk (/, /usr, /usr/bin) without unbounded memory growth.
+#define ISOFS_DIRCACHE_SLOTS 8
+
+typedef struct isofs_dircache_entry {
+	uint32_t start_lba;
+	uint32_t length;
+	uint8_t* data;
+} isofs_dircache_entry_t;
+
 typedef struct isofs {
 	block_dev_t* block_device;
 	
@@ -26,6 +37,9 @@ typedef struct isofs {
 	
 	bool is_rock_ridge;
 	uint8_t rr_len_skip;
+
+	isofs_dircache_entry_t dircache[ISOFS_DIRCACHE_SLOTS];
+	uint32_t dircache_next;
 } isofs_t;
 
 typedef struct isofs_file {

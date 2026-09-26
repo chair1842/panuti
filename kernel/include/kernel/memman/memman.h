@@ -14,6 +14,10 @@ typedef void* addr_space_t;
 void memman_map(uint32_t virt, uint32_t phys, uint32_t flags);
 void memman_unmap(uint32_t virt);
 void memman_map_in(addr_space_t addr_space, uint32_t virt, uint32_t phys, uint32_t flags);
+
+// map `count` consecutive virtual pages from `virt` onto phys[0..count) with a
+// single cr3 switch, instead of the two flushes per page memman_map_in costs
+void memman_map_in_run(addr_space_t addr_space, uint32_t virt, const uint32_t* phys, uint32_t count, uint32_t flags);
 void memman_unmap_in(addr_space_t addr_space, uint32_t virt);
 uint32_t memman_get_phys(uint32_t virt);
 uint32_t memman_alloc_frame(void);

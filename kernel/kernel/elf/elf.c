@@ -37,15 +37,25 @@ int elf_load_segments(addr_space_t addr_space, const void* elf_data, const elf_l
 		uint32_t map_flags = MEMMAN_PRESENT | MEMMAN_USER | MEMMAN_RW;
 		uint32_t phys_frames[MAX_SEG_PAGES];
 
+		uint32_t mapped = 0;
 		for (uint32_t p = 0; p < num_pages; p++) {
 			uint32_t phys = memman_alloc_frame();
 			if (!phys) {
+				// nothing is mapped until the whole run is collected, so a
+				// short allocation has to hand the frames back directly
+				for (uint32_t q = 0; q < mapped; q++) {
+					memman_free_frame(phys_frames[q]);
+				}
+
 				return -1;
 			}
 
 			phys_frames[p] = phys;
-			memman_map_in(addr_space, page_start + p * PAGE_SIZE, phys, map_flags);
+			mapped++;
 		}
+
+		// one cr3 switch for the whole segment rather than one per page
+		memman_map_in_run(addr_space, page_start, phys_frames, num_pages, map_flags);
 
 		for (uint32_t p = 0; p < num_pages; p++) {
 			memman_map(ELF_LOAD_SCRATCH, phys_frames[p], MEMMAN_PRESENT | MEMMAN_RW);

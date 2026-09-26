@@ -16,6 +16,10 @@ void memman_map_in(addr_space_t addr_space, uint32_t virt, uint32_t phys, uint32
 	vmm_map_in(addr_space, virt, phys, flags);
 }
 
+void memman_map_in_run(addr_space_t addr_space, uint32_t virt, const uint32_t* phys, uint32_t count, uint32_t flags) {
+	vmm_map_in_run(addr_space, virt, phys, count, flags);
+}
+
 void memman_unmap_in(addr_space_t addr_space, uint32_t virt) {
 	vmm_unmap_in(addr_space, virt);
 }

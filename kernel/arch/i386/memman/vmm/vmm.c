@@ -138,6 +138,30 @@ void vmm_map_in(void* addr_space, uint32_t virt_addr, uint32_t phys_addr, uint32
 	irq_restore(saved_flags);
 }
 
+void vmm_map_in_run(void* addr_space, uint32_t virt_addr, const uint32_t* phys, uint32_t count, uint32_t flags) {
+	uint32_t target_cr3 = (uint32_t)addr_space;
+	if (!target_cr3 || !phys || count == 0) {
+		return;
+	}
+
+	uint32_t saved_flags = irq_save_disable();
+	uint32_t saved_cr3 = read_cr3();
+
+	if (target_cr3 != saved_cr3) {
+		write_cr3(target_cr3);
+	}
+
+	for (uint32_t i = 0; i < count; i++) {
+		vmm_map(virt_addr + i * PAGE_SIZE, phys[i], flags);
+	}
+
+	if (target_cr3 != saved_cr3) {
+		write_cr3(saved_cr3);
+	}
+
+	irq_restore(saved_flags);
+}
+
 void vmm_unmap_in(void* addr_space, uint32_t virt_addr) {
 	uint32_t target_cr3 = (uint32_t)addr_space;
 	if (!target_cr3) {
