@@ -34,6 +34,34 @@ Errors are returned with bit 31 set (i.e. negative when interpreted as signed):
 | `PANUTIERRNO_BUSY` | `0x80000009` | Resource is busy (e.g. keyboard line already claimed) |
 
 All user pointers are validated to lie within `0x08048000`--`0xC0000000`.
+The lower bound is inclusive and the upper bound is exclusive, so `0xC0000000`
+itself is rejected. A *range* whose end lands exactly on `0xC0000000` is accepted.
+
+### Non-errno return values
+
+A few syscalls can return a raw `-1` (`0xFFFFFFFF`) instead of a
+`PANUTIERRNO_*` code. This value is **not** in the table above, so a test for
+`PANUTIERRNO_PLAINERR` will not catch it; check for `-1` explicitly.
+The syscalls affected are `ACTIVATE` (4), `MKDIR` (6), and `READDIR` (23) --
+each is documented individually below.
+
+**Note:** errors are reported *in the return value*, not through a global
+`errno`. `libc` does define an `int errno`, but nothing ever assigns to it.
+
+---
+
+## Return value conventions
+
+Return values are not uniform across the API. Check the shape before comparing:
+
+| Shape | Example | Test |
+|---|---|---|
+| Byte count | `READ` (3), `WRITE` (0), `STREAM_READ` (19) | `>= 0` is a count; `< 0` is an error |
+| Status `0` | `CLOSE` (5), `MKDIR` (6), `GETCWD` (11), `PIPE_CREATE` (17) | `== 0` is success |
+| Opaque value | `GETPID` (9), `TIMESB` (10) | cannot fail; no error case |
+| PID | `PROCREATE` (21) | `>= 0` is a PID; `< 0` is an error |
+| Two-state | `READDIR` (23) | `0` = entry written, `1` = end of directory |
+| Unobservable | `NSTREAM` (18) | see its entry -- the wrapper is `void` |
 
 ---
 
@@ -69,11 +97,17 @@ void panutisysf_exit(uint32_t code);
 Terminate the current process.
 
 **Parameters:**
-- `code` -- exit code (reserved, currently unused)
+- `code` -- exit code, retrievable by a parent via `WAIT`
 
 **Returns:** does not return (process is terminated immediately).
 
 **Errors:** none.
+
+**Note:** `code` is stored in the task and delivered to whichever process
+later calls `WAIT` on this PID, which receives it via its `ec_out` argument.
+It is *not* discarded. `WAIT` is single-shot per PID: the first waiter reaps
+the task and frees it, so a second `WAIT` on the same PID returns
+`PANUTIERRNO_NOTFOUND`.
 
 ---
 
@@ -129,13 +163,25 @@ int32_t panutisysf_activate(int handle);
 
 Activate a device handle (device-specific operation).
 
+**Currently a no-op: this syscall always fails.** No handle type in the tree
+implements a successful activate, so there is no device-specific result to
+report. The call is forwarded to the handle's `activate` op, and every
+implementation is a stub.
+
 **Parameters:**
 - `handle` -- file descriptor index
 
-**Returns:** device-specific result, or error code.
+**Returns:** never a success. The result depends on the handle type:
+
+| Handle type | Result |
+|---|---|
+| pipe, directory, mounted-FS file, block device | `-1` (raw, not an errno code) |
+| `/dvc/console`, `/dvc/kbd/line` | `PANUTIERRNO_UNSUPPORTEDOP` |
 
 **Errors:**
 - `PANUTIERRNO_BADFD` -- `handle` is out of range or empty
+- `PANUTIERRNO_UNSUPPORTEDOP` -- device does not implement activate
+- `-1` -- the handle types listed in the table above
 
 ---
 
@@ -174,7 +220,18 @@ Create a new directory in the in-memory VFS registry.
 
 **Errors:**
 - `PANUTIERRNO_INVALIDADDR` -- `path` is not a valid userspace pointer
-- `-1` -- name collision during path walk
+- `-1` -- the directory could not be created; this is a **raw** `-1`, not a
+  `PANUTIERRNO_*` code, and covers every failure below:
+  - `path` is empty
+  - `path` names the root directory or resolves to an empty name
+  - the parent directory does not exist or is not a directory
+  - the parent path prefix is 128 bytes or longer
+  - the name already exists in the parent (name collision)
+  - the name is 256 bytes or longer
+  - the inode table is full (1024 inodes)
+  - the directory entry table is full (2048 entries)
+  - the parent is inside a mounted filesystem (no filesystem implements
+    directory creation, so this always fails)
 
 ---
 
@@ -381,14 +438,14 @@ Create an anonymous pipe pair for inter-process communication.
 - `read_fd` -- userspace pointer to `int` where the read-end fd is written
 - `write_fd` -- userspace pointer to `int` where the write-end fd is written
 
-**Returns:** 0 on success (intended), or error code.
+**Returns:** 0 on success, or error code.
 
-**Intended errors:**
+**Errors:**
 - `PANUTIERRNO_INVALIDADDR` -- either pointer is not a valid userspace pointer
 - `PANUTIERRNO_NOFDS` -- not enough free handle slots (needs 2)
 - `PANUTIERRNO_PLAINERR` -- memory allocation failure
 
-**Intended behavior:** Allocates a 4096-byte circular pipe buffer and two handles.
+**Behavior:** Allocates a 4096-byte circular pipe buffer and two handles.
 Pipe reads block if the buffer is empty and return 0 on EOF.
 Pipe writes block if the buffer is full.
 Closing the write end sends EOF to readers.
@@ -398,7 +455,7 @@ Closing the write end sends EOF to readers.
 ### 18 -- NSTREAM
 
 ```c
-void panutisysf_nstream(int* out[2]);
+void panutisysf_nstream(int out[2]);
 ```
 
 Report the number of input and output streams attached to the calling task.
@@ -408,12 +465,16 @@ Every task carries a fixed set of stream slots in each direction; only the entri
 **Parameters:**
 - `out` -- userspace pointer to an array of 2 `int`s used to return the stream counts
 
-**Returns:** 0 on success.
+**Returns:** nothing. The wrapper is declared `void` and discards the
+handler's result, so a caller **cannot distinguish success from failure**: if
+`out` is an invalid pointer, the buffer is simply left untouched and no error
+is reported. Validate the pointer yourself, or call `panuti_syscall` directly
+to observe the return value.
 
-**Errors:**
+**Errors:** (reachable only via a direct `panuti_syscall` call)
 - `PANUTIERRNO_INVALIDADDR` -- `out` is not a valid userspace pointer
 
-**Note:** On success, `out[0]` receives the number of input streams and `out[1]` the number of output streams. At task creation the kernel attempts to bind output stream 0 to the console device (`/dvc/console`) and input stream 0 to the keyboard device (`/dvc/kbd`); a slot is only registered if the device is available.
+**Note:** On success, `out[0]` receives the number of input streams and `out[1]` the number of output streams. At task creation the kernel attempts to bind output stream 0 to the console device (`/dvc/console`) and input stream 0 to the keyboard line discipline (`/dvc/kbd/line`); a slot is only registered if the device is available.
 
 ---
 
@@ -517,7 +578,12 @@ Block until a target process exits and retrieve its exit code.
 - `PANUTIERRNO_PLAINERR` -- attempting to wait on the calling process itself
 - `PANUTIERRNO_NOTFOUND` -- target process does not exist
 
-**Note:** The caller blocks until the target process terminates. If the target is still running, the caller is put to sleep and retried when the target exits.
+**Note:** The caller blocks until the target process terminates. If the target is still running, the caller is put to sleep and retried when the target exits. The `ec_out` value is the exit code passed to `EXIT` (1).
+
+**Note:** `WAIT` is single-shot per PID. The first waiter to succeed reaps the
+task and destroys it, so any subsequent `WAIT` on the same PID returns
+`PANUTIERRNO_NOTFOUND`. There is no way to wait on a PID more than once, and
+no way to detect a child exiting other than by calling `WAIT` on its PID.
 
 ---
 
@@ -547,8 +613,10 @@ typedef struct {
 ```
 
 `inode_type_t` values: `INODE_NONE = 0`, `INODE_DIR = 1`, `INODE_FILE = 2`,
-`INODE_BLOCK = 3`, `INODE_PIPE = 4`. Directory entries always have type
-`INODE_DIR` or `INODE_FILE`.
+`INODE_BLOCK = 3`, `INODE_PIPE = 4`. For **native (registry) directories** the
+reported type is the entry's inode type verbatim, so it may be any of the above
+-- listing `/dvc`, for example, yields `INODE_BLOCK` for block devices.
+Entries sourced from **IsoFS** are always `INODE_DIR` or `INODE_FILE`.
 
 **Returns:** 0 on success (entry written to `dirent_out`), 1 on end of directory (no entry written), or error code.
 
@@ -556,6 +624,10 @@ typedef struct {
 - `PANUTIERRNO_INVALIDADDR` -- `dirent_out` is not a valid userspace pointer
 - `PANUTIERRNO_BADFD` -- `fd` is out of range or empty
 - `PANUTIERRNO_UNSUPPORTEDOP` -- `fd` is not a directory handle
+- `-1` -- an IsoFS-backed directory could not be read (corrupt or truncated
+  directory record, or a read failure against the underlying block device).
+  This is a **raw** `-1`, not a `PANUTIERRNO_*` code, and is propagated
+  unchanged from the filesystem.
 
 **Note:** Native (registry) directories stream their entries in dirent-list order and include the special entries `"."` and `".."`. Directories mounted from a filesystem are streamed by the filesystem itself; IsoFS emits the on-disk directory records (also including `"."` and `".."`). Closing the handle with `CLOSE` frees the directory cursor.
 
@@ -563,32 +635,24 @@ typedef struct {
 
 ## Quick Reference
 
-| # | Name | Registered |
-|---|---|---|
-| 0 | `WRITE` | Yes |
-| 1 | `EXIT` | Yes |
-| 2 | `OPEN` | Yes |
-| 3 | `READ` | Yes |
-| 4 | `ACTIVATE` | Yes |
-| 5 | `CLOSE` | Yes |
-| 6 | `MKDIR` | Yes |
-| 7 | `CHDIR` | Yes |
-| 8 | `UNLINK` | Yes |
-| 9 | `GETPID` | Yes |
-| 10 | `TIMESB` | Yes |
-| 11 | `GETCWD` | Yes |
-| 12 | `YIELD` | Yes |
-| 13 | `RENAME` | Yes |
-| 14 | `LINK` | Yes |
-| 15 | `MOUNT` | Yes |
-| 16 | `UNMOUNT` | Yes |
-| 17 | `PIPE_CREATE` | Yes |
-| 18 | `NSTREAM` | Yes |
-| 19 | `STREAM_READ` | Yes |
-| 20 | `STREAM_WRITE` | Yes |
-| 21 | `PROCREATE` | Yes |
-| 22 | `WAIT` | Yes |
-| 23 | `READDIR` | Yes |
+All 24 syscalls below are registered in the kernel dispatch table. Numbers are
+defined in `libc/include/panuti/syscall/syscallno.h`; any number outside this
+range returns `PANUTIERRNO_INVALIDSYSCALL`.
+
+| # | Name | # | Name |
+|---|---|---|---|
+| 0 | `WRITE` | 12 | `YIELD` |
+| 1 | `EXIT` | 13 | `RENAME` |
+| 2 | `OPEN` | 14 | `LINK` |
+| 3 | `READ` | 15 | `MOUNT` |
+| 4 | `ACTIVATE` | 16 | `UNMOUNT` |
+| 5 | `CLOSE` | 17 | `PIPE_CREATE` |
+| 6 | `MKDIR` | 18 | `NSTREAM` |
+| 7 | `CHDIR` | 19 | `STREAM_READ` |
+| 8 | `UNLINK` | 20 | `STREAM_WRITE` |
+| 9 | `GETPID` | 21 | `PROCREATE` |
+| 10 | `TIMESB` | 22 | `WAIT` |
+| 11 | `GETCWD` | 23 | `READDIR` |
 
 ## Limits
 
