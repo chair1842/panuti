@@ -25,16 +25,15 @@ static uint32_t task_count = 0;
 static task_t tasks[MAX_TASKS] = {0};
 
 static void task_init_default_streams(task_t* t) {
+	t->no_out_streams = 0;
+	t->no_in_streams = 0;
+
 	if (handle_build("/dvc/console", &t->out_streams[0])) {
 		t->no_out_streams = 1;
-	} else {
-		t->no_out_streams = 0;
 	}
 
 	if (handle_build("/dvc/kbd/line", &t->in_streams[0])) {
 		t->no_in_streams = 1;
-	} else {
-		t->no_in_streams = 0;
 	}
 }
 
@@ -407,6 +406,8 @@ static int install_stream(task_t* caller, int fd, handle_t* dest) {
 		return -1;
 	}
 
+	stream_unref(dest);
+
 	*dest = caller->handles[fd];
 	if (dest->type == INODE_PIPE) {
 		/* pipe impls have no inode; keep the shared pipe_end alive instead */
@@ -475,26 +476,20 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	if (args->no_in_streams > 0) {
-		for (int i = 0; i < args->no_in_streams; i++) {
-			if (install_stream(caller, args->in_streams[i], &t->in_streams[i]) != 0) {
-				procreate_cleanup(t);
-				return PANUTIERRNO_BADFD;
-			}
+	for (int i = 0; i < args->no_in_streams; i++) {
+		if (install_stream(caller, args->in_streams[i], &t->in_streams[i]) != 0) {
+			procreate_cleanup(t);
+			return PANUTIERRNO_BADFD;
 		}
-		
-		t->no_in_streams = args->no_in_streams;
+		t->no_in_streams = i + 1;
 	}
 
-	if (args->no_out_streams > 0) {
-		for (int i = 0; i < args->no_out_streams; i++) {
-			if (install_stream(caller, args->out_streams[i], &t->out_streams[i]) != 0) {
-				procreate_cleanup(t);
-				return PANUTIERRNO_BADFD;
-			}
+	for (int i = 0; i < args->no_out_streams; i++) {
+		if (install_stream(caller, args->out_streams[i], &t->out_streams[i]) != 0) {
+			procreate_cleanup(t);
+			return PANUTIERRNO_BADFD;
 		}
-		
-		t->no_out_streams = args->no_out_streams;
+		t->no_out_streams = i + 1;
 	}
 
 	task_init_user_stack(t, (void (*)(void))(uint32_t)entry, user_esp);
