@@ -25,7 +25,7 @@ typedef struct {
 	struct inode* inode;
 } handle_t;
 
-#define MAX_HANDLES 32
+#define MAX_HANDLES 64
 
 int op_not_supported_rw(void* impl, void* buf, size_t len);
 int op_not_supported_w(void* impl, const void* buf, size_t len);
