@@ -14,3 +14,10 @@ now you can make your own program for panuti!
 use the i686-panuti toolchain. if you don't ill eat you.
 
 don't delete the cloned panuti repo too
+
+
+the panuti libc isn't explicitly compatible with posix and traditional unix.
+
+if you want a traditional libc anyways, make your own. 😉
+
+basically, if you come to panuti expecting a traditional unix environment, good luck.

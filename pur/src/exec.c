@@ -6,6 +6,8 @@
 
 #include <panuti/errno.h>
 #include <panuti/handle.h>
+#include <panuti/stat.h>
+#include <panuti/inode_type.h>
 #include <panuti/process.h>
 #include <panuti/syscall/syscallsf.h>
 
@@ -338,26 +340,6 @@ static bool is_explicit_path(const char* s) {
 	return false;
 }
 
-// 0 - missing, 1 - present, 2 - a directory, -1 - cannot tell
-static int file_exists(const char* path) {
-	int fd = handle_open(path);
-
-	if (fd >= 0) {
-		handle_close(fd);
-		return 1;
-	}
-
-	if (fd == (int)PANUTIERRNO_NOTFOUND) {
-		return 0;
-	}
-
-	if (fd == (int)PANUTIERRNO_UNSUPPORTEDOP) {
-		return 2;
-	}
-
-	return -1;
-}
-
 static int resolve_path(const char* name, char* out, size_t outsz) {
 	if (is_explicit_path(name)) {
 		if (strlen(name) + 1 > outsz) {
@@ -398,18 +380,20 @@ static int check_leaf(int leaf, char* path, size_t pathsz) {
 		return PUR_EXEC_ERR_NOTFOUND;
 	}
 
-	switch (file_exists(path)) {
-		case 1:
-			return PUR_EXEC_OK;
-		case 0:
-			printf("pur: %s: command not found (%s)\n", argv[0], path);
-			return PUR_EXEC_ERR_NOTFOUND;
-		case 2:
-			printf("pur: %s: command provided is a directory (%s)\n", argv[0], path);
-			return PUR_EXEC_ERR_ISDIR;
-		default:
-			return PUR_EXEC_OK;
+	// nexist is the cheap answer, and a miss is the common case while walking
+	// PATH, so ask it first and only spend a stat telling a directory apart
+	if (!nexist(path)) {
+		printf("pur: %s: command not found (%s)\n", argv[0], path);
+		return PUR_EXEC_ERR_NOTFOUND;
 	}
+
+	dirent_entry_t entry;
+	if (stat(path, &entry) == 0 && entry.type == INODE_DIR) {
+		printf("pur: %s: command provided is a directory (%s)\n", argv[0], path);
+		return PUR_EXEC_ERR_ISDIR;
+	}
+
+	return PUR_EXEC_OK;
 }
 
 static int open_default(const char* path, int* dest) {
