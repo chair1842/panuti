@@ -247,7 +247,15 @@ static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* 
 		uint8_t dr_len = buf[offset];
 
 		if (dr_len == 0) {
-			break;
+			// a record never crosses a sector boundary, so the rest of this
+			// sector is padding and the directory carries on in the next one
+			uint32_t next = ((offset / fs->block_size) + 1) * fs->block_size;
+			if (next >= sd_len) {
+				break; // that was the last sector
+			}
+
+			offset = next;
+			continue;
 		}
 
 		if (dr_len < 34 || (offset + dr_len) > sd_len) {
@@ -419,7 +427,15 @@ static int isofs_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, 
 		uint8_t dr_len = buf[offset];
 
 		if (dr_len == 0) {
-			break; // no more records in this sector
+			// a record never crosses a sector boundary, so the rest of this
+			// sector is padding and the directory carries on in the next one
+			uint32_t next = ((offset / fs->block_size) + 1) * fs->block_size;
+			if (next >= sd_len) {
+				break; // that was the last sector
+			}
+
+			offset = next;
+			continue;
 		}
 
 		if (dr_len < 34 || (offset + dr_len) > sd_len) {
