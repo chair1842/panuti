@@ -204,7 +204,7 @@ static int parse_group(int depth, int *out) {
 		return PUR_PARSE_ERR_NODES;
 	}
 
-	/* a group with one member is transparent: (a) is just a */
+	// a group with one member is transparent: (a) is just a
 	*out = count == 1 ? members[0] : g;
 	return PUR_PARSE_OK;
 }

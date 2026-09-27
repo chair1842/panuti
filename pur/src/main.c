@@ -11,8 +11,8 @@
 #include <stdio.h>
 #include <string.h>
 
-/* -n and -c both take the statement as the rest of the command line, so the
-   arguments get joined back into the single string the parser wants */
+// -n and -c both take the statement as the rest of the command line, so the
+// arguments get joined back into the single string the parser wants
 static int join_statement(int argc, char** argv, char* buf, size_t cap) {
 	char* p = buf;
 
@@ -51,12 +51,12 @@ int main(int argc, char** argv) {
 			return pur_builtin_help();
 		}
 
-		/* -n <statement>: wire it, report stream counts, run nothing
-		   -c <statement>: run it, then exit with the pipeline's status */
+		// -n <statement>: wire it, report stream counts, run nothing
+		// -c <statement>: run it, then exit with the pipeline's status
 		if (argc > 2 && (strcmp(argv[1], "-n") == 0 || strcmp(argv[1], "-c") == 0)) {
 			bool dry_run = argv[1][1] == 'n';
 
-			/* static: pur only has 4 pages of user stack to give away */
+			// static: pur only has 4 pages of user stack to give away
 			static char stmt_buf[PUR_LINE_MAX];
 
 			if (join_statement(argc, argv, stmt_buf, sizeof(stmt_buf)) != 0) {
@@ -79,8 +79,8 @@ int main(int argc, char** argv) {
 				return 1;
 			}
 
-			/* exit statuses are 8 bits, and a child that returned -1 comes
-			   back as 0xffffffff, so bring it into range */
+			// exit statuses are 8 bits, and a child that returned -1 comes
+			// back as 0xffffffff, so bring it into range
 			return dry_run ? 0 : (int)(status & 0xff);
 		}
 	}

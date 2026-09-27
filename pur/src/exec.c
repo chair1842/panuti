@@ -114,9 +114,9 @@ static int outputs_collect(int node, int *out, int *n) {
 
 static int deliver_external(const int* srcs, int nsrc, int node);
 
-/* Wire one statement's own output into its right hand side. An internal edge
- * flows through groups all the way down, because inside a compound every
- * member is downstream of the same source. */
+// Wire one statement's own output into its right hand side. An internal edge
+// flows through groups all the way down, because inside a compound every
+// member is downstream of the same source.
 static int deliver_internal(const int* srcs, int nsrc, int node) {
 	pur_node_t* p = &pur_nodes[node];
 
@@ -143,10 +143,10 @@ static int deliver_internal(const int* srcs, int nsrc, int node) {
 	return deliver_internal(srcs, nsrc, p->rhs);
 }
 
-/* Wire a stream that arrives from outside the compound into the commands
- * that can actually read it: the bare leaves directly reachable from the
- * sink position. A group one level down is a boundary, because what sits
- * behind it is that group's own business. */
+// Wire a stream that arrives from outside the compound into the commands
+// that can actually read it: the bare leaves directly reachable from the
+// sink position. A group one level down is a boundary, because what sits
+// behind it is that group's own business.
 static int wire_bare_sides(const int* srcs, int nsrc, int node) {
 	pur_node_t* p = &pur_nodes[node];
 
@@ -205,9 +205,9 @@ static int deliver_external(const int* srcs, int nsrc, int node) {
 	return wire_bare_sides(srcs, nsrc, node);
 }
 
-/* wire_self is false for the root: the root's own '>' is a boundary between
- * what came before and the compound on the right, so it is wired by
- * deliver_external instead. */
+// wire_self is false for the root: the root's own '>' is a boundary between
+// what came before and the compound on the right, so it is wired by
+// deliver_external instead.
 static int wire_internals(int node, bool wire_self) {
 	pur_node_t *p = &pur_nodes[node];
 
@@ -247,8 +247,8 @@ static int wire_internals(int node, bool wire_self) {
 		return rc;
 	}
 
-	/* inside a compound the right hand side is downstream of the left, so
-	 * the edge reaches through any group all the way down */
+	// inside a compound the right hand side is downstream of the left, so
+	// the edge reaches through any group all the way down
 	return deliver_internal(outs, nouts, p->rhs);
 }
 
@@ -339,7 +339,7 @@ static bool is_explicit_path(const char* s) {
 	return false;
 }
 
-/* 0 - missing, 1 - present, 2 - a directory, -1 - cannot tell */
+// 0 - missing, 1 - present, 2 - a directory, -1 - cannot tell
 static int file_exists(const char* path) {
 	int fd = handle_open(path);
 
@@ -512,7 +512,7 @@ static int wire_graph(void) {
 	return deliver_external(outs, nouts, pur_nodes[pur_root].rhs);
 }
 
-/* -n: wire the statement, print the per command stream counts, run nothing */
+// -n: wire the statement, print the per command stream counts, run nothing
 int pur_exec_plan(void) {
 	int rc = wire_graph();
 	if (rc != PUR_EXEC_OK) {
@@ -544,7 +544,7 @@ int pur_exec(int* status_out) {
 		return PUR_EXEC_OK;
 	}
 
-	/* an unwired single command is only in process if it is a built-in */
+	// an unwired single command is only in process if it is a built-in
 	if (nedges == 0 && pur_nleaves == 1) {
 		char* av[PUR_MAX_ARGV];
 

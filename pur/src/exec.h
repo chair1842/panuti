@@ -16,10 +16,10 @@ typedef enum {
 	PUR_EXEC_ERR_BUILTIN,
 } pur_exec_status_t;
 
-/* Runs the parsed statement. Returns PUR_EXEC_OK, or one of the positive
- * PUR_EXEC_ERR_* codes, so callers must test against PUR_EXEC_OK and never
- * against < 0. The pipeline's exit status (lowest nonzero child code, 0 if all
- * succeeded) is stored in *status_out. */
+// Runs the parsed statement. Returns PUR_EXEC_OK, or one of the positive
+// PUR_EXEC_ERR_* codes, so callers must test against PUR_EXEC_OK and never
+// against < 0. The pipeline's exit status (lowest nonzero child code, 0 if all
+// succeeded) is stored in *status_out.
 int pur_exec(int* status_out);
 int pur_exec_plan(void);
 int pur_builtin_help(void);
