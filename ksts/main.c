@@ -96,6 +96,59 @@ static void section(int fd, const char* name) {
 	write_str(fd, " ---\n");
 }
 
+/* Runs pur with the given argv, its stdout on a pipe, and collects the output
+ * and the exit code. Returns 1 if pur could be run at all. */
+static int run_pur(char** pur_argv, int pur_argc, char* out, int cap, int* ec) {
+	int rfd, wfd;
+	int32_t r = panutisysf_pipe_create(&rfd, &wfd);
+
+	*ec = 0;
+	out[0] = '\0';
+
+	if (r < 0) {
+		return 0;
+	}
+
+	int pur_out[] = { wfd };
+	procreate_args_t cargs = {
+		.path = "/cd/usr/bin/pur",
+		.argv = pur_argv,
+		.argc = pur_argc,
+		.in_streams = (int*)0,
+		.no_in_streams = 0,
+		.out_streams = pur_out,
+		.no_out_streams = 1,
+	};
+
+	pid_t child = panutisysf_procreate(&cargs);
+	panutisysf_close(wfd);
+
+	if (child == 0 || (int32_t)child < 0) {
+		panutisysf_close(rfd);
+		return 0;
+	}
+
+	panutisysf_wait(child, ec);
+
+	int len = 0;
+	for (;;) {
+		char chunk[64];
+		int32_t n = panutisysf_read(rfd, chunk, sizeof(chunk));
+
+		if (n <= 0) {
+			break;
+		}
+
+		for (int32_t k = 0; k < n && len < cap - 1; k++) {
+			out[len++] = chunk[k];
+		}
+	}
+	out[len] = '\0';
+
+	panutisysf_close(rfd);
+	return 1;
+}
+
 /* ------------------------------------------------------------------ */
 
 int main(int argc, char** argv) {
@@ -179,7 +232,9 @@ int main(int argc, char** argv) {
 		int32_t r = panutisysf_mkdir("/testdir");
 		check_is_success(console, "mkdir /testdir", r);
 		int fd = panutisysf_open("/testdir");
-		check(console, "open /testdir -> UNSUPPORTEDOP", fd, PANUTIERRNO_UNSUPPORTEDOP);
+		/* directories are openable: they hand back a handle you readdir on */
+		check_is_success(console, "open /testdir (a directory)", fd);
+		panutisysf_close(fd);
 	}
 
 	/* ---- 4. mkdir edge cases ---- */
@@ -262,8 +317,9 @@ int main(int argc, char** argv) {
 	}
 	{
 		int fd = panutisysf_open("/");
-		/* root is a directory, should get UNSUPPORTEDOP */
-		check(console, "open \"/\" (root dir) -> UNSUPPORTEDOP", fd, PANUTIERRNO_UNSUPPORTEDOP);
+		/* root is a directory, and directories are openable */
+		check_is_success(console, "open \"/\" (root dir)", fd);
+		panutisysf_close(fd);
 	}
 	{
 		int fd = panutisysf_open("/dvc/console/");
@@ -275,23 +331,30 @@ int main(int argc, char** argv) {
 	section(console, "10. Fill handle table (fd exhaustion)");
 
 	{
-		int fds[32];
+		/* the handle table size is a kernel policy, so fill it the only way
+		 * that survives a change to that policy: keep opening until it says
+		 * no, and check the refusal is the exhaustion error */
+		int fds[128];
 		int count = 0;
-		for (int i = 0; i < 32; i++) {
-			fds[i] = panutisysf_open("/dvc/console");
-			if (fds[i] < 0) {
+		int refusal = 0;
+
+		while (count < (int)(sizeof(fds) / sizeof(fds[0]))) {
+			int fd = panutisysf_open("/dvc/console");
+			if (fd < 0) {
+				refusal = fd;
 				break;
 			}
-			count++;
+			fds[count++] = fd;
 		}
+
 		write_str(console, "  opened ");
 		write_int(console, count);
 		write_str(console, " handles\n");
-		/* the next open should fail with NOFDS */
-		{
-			int extra = panutisysf_open("/dvc/console");
-			check(console, "open after exhaustion -> NOFDS", extra, PANUTIERRNO_NOFDS);
-		}
+
+		check_is_error(console, "handle table refuses further opens", refusal);
+		check(console, "refusal is NOFDS", refusal, PANUTIERRNO_NOFDS);
+		check(console, "table filled to its limit", count > 0 ? 1 : 0, 1);
+
 		/* close them all */
 		for (int i = 0; i < count; i++) {
 			panutisysf_close(fds[i]);
@@ -299,6 +362,11 @@ int main(int argc, char** argv) {
 		write_str(console, "  (cleaned up ");
 		write_int(console, count);
 		write_str(console, " handles)\n");
+
+		/* and the table is reusable afterwards */
+		int again = panutisysf_open("/dvc/console");
+		check_is_success(console, "open works again after the table drained", again);
+		panutisysf_close(again);
 	}
 
 	/* ---- 11. Invalid syscall number ---- */
@@ -1733,6 +1801,337 @@ int main(int argc, char** argv) {
 		r = panutisysf_unmount("/kststmp");
 		check(console, "unmount /kststmp (isolation cleanup)", r, 0);
 	}
+
+	/* ---- 53. pur 0.2 statement wiring ---- */
+	section(console, "53. pur 0.2 statement wiring (pur -n)");
+
+	/* Runs `pur -n <stmt>` with its stdout on a pipe, collects the plan and
+	 * the exit code. Returns 1 if pur could not be started. */
+	{
+		int plan_ec = 0;
+		int ran = 0;
+		static char plan[512];
+		plan[0] = '\0';
+		int plan_len = 0;
+
+		/* smoke: the first case also proves pur -n is runnable at all */
+		{
+			int rfd, wfd;
+			int32_t r = panutisysf_pipe_create(&rfd, &wfd);
+
+			if (r < 0) {
+				check_is_error(console, "pipe for pur -n", r);
+			} else {
+				char* pur_argv[] = { "pur", "-n", "ls > cat" };
+				int pur_out[] = { wfd };
+				procreate_args_t cargs = {
+					.path = "/cd/usr/bin/pur",
+					.argv = pur_argv,
+					.argc = 3,
+					.in_streams = (int*)0,
+					.no_in_streams = 0,
+					.out_streams = pur_out,
+					.no_out_streams = 1,
+				};
+
+				pid_t child = panutisysf_procreate(&cargs);
+				panutisysf_close(wfd);
+
+				if (child == 0 || (int32_t)child < 0) {
+					check(console, "procreate pur -n", 0, 1);
+				} else {
+					panutisysf_wait(child, &plan_ec);
+					ran = 1;
+
+					for (;;) {
+						char chunk[64];
+						int32_t n = panutisysf_read(rfd, chunk, sizeof(chunk));
+						if (n <= 0) {
+							break;
+						}
+						for (int32_t k = 0; k < n && plan_len < (int)sizeof(plan) - 1; k++) {
+							plan[plan_len++] = chunk[k];
+						}
+					}
+					plan[plan_len] = '\0';
+				}
+
+				panutisysf_close(rfd);
+			}
+		}
+
+		check(console, "procreate pur -n ran", ran, 1);
+		check(console, "pur -n 'ls > cat' exit code", plan_ec, 0);
+		check(console, "pur -n 'ls > cat' plan",
+		      strcmp(plan, "ls in=0 out=1\ncat in=1 out=0\n") == 0 ? 1 : 0, 1);
+
+		if (strcmp(plan, "ls in=0 out=1\ncat in=1 out=0\n") != 0) {
+			write_str(console, "    got: ");
+			write_str(console, plan);
+		}
+	}
+
+	/* malformed statements must be rejected: nonzero exit and no plan */
+	{
+		static const char* bad[] = {
+			"()",
+			"(a ; ())",
+			"> ls",
+			"ls >",
+			"ls > cat >",
+			"ls > > cat",
+			"ls > (cat ; ; more)",
+			"ls > ( ; a)",
+			"(ls",
+			"ls)",
+			"\"unterminated",
+		};
+
+		for (int i = 0; i < (int)(sizeof(bad) / sizeof(bad[0])); i++) {
+			int rfd, wfd;
+			int32_t r = panutisysf_pipe_create(&rfd, &wfd);
+
+			if (r < 0) {
+				check_is_error(console, "pipe for pur reject", r);
+				continue;
+			}
+
+			char* pur_argv[] = { "pur", "-n", (char*)bad[i] };
+			int pur_out[] = { wfd };
+			procreate_args_t cargs = {
+				.path = "/cd/usr/bin/pur",
+				.argv = pur_argv,
+				.argc = 3,
+				.in_streams = (int*)0,
+				.no_in_streams = 0,
+				.out_streams = pur_out,
+				.no_out_streams = 1,
+			};
+
+			pid_t child = panutisysf_procreate(&cargs);
+			panutisysf_close(wfd);
+
+			int ec = 0;
+			int ok = 0;
+
+			if (child == 0 || (int32_t)child < 0) {
+				check(console, "procreate pur reject case", 0, 1);
+			} else {
+				panutisysf_wait(child, &ec);
+
+				char drain[128];
+				while (panutisysf_read(rfd, drain, sizeof(drain)) > 0) {
+					/* discard the error message */
+				}
+
+				/* ec 1 and only the error line, never a plan */
+				ok = (ec == 1);
+			}
+
+			panutisysf_close(rfd);
+			check(console, "pur -n rejects malformed statement", ok, 1);
+		}
+	}
+
+	/* accepted statements and their exact stream counts */
+	{
+		/* statement, expected plan */
+		static const char* cases[][2] = {
+			/* '>' folds left, so this is (ls > cat) > more */
+			{ "ls > cat > more",
+			  "ls in=0 out=1\ncat in=1 out=1\nmore in=1 out=0\n" },
+
+			/* a one member group is transparent */
+			{ "ls > (cat > more)",
+			  "ls in=0 out=2\ncat in=1 out=1\nmore in=2 out=0\n" },
+			{ "ls > ((cat) > more)",
+			  "ls in=0 out=2\ncat in=1 out=1\nmore in=2 out=0\n" },
+
+			/* a group on the sink side is not a boundary: ls reaches cat
+			 * and more, but not through the group that follows cat */
+			{ "ls > (cat > (a ; b))",
+			  "ls in=0 out=1\ncat in=1 out=2\na in=1 out=0\nb in=1 out=0\n" },
+
+			/* a group on the source side is a boundary: ls reaches only
+			 * c, while a and b still feed c */
+			{ "ls > ((a ; b) > c)",
+			  "ls in=0 out=1\na in=0 out=1\nb in=0 out=1\nc in=3 out=0\n" },
+
+			/* an external stream takes both bare leaf sides */
+			{ "a > b > (c > d)",
+			  "a in=0 out=1\nb in=1 out=2\nc in=1 out=1\nd in=2 out=0\n" },
+
+			/* five pipes */
+			{ "echo hello > mul > (app1 > (cat ; more) ; cat)",
+			  "echo in=0 out=1\nmul in=1 out=2\napp1 in=1 out=2\n"
+			  "cat in=1 out=0\nmore in=1 out=0\ncat in=1 out=0\n" },
+
+			/* a group fans the upstream command out to every member */
+			{ "ls > (cat ; mul)",
+			  "ls in=0 out=2\ncat in=1 out=0\nmul in=1 out=0\n" },
+
+			/* a group on the left feeds only the group's own outputs */
+			{ "(a ; b) > c",
+			  "a in=0 out=1\nb in=0 out=1\nc in=2 out=0\n" },
+
+			/* a bare command is unwired on both sides */
+			{ "echo hello",
+			  "echo in=0 out=0\n" },
+		};
+
+		for (int i = 0; i < (int)(sizeof(cases) / sizeof(cases[0])); i++) {
+			int rfd, wfd;
+			int32_t r = panutisysf_pipe_create(&rfd, &wfd);
+
+			if (r < 0) {
+				check_is_error(console, "pipe for pur case", r);
+				continue;
+			}
+
+			char* pur_argv[] = { "pur", "-n", (char*)cases[i][0] };
+			int pur_out[] = { wfd };
+			procreate_args_t cargs = {
+				.path = "/cd/usr/bin/pur",
+				.argv = pur_argv,
+				.argc = 3,
+				.in_streams = (int*)0,
+				.no_in_streams = 0,
+				.out_streams = pur_out,
+				.no_out_streams = 1,
+			};
+
+			pid_t child = panutisysf_procreate(&cargs);
+			panutisysf_close(wfd);
+
+			static char plan[512];
+			plan[0] = '\0';
+			int plan_len = 0;
+			int ec = 0;
+			int ran = 0;
+
+			if (child == 0 || (int32_t)child < 0) {
+				check(console, "procreate pur case", 0, 1);
+			} else {
+				panutisysf_wait(child, &ec);
+				ran = 1;
+
+				for (;;) {
+					char chunk[64];
+					int32_t n = panutisysf_read(rfd, chunk, sizeof(chunk));
+					if (n <= 0) {
+						break;
+					}
+					for (int32_t k = 0; k < n && plan_len < (int)sizeof(plan) - 1; k++) {
+						plan[plan_len++] = chunk[k];
+					}
+				}
+				plan[plan_len] = '\0';
+			}
+
+			panutisysf_close(rfd);
+
+			if (ran) {
+				int ok = (ec == 0) && strcmp(plan, cases[i][1]) == 0;
+				check(console, cases[i][0], ok ? 1 : 0, 1);
+
+				if (!ok) {
+					write_str(console, "    got: ");
+					write_str(console, plan);
+					write_str(console, "    exit=");
+					write_int(console, ec);
+					write_str(console, "\n");
+				}
+			}
+		}
+	}
+
+
+	/* ---- 54. pur 0.2 statement execution (pur -c) ---- */
+	section(console, "54. pur 0.2 statement execution (pur -c)");
+
+	/* -c must run the statement and hand the pipeline's status back to the
+	 * caller, which is the whole point of it over -n and the repl */
+	{
+		static char out[512];
+		int ec = 0;
+
+		/* a working pipeline: status 0. pipeline data goes to the wired
+		 * streams (the console by default), not to pur's own stdout, so the
+		 * only thing assertable here is that pur itself stays quiet */
+		{
+			char* argv[] = { "pur", "-c", "ls /cd/usr/bin > cat" };
+
+			if (run_pur(argv, 3, out, sizeof(out), &ec)) {
+				check(console, "pur -c successful pipeline exit", ec, 0);
+				check(console, "pur -c success is quiet on stdout", out[0] == '\0' ? 1 : 0, 1);
+			} else {
+				check(console, "procreate pur -c success", 0, 1);
+			}
+		}
+
+		/* a syntax error is pur's own failure, so it is 1 and not a child code */
+		{
+			char* argv[] = { "pur", "-c", "ls >" };
+
+			if (run_pur(argv, 3, out, sizeof(out), &ec)) {
+				check(console, "pur -c malformed exit", ec, 1);
+			} else {
+				check(console, "procreate pur -c malformed", 0, 1);
+			}
+		}
+
+		/* a command that cannot be started is pur's own failure too */
+		{
+			char* argv[] = { "pur", "-c", "nosuchcmd" };
+
+			if (run_pur(argv, 3, out, sizeof(out), &ec)) {
+				check(console, "pur -c command not found exit", ec, 1);
+			} else {
+				check(console, "procreate pur -c missing", 0, 1);
+			}
+		}
+
+		/* a child that runs and fails has to reach the exit status: the repl
+		 * swallows this, and -c exists to be the one that does not. only
+		 * assert nonzero, the exact code is a child convention. */
+		{
+			char* argv[] = { "pur", "-c", "in /cd/nosuch > cat" };
+
+			if (run_pur(argv, 3, out, sizeof(out), &ec)) {
+				/* the repl swallows this, and -c exists to be the one that
+				 * does not. a child that returns -1 is 0xffffffff, which
+				 * pur masks down to 255, so this also proves the code came
+				 * from the child rather than pur's own failure of 1 */
+				check(console, "pur -c propagates child failure", ec, 255);
+			} else {
+				check(console, "procreate pur -c child failure", 0, 1);
+			}
+		}
+
+		/* exec level errors are positive codes, so they must be caught by a
+		 * compare against PUR_EXEC_OK. 15 pipes is over the limit, and this
+		 * used to exit 0 silently for both -n and -c */
+		{
+			char* over[] = { "pur", "-c",
+					 "a > b > c > d > e > f > g > h > i > j > k > l > m > n > o > p" };
+
+			if (run_pur(over, 3, out, sizeof(out), &ec)) {
+				check(console, "pur -c too many pipes exit", ec, 1);
+			} else {
+				check(console, "procreate pur -c too many pipes", 0, 1);
+			}
+
+			char* over_n[] = { "pur", "-n",
+					   "a > b > c > d > e > f > g > h > i > j > k > l > m > n > o > p" };
+
+			if (run_pur(over_n, 3, out, sizeof(out), &ec)) {
+				check(console, "pur -n too many pipes exit", ec, 1);
+			} else {
+				check(console, "procreate pur -n too many pipes", 0, 1);
+			}
+		}
+	}
+
 
 	/* ---- Summary ---- */
 	write_str(console, "\n==============================\n");

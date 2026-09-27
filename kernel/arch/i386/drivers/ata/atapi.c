@@ -9,6 +9,7 @@
 #include <kernel/block/block.h>
 #include <kernel/timer.h>
 #include <kernel/klog.h>
+#include <kernel/sched/sched.h>
 #include <string.h>
 
 #define ATAPI_SECTOR_SIZE 2048
@@ -50,7 +51,25 @@ static void ata_irq15_handler(registers_t* regs) {
 // of betting on irq timing. with irqs the data can land in the buffer one
 // transfer late (the drive raises intq for the packet phase too), which
 // scrambles which sector we actually read on the next go.
-static int ide_send_packet(
+//
+// a packet exchange drives one shared set of ATA registers and then polls
+// them with `hlt`, so its owner can be descheduled part-way through. without
+// a lock, a second task that reaches the same drive in that window issues its
+// own CDB and status polls against the in-flight transfer: both then read the
+// wrong sectors and usually time out. serialize whole packet exchanges. the
+// owner never blocks (it only ever halts), so it stays runnable and a
+// yielding waiter is guaranteed to make progress.
+static void ide_channel_acquire(ide_channel_t* ch) {
+	while (__sync_lock_test_and_set(&ch->busy, (uint32_t)1)) {
+		sched_schedule();
+	}
+}
+
+static void ide_channel_release(ide_channel_t* ch) {
+	__sync_lock_release(&ch->busy);
+}
+
+static int ide_send_packet_locked(
 	ide_channel_t* ch,
 	const uint8_t cdb[12],
 	void* buf,
@@ -111,6 +130,18 @@ static int ide_send_packet(
 	} while (status & ATA_SR_BSY);
 
 	return BLOCK_OK;
+}
+
+static int ide_send_packet(
+	ide_channel_t* ch,
+	const uint8_t cdb[12],
+	void* buf,
+	size_t transfer_bytes
+) {
+	ide_channel_acquire(ch);
+	int rc = ide_send_packet_locked(ch, cdb, buf, transfer_bytes);
+	ide_channel_release(ch);
+	return rc;
 }
 
 static inline uint32_t read_be32(const uint8_t* p) {

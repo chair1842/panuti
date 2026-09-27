@@ -13,38 +13,35 @@ DESTDIR?=
 PREFIX?=/usr/local
 EXEC_PREFIX?=$(PREFIX)
 BOOTDIR?=$(EXEC_PREFIX)/boot
+BINDIR?=$(EXEC_PREFIX)/bin
 INCLUDEDIR?=$(PREFIX)/include
 
 CFLAGS:=$(CFLAGS) -Wall -Wextra -Wa,--noexecstack
 
-OBJS=\
-main.o \
+NAME=pur
+SRCS:=$(wildcard src/*.c)
+OBJS:=$(SRCS:.c=.o)
+DEPS:=$(OBJS:.o=.d)
 
-BINARY=pur
+BINARY=$(NAME)
 
 .PHONY: all clean install install-pur
-.SUFFIXES: .o .c .S
 
 all: $(BINARY)
+
+src/%.o: src/%.c
+	$(CC) -MD -std=gnu23 $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 $(BINARY): $(OBJS)
 	$(CC) -o $@ $(LDFLAGS) $(OBJS)
 
-.c.o:
-	$(CC) -MD -c $< -o $@ -std=gnu23 $(CFLAGS) $(CPPFLAGS)
-
-.S.o:
-	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
-
 clean:
-	rm -f $(BINARY)
-	rm -f $(OBJS)
-	rm -f $(OBJS:.o=.d)
+	rm -f $(BINARY) $(OBJS) $(DEPS)
 
 install: install-pur
 
 install-pur: $(BINARY)
 	mkdir -p $(DESTDIR)$(BINDIR)
-	cp $(BINARY) $(DESTDIR)$(BINDIR)/$(BINARY)
+	cp $(BINARY) $(DESTDIR)$(BINDIR)/$(NAME)
 
--include $(OBJS:.o=.d)
+-include $(DEPS)

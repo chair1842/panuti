@@ -25,6 +25,17 @@ static uint32_t task_count = 0;
 static task_t tasks[MAX_TASKS] = {0};
 
 static void task_init_default_streams(task_t* t) {
+	// a recycled slot still holds the handle_t copies the previous task left
+	// in its stream arrays. those ends were already released by
+	// task_destroy(), and install_stream() unrefs whatever it is handed
+	// before overwriting it -- so leaving them in place would release memory
+	// that the allocator may already have handed to somebody else. start the
+	// slot out with empty stream arrays.
+	for (int i = 0; i < MAX_STREAMS; i++) {
+		t->in_streams[i] = (handle_t){0};
+		t->out_streams[i] = (handle_t){0};
+	}
+
 	t->no_out_streams = 0;
 	t->no_in_streams = 0;
 

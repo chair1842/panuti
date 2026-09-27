@@ -49,6 +49,9 @@ typedef struct ide_channel {
 	uint64_t block_count;
 	
 	volatile bool irq_fired;
+
+	// set while a task owns the channel's registers; see ide_send_packet
+	volatile uint32_t busy;
 } ide_channel_t;
 
 uint8_t ide_read_reg(ide_channel_t* ch, uint8_t offset);

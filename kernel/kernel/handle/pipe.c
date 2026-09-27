@@ -132,7 +132,9 @@ int pipe_end_ref(pipe_end_t* end) {
 	return 0;
 }
 
-int pipe_end_unref(pipe_end_t* end) {
+// the last holder of this end lets go: signal EOF to the peer end, then drop
+// the end and the pipe reference it was holding
+static void pipe_end_release(pipe_end_t* end) {
 	pipe_t* p = end->pipe;
 
 	if (end->is_write_end) {
@@ -149,20 +151,23 @@ int pipe_end_unref(pipe_end_t* end) {
 	}
 
 	kfree(end);
+}
+
+// one holder gives up its reference. an end is shared between the creating
+// task's handle table and every child it was installed into, so it must only
+// be released (and only signal EOF) once all of them have let go.
+int pipe_end_unref(pipe_end_t* end) {
+	if (--end->refcount > 0) {
+		return 0;
+	}
+
+	pipe_end_release(end);
 	return 0;
 }
 
 int pipe_close(void* impl, struct task* self) {
 	(void)self;
-	pipe_end_t* end = impl;
-
-	// a pipe end may be shared with child tasks via install_stream(); only
-	// free it (and mark it closed) once every holder has released its ref
-	if (--end->refcount > 0) {
-		return 0;
-	}
-
-	return pipe_end_unref(end);
+	return pipe_end_unref((pipe_end_t*)impl);
 }
 
 pipe_end_t* pipe_end_create(pipe_t* pipe, bool is_write_end) {
