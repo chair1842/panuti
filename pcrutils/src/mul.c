@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
-#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -10,7 +9,7 @@
 
 static void print_help(void) {
 	printf("mul - a pcrutils utility\n\n");
-	printf("mul copies in stream 0 to every out stream until in stream 0 ends\n");
+	printf("mul copies in0 to every out stream until in0 ends\n");
 	printf("it is the way to fan a keyboard line out to several commands\n\n");
 	printf("usage:\n");
 	printf("  mul\n\n");

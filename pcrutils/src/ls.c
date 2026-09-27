@@ -3,9 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <panuti/handle.h>
+#include <panuti/stat.h>
 #include <panuti/dirent.h>
 #include <panuti/inode_type.h>
-#include <panuti/syscall/syscallsf.h>
 
 static int show_hidden = 0;
 static int no_type = 0;
@@ -48,7 +48,7 @@ static size_t dir_max_width(const char* path) {
 	size_t w = 0;
 	dirent_entry_t entry;
 	int rc;
-	while ((rc = panutisysf_readdir(fd, &entry)) == 0) {
+	while ((rc = readdir(fd, &entry)) == 0) {
 		if (!show_hidden && is_hidden(entry.name)) {
 			continue;
 		}
@@ -74,7 +74,7 @@ static int list_dir(const char* path, size_t maxw) {
 
 	dirent_entry_t entry;
 	int rc;
-	while ((rc = panutisysf_readdir(fd, &entry)) == 0) {
+	while ((rc = readdir(fd, &entry)) == 0) {
 		if (!show_hidden && is_hidden(entry.name)) {
 			continue;
 		}

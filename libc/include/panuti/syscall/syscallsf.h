@@ -133,4 +133,8 @@ static inline int32_t panutisysf_stat(const char* path, dirent_entry_t* dirent_o
 	return panuti_syscall(SYSHANDLER_STAT, (uint32_t)path, (uint32_t)dirent_out, 0, 0);
 }
 
+static inline int32_t panutisysf_nexist(const char* path) {
+	return panuti_syscall(SYSHANDLER_NEXIST, (uint32_t)path, 0, 0, 0);
+}
+
 #endif

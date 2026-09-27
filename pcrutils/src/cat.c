@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
-#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -14,7 +13,7 @@ static bool only_out0 = false;
 
 static void print_help(void) {
 	printf("cat - a pcrutils utility\n\n");
-	printf("cat copies files to all out streams, or copies in stream 0\n");
+	printf("cat copies files to all out streams, or copies in0\n");
 	printf("when no file is given\n\n");
 	printf("usage:\n");
 	printf("  cat [path ...]\n\n");

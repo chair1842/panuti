@@ -3,8 +3,6 @@
 #ifndef PUR_EXEC_H
 #define PUR_EXEC_H
 
-#include <stdbool.h>
-
 typedef enum {
 	PUR_EXEC_OK = 0,
 	PUR_EXEC_ERR_PIPES,

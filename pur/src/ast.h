@@ -3,8 +3,6 @@
 #ifndef PUR_AST_H
 #define PUR_AST_H
 
-#include <stdbool.h>
-
 #define PUR_MAX_TOKENS 256
 #define PUR_MAX_NODES 256
 #define PUR_MAX_LEAVES 16

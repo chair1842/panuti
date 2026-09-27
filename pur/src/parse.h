@@ -3,8 +3,6 @@
 #ifndef PUR_PARSE_H
 #define PUR_PARSE_H
 
-#include <stdbool.h>
-
 typedef enum {
 	PUR_PARSE_OK = 0,
 	PUR_PARSE_EMPTY = 1,

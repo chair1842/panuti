@@ -39,6 +39,7 @@ int32_t syshandler_stat(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	inode_t* parent = nullptr;
 	const char* last = nullptr;
 	size_t lastlen = 0;
+	
 	if (registry_splitpath(t->cwd, path, &parent, &last, &lastlen) == 0) {
 		name = last;
 		namelen = lastlen;
@@ -60,6 +61,7 @@ int32_t syshandler_stat(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	if (namelen >= sizeof(entry.name)) {
 		return PANUTIERRNO_PLAINERR;
 	}
+	
 	memcpy(entry.name, name, namelen);
 	entry.name[namelen] = '\0';
 	entry.type = n->type;
