@@ -30,6 +30,7 @@ syscall_handler_t syscall_handlers[256] = {
 	[SYSHANDLER_PROCREATE] = syshandler_procreate,
 	[SYSHANDLER_WAIT] = syshandler_wait,
 	[SYSHANDLER_READDIR] = syshandler_readdir,
+	[SYSHANDLER_STAT] = syshandler_stat,
 };
 
 int32_t syscall_dispatch(uint32_t num, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {

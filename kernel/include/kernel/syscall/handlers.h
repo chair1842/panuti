@@ -78,4 +78,7 @@ int32_t syshandler_wait(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // read dirents from a directory
 int32_t syshandler_readdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// describe a path as a dirent
+int32_t syshandler_stat(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

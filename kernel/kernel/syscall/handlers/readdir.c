@@ -45,6 +45,7 @@ int32_t syshandler_readdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 			strncpy(entry.name, dh->next_inode->name, sizeof(entry.name) - 1);
 			entry.name[sizeof(entry.name) - 1] = '\0';
 			entry.type = dh->next_inode->inode->type;
+			entry.size = 0;
 			dh->next_inode = dh->next_inode->next;
 			rc = 0;
 		}

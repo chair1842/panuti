@@ -320,12 +320,13 @@ static void isofs_finish(void* fs_impl) {
 static int64_t isofs_size(void* fs_impl, struct inode* node) {
 	(void)fs_impl;
 
-	if (!node || node->type != INODE_FILE) {
+	if (!node) {
 		return -1;
 	}
 
 	// the length is already recorded on the dirent when the directory is read,
-	// so this costs nothing and needs no open
+	// so this costs nothing and needs no open. directories report their extent
+	// length too, which is what readdir hands out for them.
 	isofs_dirent_t* fs_n = node->impl;
 	if (!fs_n) {
 		return -1;
@@ -453,6 +454,7 @@ static int isofs_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, 
 			strncpy(out->name, dirent.name, sizeof(out->name) - 1);
 			out->name[sizeof(out->name) - 1] = '\0';
 			out->type = dirent.is_dir ? INODE_DIR : INODE_FILE;
+			out->size = dirent.length; // the extent length recorded on the dirent
 
 			*cursor = offset + dr_len; // resume here next call
 			result = 0;
