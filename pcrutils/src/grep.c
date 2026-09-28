@@ -41,8 +41,8 @@ static int line_reserve(size_t need) {
 
 static void print_help(void) {
 	printf("grep - a pcrutils utility\n\n");
-	printf("grep reads in0, and outputs every line that holds the word\n");
-	printf("it is given. a line is copied out as it came in, newline and all\n\n");
+	printf("grep reads in0, and outputs every line that holds the word it is given.\n");
+	printf("a line is copied out as it came in, newline and all\n\n");
 	printf("usage:\n");
 	printf("  grep <word>\n\n");
 	printf("args:\n");

@@ -8,8 +8,8 @@
 
 static void print_help(void) {
 	printf("cbi - a pcrutils utility\n\n");
-	printf("cbi takes in any amount of input streams and combines them in order\n");
-	printf("and outputs the result to out0\n\n");
+	printf("cbi takes in any amount of input streams and combines them in order.\n");
+	printf("it outputs the result to out0\n\n");
 	printf("args (only the first argument is considered):\n");
 	printf("  -h - prints this help message\n");
 }

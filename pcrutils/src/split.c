@@ -26,15 +26,14 @@ static int mode = SPLIT_LINES;
 
 static void print_help(void) {
 	printf("split - a pcrutils utility\n\n");
-	printf("split reads in stream 0, cuts it into as many parts as there are\n");
-	printf("out streams, and gives one part to each out stream. the parts are\n");
-	printf("cut as evenly as they can be, so they come out the same size to\n");
-	printf("within one line, word or character, and putting them back together\n");
-	printf("gives the input back\n\n");
+	printf("split reads in0, cuts it into as many parts as there are out streams,\n");
+	printf("and gives one part to each out stream.\n");
+	printf("the parts are cut as evenly as they can be, so they come out the same size to within one line,\n");
+	printf("word or character, and putting them back together gives the input back\n\n");
 	printf("with fewer lines, words or characters than there are out streams,\n");
 	printf("some of the parts come out empty\n\n");
-	printf("the whole input is held in memory, so it has to fit in what is left\n");
-	printf("of memory once everything else has taken its share\n\n");
+	printf("the whole input is held in memory,\n");
+	printf("so it has to fit in what is left of memory once everything else has taken its share\n\n");
 	printf("usage:\n");
 	printf("  split [-w] [-c]\n\n");
 	printf("args:\n");
