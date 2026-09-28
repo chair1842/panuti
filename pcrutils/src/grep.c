@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <panuti/stream.h>
@@ -9,6 +10,34 @@
 #define GREP_READSZ 128
 
 static bool only_out0 = false;
+
+static char* line;
+static size_t line_cap;
+
+static int line_reserve(size_t need) {
+	if (need <= line_cap) {
+		return 0;
+	}
+
+	size_t want = line_cap ? line_cap : GREP_LINESZ;
+
+	while (want < need) {
+		if (want > (size_t)-1 / 2) {
+			return -1;
+		}
+		want *= 2;
+	}
+
+	char* p = realloc(line, want);
+	if (!p) {
+		return -1;
+	}
+
+	line = p;
+	line_cap = want;
+	
+	return 0;
+}
 
 static void print_help(void) {
 	printf("grep - a pcrutils utility\n\n");
@@ -122,7 +151,6 @@ int main(int argc, char** argv) {
 	size_t nlen = strlen(needle);
 
 	int failed = 0;
-	char line[GREP_LINESZ];
 	size_t have = 0;
 	char buf[GREP_READSZ];
 
@@ -139,13 +167,8 @@ int main(int argc, char** argv) {
 		}
 
 		for (int i = 0; i < n; ) {
-			// take the rest of the chunk, or stop at a newline
-			size_t room = sizeof(line) - have;
+			// stop at the newline, or take the rest of the chunk
 			size_t take = (size_t)n - (size_t)i;
-
-			if (take > room) {
-				take = room;
-			}
 
 			for (size_t k = 0; k < take; k++) {
 				if (buf[i + k] == '\n') {
@@ -154,26 +177,25 @@ int main(int argc, char** argv) {
 				}
 			}
 
+			if (line_reserve(have + take) != 0) {
+				printf("pcrutils: grep: out of memory\n");
+				failed = 1;
+				break;
+			}
+
 			memcpy(line + have, buf + i, take);
 			have += take;
 			i += (int)take;
 
-			bool complete = have > 0 && line[have - 1] == '\n';
-			bool full = have == sizeof(line);
+			if (line[have - 1] == '\n') {
+				if (contains(line, have, needle, nlen) &&
+				    output(no_streams, line, have) != 0) {
+					printf("pcrutils: grep: could not write to the out streams\n");
+					failed = 1;
+				}
 
-			if (!complete && !full) {
-				continue;
+				have = 0;
 			}
-
-			if (contains(line, have, needle, nlen) &&
-			    output(no_streams, line, have) != 0) {
-				printf("pcrutils: grep: could not write to the out streams\n");
-				failed = 1;
-			}
-
-			// a line longer than the buffer is searched as fragments, so a
-			// word straddling a fragment edge is the one thing that is missed
-			have = 0;
 
 			if (failed) {
 				break;
@@ -192,6 +214,10 @@ int main(int argc, char** argv) {
 			failed = 1;
 		}
 	}
+
+	free(line);
+	line = NULL;
+	line_cap = 0;
 
 	return failed ? -1 : 0;
 }

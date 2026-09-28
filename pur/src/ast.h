@@ -3,14 +3,22 @@
 #ifndef PUR_AST_H
 #define PUR_AST_H
 
-#define PUR_MAX_TOKENS 256
-#define PUR_MAX_NODES 256
+#define PUR_AST_INIT 64
 #define PUR_MAX_LEAVES 16
 #define PUR_MAX_PIPES 14
 #define PUR_MAX_STREAMS 16
 #define PUR_MAX_DEPTH 16
 #define PUR_MAX_ARGV 32
-#define PUR_LINE_MAX 4096
+#define PUR_LINE_INIT 4096
+
+// the token, node and member pools start at PUR_AST_INIT and grow with realloc,
+// so a statement is not held to a size the machine cannot promise. the line
+// buffer the shell reads into does the same from PUR_LINE_INIT.
+//
+// leaves and the argv of one command stay capped, because exec.c wires the
+// leaves with its own fixed arrays and takes the argv of a command in an array
+// of PUR_MAX_ARGV, so lifting either cap has to wait on that going after
+// exec.c as well. pur_leaves stays put for the same reason.
 
 typedef enum {
 	PUR_NODE_LEAF = 0,
@@ -30,10 +38,10 @@ typedef struct {
 	int argc;
 } pur_leaf_t;
 
-extern pur_node_t pur_nodes[PUR_MAX_NODES];
+extern pur_node_t* pur_nodes;
 extern pur_leaf_t pur_leaves[PUR_MAX_LEAVES];
-extern int pur_argv_off[PUR_MAX_LEAVES * PUR_MAX_ARGV];
-extern int pur_member_pool[PUR_MAX_NODES];
+extern int* pur_argv_off;
+extern int* pur_member_pool;
 
 extern int pur_nnodes;
 extern int pur_nleaves;

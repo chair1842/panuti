@@ -9,7 +9,38 @@
 #include <panuti/syscall/syscallsf.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+
+// the line the shell reads into starts this big and grows with realloc. pur
+// only has 4 pages of user stack to give away, so nothing that can be sized
+// by what came in belongs in a frame.
+static char* line;
+static size_t line_cap;
+
+static int line_reserve(size_t need) {
+	if (need <= line_cap) {
+		return 0;
+	}
+
+	size_t want = line_cap ? line_cap : PUR_LINE_INIT;
+
+	while (want < need) {
+		if (want > (size_t)-1 / 2) {
+			return -1;
+		}
+		want *= 2;
+	}
+
+	char* p = realloc(line, want);
+	if (!p) {
+		return -1;
+	}
+
+	line = p;
+	line_cap = want;
+	return 0;
+}
 
 // -n and -c both take the statement as the rest of the command line, so the
 // arguments get joined back into the single string the parser wants
@@ -56,10 +87,23 @@ int main(int argc, char** argv) {
 		if (argc > 2 && (strcmp(argv[1], "-n") == 0 || strcmp(argv[1], "-c") == 0)) {
 			bool dry_run = argv[1][1] == 'n';
 
-			// static: pur only has 4 pages of user stack to give away
-			static char stmt_buf[PUR_LINE_MAX];
+			// the statement goes on the heap rather than in a static, so a
+			// long one is not held to a size the machine cannot promise
+			size_t need = 1;
 
-			if (join_statement(argc, argv, stmt_buf, sizeof(stmt_buf)) != 0) {
+			for (int i = 2; i < argc; i++) {
+				need += strlen(argv[i]) + 1;
+			}
+
+			char* stmt_buf = malloc(need);
+			if (!stmt_buf) {
+				printf("pur: out of memory\n");
+				return 1;
+			}
+
+			int jrc = join_statement(argc, argv, stmt_buf, need);
+			if (jrc != 0) {
+				free(stmt_buf);
 				printf("pur: statement is too long\n");
 				return 1;
 			}
@@ -68,12 +112,14 @@ int main(int argc, char** argv) {
 
 			int prc = pur_parse(stmt_buf);
 			if (prc != PUR_PARSE_OK) {
+				free(stmt_buf);
 				printf("pur: %s\n", pur_parse_strerror(prc));
 				return 1;
 			}
 
 			int status = 0;
 			int xrc = dry_run ? pur_exec_plan() : pur_exec(&status);
+			free(stmt_buf);
 			if (xrc != PUR_EXEC_OK) {
 				printf("pur: %s\n", pur_exec_strerror(xrc));
 				return 1;
@@ -85,26 +131,40 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	char buf[PUR_LINE_MAX];
-
 	while (1) {
 		printf("# ");
 
-		int n = stream_read(0, buf, sizeof(buf));
+		if (line_reserve(PUR_LINE_INIT) != 0) {
+			printf("\npur: out of memory\n");
+			return 1;
+		}
+
+		int n = stream_read(0, line, line_cap);
 		if (n < 0) {
 			printf("\npur: could not read the input stream\n");
 			continue;
 		}
 
-		if (n >= (int)sizeof(buf)) {
-			n = (int)sizeof(buf) - 1;
+		if ((size_t)n == line_cap) {
+			// the buffer filled up, so the line was cut short. grow it so
+			// the next one has more room. the line stays cut here, as it
+			// always was: stdin gives a line at a time, so another read
+			// would bring back the line after this one
+			if (line_reserve(line_cap * 2) != 0) {
+				printf("\npur: out of memory\n");
+				return 1;
+			}
 		}
 
-		buf[n] = '\0';
+		if (n >= (int)line_cap) {
+			n = (int)line_cap - 1;
+		}
+
+		line[n] = '\0';
 
 		pur_ast_reset();
 
-		int rc = pur_parse(buf);
+		int rc = pur_parse(line);
 		if (rc == PUR_PARSE_EMPTY) {
 			continue;
 		}

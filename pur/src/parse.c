@@ -4,8 +4,9 @@
 #include "ast.h"
 
 #include <stddef.h>
+#include <stdlib.h>
 
-#define PUR_MAX_GROUP_MEMBERS 32
+#define PUR_GROUP_INIT 8
 
 typedef enum {
 	PUR_T_END = 0,
@@ -22,10 +23,37 @@ typedef struct {
 	int len;
 } pur_token_t;
 
-static pur_token_t toks[PUR_MAX_TOKENS];
+// the tokens of a statement, kept on the heap and grown as they are found
+static pur_token_t* toks;
+static size_t toks_cap;
 static int ntoks;
 static int pos;
 static char *line;
+
+// make room for one more token
+static int toks_reserve(size_t need) {
+	if (need <= toks_cap) {
+		return 0;
+	}
+
+	size_t cap = toks_cap ? toks_cap : PUR_AST_INIT;
+
+	while (cap < need) {
+		if (cap > (size_t)-1 / 2 / sizeof(pur_token_t)) {
+			return -1;
+		}
+		cap *= 2;
+	}
+
+	pur_token_t* p = realloc(toks, cap * sizeof(pur_token_t));
+	if (!p) {
+		return -1;
+	}
+
+	toks = p;
+	toks_cap = cap;
+	return 0;
+}
 
 static bool is_space(char c) {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r';
@@ -83,8 +111,8 @@ static int tokenize(void) {
 			len = (int)(p - line) - off;
 		}
 
-		if (ntoks >= PUR_MAX_TOKENS) {
-			return PUR_PARSE_ERR_TOKENS;
+		if (toks_reserve((size_t)ntoks + 1) != 0) {
+			return PUR_PARSE_ERR_MEMORY;
 		}
 
 		toks[ntoks].type = (pur_tok_t)type;
@@ -93,8 +121,8 @@ static int tokenize(void) {
 		ntoks++;
 	}
 
-	if (ntoks >= PUR_MAX_TOKENS) {
-		return PUR_PARSE_ERR_TOKENS;
+	if (toks_reserve((size_t)ntoks + 1) != 0) {
+		return PUR_PARSE_ERR_MEMORY;
 	}
 
 	toks[ntoks].type = PUR_T_END;
@@ -155,6 +183,31 @@ static int parse_operand(int depth, int *out) {
 	return PUR_PARSE_ERR_SYNTAX;
 }
 
+// grow the members of a group so it can take `need` of them in all
+static int members_reserve(int** members, size_t* cap, size_t need) {
+	if (need <= *cap) {
+		return 0;
+	}
+
+	size_t want = *cap ? *cap : PUR_GROUP_INIT;
+
+	while (want < need) {
+		if (want > (size_t)-1 / 2 / sizeof(int)) {
+			return -1;
+		}
+		want *= 2;
+	}
+
+	int* p = realloc(*members, want * sizeof(int));
+	if (!p) {
+		return -1;
+	}
+
+	*members = p;
+	*cap = want;
+	return 0;
+}
+
 static int parse_group(int depth, int *out) {
 	if (toks[pos].type != PUR_T_LPAREN) {
 		return PUR_PARSE_ERR_SYNTAX;
@@ -165,18 +218,25 @@ static int parse_group(int depth, int *out) {
 		return PUR_PARSE_ERR_EMPTY_GROUP;
 	}
 
-	int members[PUR_MAX_GROUP_MEMBERS];
-	int count = 0;
-	int rc;
+	// the members are on the heap, because a group can sit inside a group
+	// up to PUR_MAX_DEPTH deep, and a stack array at every one of those
+	// levels is room the shell does not have to spare
+	int* members = NULL;
+	size_t members_cap = 0;
+	size_t count = 0;
+	int single = 0;
+	int g = -1;
+	int rc = PUR_PARSE_OK;
 
 	while (1) {
-		if (count >= PUR_MAX_GROUP_MEMBERS) {
-			return PUR_PARSE_ERR_NODES;
+		if (members_reserve(&members, &members_cap, count + 1) != 0) {
+			rc = PUR_PARSE_ERR_MEMORY;
+			break;
 		}
 
 		rc = parse_stmt(depth, &members[count]);
 		if (rc != PUR_PARSE_OK) {
-			return rc;
+			break;
 		}
 		count++;
 
@@ -190,22 +250,33 @@ static int parse_group(int depth, int *out) {
 		}
 	}
 
-	if (toks[pos].type != PUR_T_RPAREN) {
-		return PUR_PARSE_ERR_SYNTAX;
-	}
-	pos++;
-
-	int g = pur_node_new(PUR_NODE_GROUP);
-	if (g < 0) {
-		return PUR_PARSE_ERR_NODES;
+	if (rc == PUR_PARSE_OK && toks[pos].type != PUR_T_RPAREN) {
+		rc = PUR_PARSE_ERR_SYNTAX;
 	}
 
-	if (pur_group_set(g, members, count) != 0) {
-		return PUR_PARSE_ERR_NODES;
+	if (rc == PUR_PARSE_OK) {
+		pos++;
+
+		// a group with one member is transparent: (a) is just a
+		single = count == 1 ? members[0] : 0;
+
+		g = pur_node_new(PUR_NODE_GROUP);
+		if (g < 0) {
+			rc = PUR_PARSE_ERR_NODES;
+		} else if (pur_group_set(g, members, (int)count) != 0) {
+			rc = PUR_PARSE_ERR_NODES;
+		}
 	}
 
-	// a group with one member is transparent: (a) is just a
-	*out = count == 1 ? members[0] : g;
+	free(members);
+
+	if (rc != PUR_PARSE_OK) {
+		return rc;
+	}
+
+	// count decides which, not single: a single member can be node 0, which
+	// is a perfectly good index and would read as false
+	*out = count == 1 ? single : g;
 	return PUR_PARSE_OK;
 }
 
@@ -307,8 +378,6 @@ const char *pur_parse_strerror(int status) {
 			return "an empty group has no leaves to wire";
 		case PUR_PARSE_ERR_QUOTE:
 			return "unterminated quote";
-		case PUR_PARSE_ERR_TOKENS:
-			return "too many tokens";
 		case PUR_PARSE_ERR_NODES:
 			return "statement too complex";
 		case PUR_PARSE_ERR_LEAVES:
@@ -317,6 +386,8 @@ const char *pur_parse_strerror(int status) {
 			return "too many arguments for one command";
 		case PUR_PARSE_ERR_COMPLEX:
 			return "statement too complex";
+		case PUR_PARSE_ERR_MEMORY:
+			return "out of memory";
 		default:
 			return "unknown parse error";
 	}
