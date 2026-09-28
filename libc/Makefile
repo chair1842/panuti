@@ -35,6 +35,11 @@ stdio/printf.o \
 stdio/putchar.o \
 stdio/puts.o \
 stdlib/abort.o \
+stdlib/malloc.o \
+stdlib/calloc.o \
+stdlib/free.o \
+stdlib/realloc.o \
+stdlib/malloc_util.o \
 string/memcmp.o \
 string/memcpy.o \
 string/memmove.o \
