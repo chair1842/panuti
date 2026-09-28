@@ -81,7 +81,9 @@ kernel/drivers/kbd/line.o \
 kernel/handle/dir.o \
 kernel/syscall/handlers/readdir.o \
 kernel/syscall/handlers/stat.o \
-kernel/syscall/handlers/nexist.o
+kernel/syscall/handlers/nexist.o \
+kernel/syscall/handlers/mmapan.o \
+kernel/syscall/handlers/munmap.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

@@ -84,4 +84,10 @@ int32_t syshandler_stat(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // report whether a path resolves to something
 int32_t syshandler_nexist(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// map a run of anonymous pages and return its base address, or a negative error
+int32_t syshandler_mmapan(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// release a run of anonymous pages
+int32_t syshandler_munmap(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

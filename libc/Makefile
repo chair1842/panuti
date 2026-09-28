@@ -61,7 +61,9 @@ panuti/handle/close.o \
 	panuti/stat/readdir.o \
 panuti/stream/stream_write.o \
 panuti/stream/stream_read.o \
-panuti/stream/nstream.o
+panuti/stream/nstream.o \
+panuti/mmap/mmapan.o \
+panuti/mmap/munmap.o
 
 HOSTEDOBJS=\
 $(ARCH_HOSTEDOBJS) \

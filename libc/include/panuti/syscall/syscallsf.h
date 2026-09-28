@@ -137,4 +137,12 @@ static inline int32_t panutisysf_nexist(const char* path) {
 	return panuti_syscall(SYSHANDLER_NEXIST, (uint32_t)path, 0, 0, 0);
 }
 
+static inline int32_t panutisysf_mmapan(size_t len, int prot, void* addr_hint) {
+	return panuti_syscall(SYSHANDLER_MMAPAN, (uint32_t)len, (uint32_t)prot, (uint32_t)addr_hint, 0);
+}
+
+static inline int32_t panutisysf_munmap(void* addr, size_t len) {
+	return panuti_syscall(SYSHANDLER_MUNMAP, (uint32_t)addr, (uint32_t)len, 0, 0);
+}
+
 #endif
