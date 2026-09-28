@@ -262,11 +262,7 @@ static void stream_unref(handle_t* h) {
 	}
 }
 
-void task_destroy(task_t* t) {
-	if (!t || t->state != TASK_TERMINATED) {
-		return;
-	}
-
+static void task_release_handles(task_t* t) {
 	for (int i = 0; i < MAX_HANDLES; i++) {
 		if (t->handles[i].type != INODE_NONE) {
 			inode_unref(t->handles[i].inode);
@@ -276,6 +272,14 @@ void task_destroy(task_t* t) {
 			handle_free(t, i);
 		}
 	}
+}
+
+void task_destroy(task_t* t) {
+	if (!t || t->state != TASK_TERMINATED) {
+		return;
+	}
+
+	task_release_handles(t);
 
 	for (int i = 0; i < t->no_in_streams; i++) {
 		stream_unref(&t->in_streams[i]);
@@ -306,6 +310,11 @@ static void procreate_cleanup(task_t* t) {
 	if (!t) {
 		return;
 	}
+
+	// a task that never ran cannot normally have open handles, but a partial
+	// setup must not be able to strand one now that handles can pin registry
+	// state
+	task_release_handles(t);
 
 	for (int i = 0; i < t->no_in_streams; i++) {
 		stream_unref(&t->in_streams[i]);

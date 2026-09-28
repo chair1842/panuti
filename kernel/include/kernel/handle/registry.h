@@ -9,14 +9,17 @@
 #include <panuti/inode_type.h>
 
 #define REG_MAX_INODES 1024
-#define REG_MAX_DIRENTS 2048
+#define REG_MAX_DIRENTS 8192
 #define REG_MAX_NAME_LEN 256
 
 typedef struct dirent {
-	char name[REG_MAX_NAME_LEN];
+	char* name;
+	uint16_t name_len;
+
+	uint16_t refcount;
+
 	struct inode* inode;
 	struct dirent* next;
-	bool in_use;
 } dirent_t;
 
 typedef struct inode {
@@ -31,8 +34,6 @@ typedef struct inode {
 	// dir-only
 	dirent_t* children;
 
-	// filesystem attachment: if non-NULL, this inode lives inside a mounted
-	// filesystem (fabricated by it), and `mnt` identifies the mount.
 	struct mount* mnt;
 } inode_t;
 
@@ -44,12 +45,14 @@ inode_t* registry_resolve(inode_t* start, const char* path);
 inode_t* registry_find(const char* path);
 inode_t* registry_root(void);
 inode_t* registry_inode_alloc(inode_type_t type);
-dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len);
+int registry_unlink(inode_t* dir, const char* name, size_t len);
 void inode_unref(inode_t* inode);
 int registry_mount(const char* path, const fs_ops_t* fs_ops, void* fs_impl);
 int registry_unmount(const char* path);
 dirent_t* registry_linkdirent(inode_t* dir, const char* name, size_t len, inode_t* target);
 dirent_t* registry_finddirent(inode_t* dir, const char* name, size_t len);
 int registry_splitpath(inode_t* start, const char* path, inode_t** parent, const char** name, size_t* namelen);
+void dirent_ref(dirent_t* d);
+void dirent_unref(dirent_t* d);
 
 #endif

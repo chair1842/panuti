@@ -60,7 +60,7 @@ int32_t syshandler_rename(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	if (!registry_unlink(old_parent, old_name, old_len)) {
+	if (registry_unlink(old_parent, old_name, old_len) != 0) {
 		// this should never happen since we just found it, but roll back
 		// anyway so the refcount doesn't leak
 		registry_unlink(new_parent, new_name, new_len);

@@ -12,6 +12,9 @@ typedef struct dir_handle {
 	dirent_t* next_inode;
 } dir_handle_t;
 
+void dir_handle_start(dir_handle_t* dh, dirent_t* entry);
+void dir_handle_advance(dir_handle_t* dh);
+
 extern const handle_ops_t dir_handle_ops;
 
 #endif

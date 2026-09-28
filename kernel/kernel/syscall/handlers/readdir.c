@@ -33,26 +33,37 @@ int32_t syshandler_readdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	dir_handle_t* dh = t->handles[fd].impl;
 	inode_t* dir_inode = t->handles[fd].inode;
 
-	dirent_entry_t entry;
+	dirent_entry_t entry_out;
 	int rc;
 
 	if (dir_inode->mnt) {
-		rc = dir_inode->mnt->fs_ops->readdir(dir_inode->mnt->fs_impl, dir_inode, &entry, &dh->cursor);
+		rc = dir_inode->mnt->fs_ops->readdir(
+			dir_inode->mnt->fs_impl,
+			dir_inode,
+			&entry_out,
+			&dh->cursor
+		);
 	} else {
-		if (!dh->next_inode) {
+		dirent_t* d = dh->next_inode;
+		if (!d) {
 			rc = 1; // end of directory
 		} else {
-			strncpy(entry.name, dh->next_inode->name, sizeof(entry.name) - 1);
-			entry.name[sizeof(entry.name) - 1] = '\0';
-			entry.type = dh->next_inode->inode->type;
-			entry.size = 0;
-			dh->next_inode = dh->next_inode->next;
+			size_t n = d->name_len;
+			if (n >= sizeof(entry_out.name)) {
+				n = sizeof(entry_out.name) - 1;
+			}
+			
+			memcpy(entry_out.name, d->name, n);
+			entry_out.name[n] = '\0';
+			entry_out.type = d->inode->type;
+			entry_out.size = 0;
+			dir_handle_advance(dh);
 			rc = 0;
 		}
 	}
 
 	if (rc == 0) {
-		*user_out = entry;
+		*user_out = entry_out;
 	}
 
 	return rc;

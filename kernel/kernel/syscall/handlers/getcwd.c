@@ -50,19 +50,19 @@ int32_t syshandler_getcwd(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 
 		inode_t* parent = up->inode;
 
-		char* name = nullptr;
+		dirent_t* self = nullptr;
 		for (dirent_t* d = parent->children; d; d = d->next) {
 			if (d->inode == cur) {
-				name = d->name;
+				self = d;
 				break;
 			}
 		}
 
-		if (!name) {
+		if (!self) {
 			break;
 		}
 
-		size_t nl = strlen(name);
+		size_t nl = self->name_len;
 		if (nl == 0 || nl >= REG_MAX_NAME_LEN) {
 			break;
 		}
@@ -72,7 +72,7 @@ int32_t syshandler_getcwd(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		}
 
 		offs[ncomp] = (uint32_t)packed;
-		memcpy(scratch + packed, name, nl + 1);
+		memcpy(scratch + packed, self->name, nl + 1);
 		packed += nl + 1;
 		ncomp++;
 

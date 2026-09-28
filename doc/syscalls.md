@@ -269,7 +269,7 @@ Create a new directory in the in-memory VFS registry.
   - the name already exists in the parent (name collision)
   - the name is 256 bytes or longer
   - the inode table is full (1024 inodes)
-  - the directory entry table is full (2048 entries)
+  - the directory entry table is full (8192 entries)
   - the parent is inside a mounted filesystem (no filesystem implements
     directory creation, so this always fails)
 
@@ -739,7 +739,7 @@ returns `PANUTIERRNO_INVALIDSYSCALL`.
 |---|---|
 | File descriptors per task | 32 |
 | Total inodes | 1024 |
-| Total directory entries | 2048 |
+| Total directory entries | 8192 |
 | Max path component name | 256 bytes |
 | Max getcwd nesting | 64 components |
 | Max mounted filesystems | 64 |

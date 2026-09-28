@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include <kernel/handle/registry.h>
+#include <kernel/memman/slab.h>
 #include <string.h>
 
 static void registry_destroy(inode_t* inode);
@@ -28,31 +29,74 @@ inode_t* registry_inode_alloc(inode_type_t type) {
 
 static dirent_t* dirent_alloc(void) {
 	for (int i = 0; i < REG_MAX_DIRENTS; i++) {
-		if (!dirents[i].in_use) {
-			dirents[i].in_use = true;
-			dirents[i].next = nullptr;
+		if (!dirents[i].name) {
+			dirents[i].name_len = 0;
+			dirents[i].refcount = 1;
 			dirents[i].inode = nullptr;
-			dirents[i].name[0] = '\0';
+			dirents[i].next = nullptr;
 			return &dirents[i];
 		}
 	}
-	
+
 	return nullptr;
+}
+
+void dirent_ref(dirent_t* d) {
+	if (!d || !d->name) {
+		return;
+	}
+	
+	if (d->refcount == UINT16_MAX) {
+		return; // one list reference plus one per open handle cannot reach this
+	}
+	
+	d->refcount++;
+}
+
+void dirent_unref(dirent_t* d) {
+	if (!d || !d->name) {
+		return;
+	}
+
+	if (d->refcount > 0) {
+		d->refcount--;
+	}
+	
+	if (d->refcount != 0) {
+		return;
+	}
+
+	kfree(d->name);
+	d->name = nullptr;
+	d->name_len = 0;
+	d->inode = nullptr;
+	d->next = nullptr;
 }
 
 // links name -> target into dir's children list. does not check for collisions
 dirent_t* registry_linkdirent(inode_t* dir, const char* name, size_t len, inode_t* target) {
-	if (len >= REG_MAX_NAME_LEN) {
+	if (len == 0 || len >= REG_MAX_NAME_LEN) {
 		return nullptr;
 	}
 	
+	// build the name copy before claiming a slot, so a claimed slot is never
+	// briefly nameless and a failed allocation leaves the table untouched
+	char* copy = kmalloc((uint32_t)len + 1, 1);
+	if (!copy) {
+		return nullptr;
+	}
+	
+	memcpy(copy, name, len);
+	copy[len] = '\0';
+
 	dirent_t* d = dirent_alloc();
 	if (!d) {
+		kfree(copy);
 		return nullptr;
 	}
 	
-	memcpy(d->name, name, len);
-	d->name[len] = '\0';
+	d->name = copy;
+	d->name_len = (uint16_t)len;
 	d->inode = target;
 	d->next = dir->children;
 	dir->children = d;
@@ -62,7 +106,7 @@ dirent_t* registry_linkdirent(inode_t* dir, const char* name, size_t len, inode_
 
 dirent_t* registry_finddirent(inode_t* dir, const char* name, size_t len) {
 	for (dirent_t* d = dir->children; d; d = d->next) {
-		if (strlen(d->name) == len && strncmp(d->name, name, len) == 0) {
+		if (d->name_len == len && memcmp(d->name, name, len) == 0) {
 			return d;
 		}
 	}
@@ -78,7 +122,11 @@ void registry_init(void) {
 	}
 	
 	for (int i = 0; i < REG_MAX_DIRENTS; i++) {
-		dirents[i].in_use = false;
+		dirents[i].name = nullptr;
+		dirents[i].name_len = 0;
+		dirents[i].refcount = 0;
+		dirents[i].inode = nullptr;
+		dirents[i].next = nullptr;
 	}
 
 	root = registry_inode_alloc(INODE_DIR);
@@ -350,7 +398,8 @@ static void registry_destroy(inode_t* inode) {
 			if (d->inode != inode) {
 				inode_unref(d->inode);
 			}
-			d->in_use = false;
+			
+			dirent_unref(d);
 			d = next;
 		}
 		inode->children = nullptr;
@@ -359,8 +408,13 @@ static void registry_destroy(inode_t* inode) {
 	inode->in_use = false;
 }
 
-int registry_splitpath(inode_t* start, const char* path, inode_t** parent,
-                       const char** name, size_t* namelen) {
+int registry_splitpath(
+	inode_t* start,
+	const char* path,
+	inode_t** parent,
+    const char** name,
+    size_t* namelen
+) {
 	if (!path || path[0] == '\0') {
 		return -1;
 	}
@@ -405,15 +459,15 @@ int registry_splitpath(inode_t* start, const char* path, inode_t** parent,
 	return 0;
 }
 
-dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len) {
+int registry_unlink(inode_t* dir, const char* name, size_t len) {
 	if (!dir || dir->type != INODE_DIR || !name) {
-		return nullptr;
+		return -1;
 	}
 
 	if (dir->mnt && dir->mnt->fs_ops->unlink) {
 		int ret = dir->mnt->fs_ops->unlink(dir->mnt->fs_impl, dir, name, len);
 		if (ret < 0) {
-			return nullptr;
+			return -1;
 		}
 	}
 
@@ -421,7 +475,7 @@ dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len) {
 	dirent_t* curr = dir->children;
 
 	while (curr) {
-		if (strlen(curr->name) == len && strncmp(curr->name, name, len) == 0) {
+		if (curr->name_len == len && memcmp(curr->name, name, len) == 0) {
 			if (prev) {
 				prev->next = curr->next;
 			} else {
@@ -429,15 +483,14 @@ dirent_t* registry_unlink(inode_t* dir, const char* name, size_t len) {
 			}
 
 			inode_unref(curr->inode);
-			curr->in_use = false;
-			curr->next = nullptr;
-			return curr;
+			dirent_unref(curr);
+			return 0;
 		}
 		prev = curr;
 		curr = curr->next;
 	}
 
-	return nullptr;
+	return -1;
 }
 
 void inode_unref(inode_t* inode) {

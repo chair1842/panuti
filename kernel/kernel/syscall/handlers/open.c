@@ -39,8 +39,8 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 			handle_free(t, des);
 			return PANUTIERRNO_PLAINERR;
 		}
-		dh->cursor = 0;
-		dh->next_inode = n->children; // NULL for a mounted dir, real for native
+
+		dir_handle_start(dh, n->children);
 
 		t->handles[des].type = n->type;
 		t->handles[des].impl = dh;
