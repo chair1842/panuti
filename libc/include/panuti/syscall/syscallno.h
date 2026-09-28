@@ -3,6 +3,10 @@
 #ifndef _PANUTI_SYSCALL_NO_H
 #define _PANUTI_SYSCALL_NO_H
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 #define SYSHANDLER_WRITE 0
 #define SYSHANDLER_EXIT 1
 #define SYSHANDLER_OPEN 2
@@ -31,5 +35,9 @@
 #define SYSHANDLER_NEXIST 25
 #define SYSHANDLER_MMAPAN 26
 #define SYSHANDLER_MUNMAP 27
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif

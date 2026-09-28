@@ -8,7 +8,7 @@
 #include <sys/types.h>
 #include <stdint.h>
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 extern "C" {
 #endif
 
@@ -22,7 +22,7 @@ pid_t getpid(void);
 int close(int);
 int access(const char*, int);
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 }
 #endif
 

@@ -11,6 +11,10 @@
 #include <sys/types.h>
 #include "procreate.h"
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 static inline int32_t panutisysf_write(int handle, const void* data, size_t size) {
 	return panuti_syscall(SYSHANDLER_WRITE, (uint32_t)handle, (uint32_t)data, (uint32_t)size, 0);
 }
@@ -144,5 +148,9 @@ static inline int32_t panutisysf_mmapan(size_t len, int prot, void* addr_hint) {
 static inline int32_t panutisysf_munmap(void* addr, size_t len) {
 	return panuti_syscall(SYSHANDLER_MUNMAP, (uint32_t)addr, (uint32_t)len, 0, 0);
 }
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif

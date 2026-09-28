@@ -7,7 +7,7 @@
 
 #include <sys/types.h>
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 extern "C" {
 #endif
 
@@ -35,7 +35,7 @@ struct flock {
 int open(const char*, int, ...);
 int fcntl(int, int, ...);
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 }
 #endif
 

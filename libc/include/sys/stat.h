@@ -7,7 +7,7 @@
 
 #include <sys/types.h>
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 extern "C" {
 #endif
 
@@ -16,7 +16,7 @@ extern "C" {
 
 int mkdir(const char*, mode_t);
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 }
 #endif
 

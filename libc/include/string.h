@@ -7,7 +7,7 @@
 
 #include <stddef.h>
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 extern "C" {
 #endif
 
@@ -24,7 +24,7 @@ int strcmp(const char* a, const char* b);
 int strncmp(const char* a, const char* b, size_t n);
 void* memchr(const void* buf, int ch, size_t n);
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 }
 #endif
 

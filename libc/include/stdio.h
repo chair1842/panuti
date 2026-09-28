@@ -12,7 +12,7 @@ typedef struct { int unused; } FILE;
 
 #define SEEK_SET 0
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 extern "C" {
 #endif
 
@@ -40,7 +40,7 @@ int fseek(FILE*, long, int);
 long ftell(FILE*);
 void setbuf(FILE* __restrict, char* __restrict);
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 }
 #endif
 

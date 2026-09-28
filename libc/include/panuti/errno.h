@@ -3,6 +3,10 @@
 #ifndef _PANUTI_ERRNO_H
 #define _PANUTI_ERRNO_H
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 #define PANUTIERRORCODE(code) ((code) + 0x80000000)
 
 // error codes first
@@ -20,5 +24,9 @@
 
 // success codes
 #define PANUTIERRNO_PLAINSUCCESS 0
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif

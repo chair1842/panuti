@@ -6,6 +6,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 /* Protection bits accepted by mmapan(). The syscall argument is a plain
  * uint32_t, so these have to stay inside a 32-bit word. */
 #define MMAPAN_PROT_NONE  0x0
@@ -41,5 +45,9 @@ int32_t mmapan(size_t len, int prot, void* addr_hint);
  * Returns 0, or a negative PANUTIERRNO_* code.
  */
 int32_t munmap(void* addr, size_t len);
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif

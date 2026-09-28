@@ -3,6 +3,10 @@
 #ifndef _ERRNO_H
 #define _ERRNO_H
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 extern int errno;
 
 #define EDOM   1
@@ -43,5 +47,9 @@ extern int errno;
 #define ENOSYS  35
 #define ENOTEMPTY 36
 #define ENAMETOOLONG 37
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif

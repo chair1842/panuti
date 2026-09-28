@@ -6,7 +6,7 @@
 #include <sys/cdefs.h>
 #include <stddef.h>
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 extern "C" {
 #endif
 
@@ -26,7 +26,7 @@ int atoi(const char*);
 char* getenv(const char*);
 int abs(int);
 
-#ifdef __cplusplus
+#if defined(__cplusplus)
 }
 #endif
 

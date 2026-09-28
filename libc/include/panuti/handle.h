@@ -5,6 +5,10 @@
 
 #include <stddef.h>
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 // write len bytes of data to the fd
 int handle_write(int fd, const void* data, size_t len);
 
@@ -16,5 +20,9 @@ int handle_open(const char* path);
 
 // close an fd
 int handle_close(int fd);
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif

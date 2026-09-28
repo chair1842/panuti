@@ -5,6 +5,10 @@
 
 #include <stdint.h>
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 typedef enum keycode : uint8_t {
 	KEYCODE_NONE,
 	KEYCODE_A,
@@ -82,5 +86,9 @@ typedef struct keypacket {
 	bool scroll_lock;
 	bool num_lock;
 } keypacket_t;
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif

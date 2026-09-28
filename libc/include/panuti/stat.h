@@ -5,6 +5,10 @@
 
 #include <panuti/dirent.h>
 
+#if defined(__cplusplus)
+extern "C" {
+#endif
+
 // describe a path as a dirent, 0 on success
 int stat(const char* path, dirent_entry_t* dirent_out);
 
@@ -13,5 +17,9 @@ bool nexist(const char* path);
 
 // read the next entry of an open directory, 0 on entry, 1 once it is done
 int readdir(int fd, dirent_entry_t* dirent_out);
+
+#if defined(__cplusplus)
+}
+#endif
 
 #endif
