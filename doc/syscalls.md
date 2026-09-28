@@ -316,7 +316,7 @@ Remove a directory entry from its parent directory.
 - `PANUTIERRNO_INVALIDADDR` -- `path` is not a valid userspace pointer
 - `PANUTIERRNO_NOTFOUND` -- path does not resolve or name is empty
 
-**Note:** The underlying inode is not destroyed if its refcount > 0 (e.g. still open via a handle).
+**Note:** The underlying inode is not destroyed if its refcount > 0 (e.g. still open via a handle). The directory entry is likewise not destroyed while something still references it, and its name is stored on the heap. The entry is released once it is no longer in its parent directory *and* no `READDIR` cursor is positioned on it, so removing an entry that is being streamed does not pull the name out from under the reader.
 
 ---
 
@@ -672,8 +672,24 @@ The `dirent_entry_t` struct is defined in `libc/include/panuti/dirent.h`:
 typedef struct {
     char name[DIRENT_NAME_MAX];  // entry name, NUL-terminated
     inode_type_t type;           // see the type discussion below
+    size_t size;                 // see the note below
 } dirent_entry_t;
 ```
+
+`size` is the entry's length in bytes, and is only as good as the filesystem
+that recorded it:
+
+- **Native registry entries always report `0`**, from both `READDIR` and
+  `STAT`. The registry records no lengths anywhere, so this is `0` even for
+  entries that have real content.
+- **IsoFS entries report a real length** from both. `READDIR` hands out the
+  extent length recorded in the directory record; `STAT` returns the same value,
+  for directories as well as files.
+
+`dirent_out` is written **only on success**. A `READDIR` that returns `1` for
+end of directory, or any error, leaves the struct untouched, so a caller that
+reuses one `dirent_entry_t` across calls must not read it after a non-zero
+return without zeroing it first.
 
 `inode_type_t` values: `INODE_NONE = 0`, `INODE_DIR = 1`, `INODE_FILE = 2`,
 `INODE_BLOCK = 3`, `INODE_PIPE = 4`.
@@ -700,6 +716,8 @@ from **IsoFS** are always `INODE_DIR` or `INODE_FILE`.
 
 **Note:** Native (registry) directories stream their entries in dirent-list order and include the special entries `"."` and `".."`. Directories mounted from a filesystem are streamed by the filesystem itself; IsoFS emits the on-disk directory records (also including `"."` and `".."`). Closing the handle with `CLOSE` frees the directory cursor.
 
+Entry names live on the heap, and the cursor holds a reference to the entry it is currently positioned on, so a name stays valid for as long as the cursor needs it. Closing the handle drops that reference. The practical guarantee is that **unlinking entries while a `READDIR` walk is in progress is safe**: the entry under the cursor is not torn down out from under the reader, its name is still delivered in full, and the walk continues to the following entries. See the "Traps when looping" note below for the caveat that comes with it.
+
 **Traps when looping:**
 
 - On an IsoFS `-1` the cursor is left unchanged, so a naive
@@ -708,30 +726,191 @@ from **IsoFS** are always `INODE_DIR` or `INODE_FILE`.
 - Only IsoFS implements the `readdir` filesystem op. Mounting a FAT filesystem
   and listing the mountpoint dereferences a null op pointer and panics, so
   `READDIR` is only usable on native and IsoFS directories.
+- A walk is not a snapshot. An entry unlinked partway through is still reported
+  by that walk, because the cursor keeps it alive until it is released; the
+  unlink is not reflected in what the walk returns. Re-`OPEN` the directory to
+  observe the post-unlink contents.
+
+---
+
+### 24 -- STAT
+
+```c
+int32_t panutisysf_stat(const char* path, dirent_entry_t* dirent_out);
+```
+
+Resolve a path and describe the entry it names, without opening it.
+
+**Parameters:**
+- `path` -- path of the entry to describe
+- `dirent_out` -- userspace pointer to a `dirent_entry_t` that receives the entry
+
+`path` is resolved relative to the calling task's current working directory, by
+exactly the same rules as `NEXIST` and every other path-taking syscall.
+
+The reported `name` is the entry's **own** name, not the path it was reached
+by, so `STAT` and `READDIR` describe the same file identically. The one
+exception is a path with no final component to report, such as `"/"`, which
+keeps the literal path the caller supplied.
+
+`type` uses the same `inode_type_t` vocabulary described under `READDIR`.
+
+`size` is `0` unless the entry came from a mounted filesystem that implements
+`fs_ops->size`, which in practice means IsoFS. The native registry records no
+lengths anywhere, so **native entries always report `size == 0` even when they
+have real content**. IsoFS returns the same extent length that `READDIR` hands
+out for the same entry, so `STAT` and `READDIR` agree on `size`.
+
+**Returns:** 0 on success (entry written to `dirent_out`), or error code.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `path` is not a valid NUL-terminated userspace pointer, or `dirent_out` is not a valid userspace range of `sizeof(dirent_entry_t)` bytes
+- `PANUTIERRNO_NOTFOUND` -- `path` does not resolve
+- `PANUTIERRNO_PLAINERR` -- the final name component is 256 bytes or longer and so does not fit `dirent_entry_t.name`
+
+**Note:** `STAT` resolves and describes only; it does not open the entry, so it
+costs no file descriptor and cannot fail with `PANUTIERRNO_NOFDS`. There is no
+permission model, so no access check is performed and `STAT` succeeds on a
+directory, a block device, or any other registered entry.
+
+libc wraps this as `int stat(const char*, dirent_entry_t*)` in
+`libc/panuti/stat/stat.c`.
+
+---
+
+### 25 -- NEXIST
+
+```c
+int32_t panutisysf_nexist(const char* path);
+```
+
+Test whether a path resolves to something, without describing or opening it.
+
+**Parameters:**
+- `path` -- path to test
+
+**Returns:** **1 if the path resolves, 0 if it does not.** This is deliberately
+*not* an error code: every `PANUTIERRNO_*` value lives at or above `0x80000000`,
+which leaves `0` and `1` free to mean "no" and "yes". A caller that treats a
+non-zero result as success is correct only because nothing else can return
+`1`; a caller that compares against `1` exactly is correct regardless.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `path` is not a valid NUL-terminated userspace pointer
+
+**Note:** Resolution is identical to `STAT`'s, so anything `STAT` can find,
+`NEXIST` finds, and vice versa -- including entries inside a mounted
+filesystem. "Exists" says nothing about kind; use `STAT` and check
+`entry.type` for that.
+
+libc wraps this as `bool nexist(const char*)` in
+`libc/panuti/stat/nexist.c`, which returns true only on an exact `1`, so a
+future in-band error would surface as "does not exist" rather than as true.
+
+---
+
+### 26 -- MMAPAN
+
+```c
+int32_t panutisysf_mmapan(size_t len, int prot, void* addr_hint);
+```
+
+Map `len` bytes of anonymous memory and return the base address.
+
+The whole region is backed by physical frames and **zeroed before the call
+returns** -- there is no demand paging, so every page is resident from the
+start. Frames are committed in chunks of 64 with interrupts masked, which bounds
+the irq-off window.
+
+`prot` is a mask of `MMAPAN_PROT_*` from `libc/include/panuti/mmap.h`:
+
+| Bit | Name | Effect |
+|---|---|---|
+| `0x0` | `MMAPAN_PROT_NONE` | pages are present but supervisor-only, so ring 3 cannot touch them at all |
+| `0x1` | `MMAPAN_PROT_READ` | pages become user accessible |
+| `0x2` | `MMAPAN_PROT_WRITE` | pages become user accessible and writable |
+| `0x4` | `MMAPAN_PROT_EXEC` | accepted, but has **no effect** |
+
+Two consequences worth knowing before you rely on the protection bits:
+
+- `PROT_WRITE` implies `PROT_READ`. The x86 R/W bit gates supervisor access as
+  well, so there is no way to express writable-but-not-readable here.
+- `PROT_EXEC` cannot be honoured because a 32-bit page table entry carries no
+  NX bit; text is executable either way.
+
+`addr_hint` is a preference, not a contract. It is rounded down to a page and
+used if it currently holds a free run that large; otherwise the kernel searches
+the rest of user space. The address is chosen entirely kernel-side, so there is
+no user pointer to validate.
+
+**Returns:** the base address -- a userspace address, so non-negative -- on
+success, or a negative `PANUTIERRNO_*` code.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `prot` has bits set outside the three known flags (which means the caller was built against a different header, so it is refused rather than silently mapped with a protection nobody asked for), or `len` is `0`, or `len` exceeds `MMAPAN_MAX`
+- `PANUTIERRNO_NOMEM` -- no free run of the requested size in user space, or physical frames ran out. **Failure is all-or-nothing:** frames committed by earlier chunks are released before returning, so a failed call leaves nothing mapped.
+
+**Note:** the kernel keeps no per-task accounting, so `MMAPAN_MAX` (16 MiB)
+bounds a single call and *not* a process's total footprint; a caller can map
+repeatedly up to the physical memory and address space available.
+
+**This is the syscall `malloc` is built on.** libc's allocator takes 1 MiB
+arenas from here (`libc/stdlib/malloc_util.c`), so any program that calls
+`malloc` issues `MMAPAN` even though it never names it.
+
+---
+
+### 27 -- MUNMAP
+
+```c
+int32_t panutisysf_munmap(void* addr, size_t len);
+```
+
+Release a range previously handed out by `MMAPAN`.
+
+`addr` must be page aligned and `len` is rounded up to a whole number of pages.
+Pages in the range that are already unmapped are skipped, so a single call may
+legitimately span a hole; this is not an error.
+
+**Returns:** 0 on success, or error code.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `len` is `0`, or `addr` is not page aligned, or `addr`..`addr`+`len` is not wholly within the userspace range (which also rejects a `len` that would wrap the 32-bit address space)
+
+**Note:** only `MMAPAN` hands out addresses, so a `addr` that is not page
+aligned means the caller's own arithmetic went wrong rather than that it meant
+to clip a neighbour. The kernel rejects it instead of rounding, so a
+miscomputed range fails loudly instead of unmapping the wrong page.
 
 ---
 
 ## Quick Reference
 
-All 24 syscalls listed here are registered in the kernel dispatch table and
+All 28 syscalls listed here are registered in the kernel dispatch table and
 documented in detail above. Numbers are defined in
-`libc/include/panuti/syscall/syscallno.h`; any number outside this range
-returns `PANUTIERRNO_INVALIDSYSCALL`.
+`libc/include/panuti/syscall/syscallno.h`.
+
+The dispatch table has 256 slots. Any number at or above `256` returns
+`PANUTIERRNO_INVALIDSYSCALL`, as does any number below `256` that is not
+registered -- today that is `28` through `255`, so they are reserved rather
+than permanently invalid.
 
 | # | Name | # | Name |
 |---|---|---|---|
-| 0 | `WRITE` | 12 | `YIELD` |
-| 1 | `EXIT` | 13 | `RENAME` |
-| 2 | `OPEN` | 14 | `LINK` |
-| 3 | `READ` | 15 | `MOUNT` |
-| 4 | `ACTIVATE` | 16 | `UNMOUNT` |
-| 5 | `CLOSE` | 17 | `PIPE_CREATE` |
-| 6 | `MKDIR` | 18 | `NSTREAM` |
-| 7 | `CHDIR` | 19 | `STREAM_READ` |
-| 8 | `UNLINK` | 20 | `STREAM_WRITE` |
-| 9 | `GETPID` | 21 | `PROCREATE` |
-| 10 | `TIMESB` | 22 | `WAIT` |
-| 11 | `GETCWD` | 23 | `READDIR` |
+| 0 | `WRITE` | 14 | `LINK` |
+| 1 | `EXIT` | 15 | `MOUNT` |
+| 2 | `OPEN` | 16 | `UNMOUNT` |
+| 3 | `READ` | 17 | `PIPE_CREATE` |
+| 4 | `ACTIVATE` | 18 | `NSTREAM` |
+| 5 | `CLOSE` | 19 | `STREAM_READ` |
+| 6 | `MKDIR` | 20 | `STREAM_WRITE` |
+| 7 | `CHDIR` | 21 | `PROCREATE` |
+| 8 | `UNLINK` | 22 | `WAIT` |
+| 9 | `GETPID` | 23 | `READDIR` |
+| 10 | `TIMESB` | 24 | `STAT` |
+| 11 | `GETCWD` | 25 | `NEXIST` |
+| 12 | `YIELD` | 26 | `MMAPAN` |
+| 13 | `RENAME` | 27 | `MUNMAP` |
 
 ## Limits
 
@@ -740,10 +919,11 @@ returns `PANUTIERRNO_INVALIDSYSCALL`.
 | File descriptors per task | 32 |
 | Total inodes | 1024 |
 | Total directory entries | 8192 |
-| Max path component name | 256 bytes |
+| Max path component name | 255 bytes (256-byte buffer, NUL included) |
 | Max getcwd nesting | 64 components |
 | Max mounted filesystems | 64 |
 | Pipe buffer size | 4096 bytes |
 | Max input streams per task | 16 |
 | Max output streams per task | 16 |
 | Max procreate argv count | 32 |
+| Max single anonymous mapping | 16 MiB |
