@@ -9,6 +9,7 @@ mkdir -p isodir/usr/bin
 
 cp sysroot/boot/panuti_kern isodir/boot/panuti_kern
 cp sysroot/boot/pint isodir/boot/pint
+rm -f isodir/usr/bin/*
 cp sysroot/usr/bin/* isodir/usr/bin/
 cat > isodir/boot/grub/grub.cfg << EOF
 set timeout=2

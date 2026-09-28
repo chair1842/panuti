@@ -48,18 +48,56 @@ static void task_init_default_streams(task_t* t) {
 	}
 }
 
+// true if some live task has published that it is blocked waiting on `pid`.
+// syshandler_wait() registers pid_waiting_on *before* it calls
+// task_wait_pid(), so this is the authoritative test for "somebody is about
+// to collect this task's exit code", and it holds from the moment a waiter
+// commits until it clears the field on the way out.
+static bool task_has_waiter(pid_t pid) {
+	for (int i = 0; i < MAX_TASKS; i++) {
+		if (tasks[i].state != TASK_NONE && tasks[i].pid_waiting_on == pid) {
+			return true;
+		}
+	}
+	return false;
+}
+
 // finds a free slot: one that's never been used (state == 0 / TASK_NONE,
 // assuming that's the zero-value of task_state_t). A TASK_TERMINATED task
 // is a zombie whose parent hasn't reaped it yet — it still holds a live PID
 // that task_wait_pid must be able to find, so its slot is not free until
 // task_destroy resets it to TASK_NONE.
-// Returns NULL if every slot is occupied.
+//
+// If every slot is occupied, fall back to reclaiming a zombie that nobody is
+// waiting on. task_destroy() is otherwise only reachable from task_wait_pid(),
+// so a child that exits without being waited on would hold its slot, its
+// 4-page kernel stack, and its whole address space forever: after MAX_TASKS
+// such children, task creation fails permanently with NOFDS and never
+// recovers. Reclaiming only unwaited zombies keeps wait() working — a zombie
+// someone is blocked on is skipped, so its exit code is still delivered — and
+// matches the lazy reaping a real kernel does on fork.
+// Returns NULL if every slot is occupied by a task that is live, or a zombie
+// somebody is still waiting on.
 static task_t* task_find_free_slot(void) {
 	for (int i = 0; i < MAX_TASKS; i++) {
 		if (tasks[i].state == TASK_NONE) {
 			return &tasks[i];
 		}
 	}
+
+	for (int i = 0; i < MAX_TASKS; i++) {
+		if (tasks[i].state == TASK_TERMINATED && !task_has_waiter(tasks[i].pid)) {
+			task_t* victim = &tasks[i];
+			// mirrors task_wait_pid(): a zombie is already off the run
+			// queue, but removing it is a no-op if it still is on one, and
+			// task_destroy() would otherwise leave a dangling next pointer
+			sched_remove(victim);
+			// clears state to TASK_NONE, so this same slot is now free
+			task_destroy(victim);
+			return victim;
+		}
+	}
+
 	return nullptr;
 }
 
