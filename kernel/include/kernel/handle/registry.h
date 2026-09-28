@@ -9,7 +9,7 @@
 #include <panuti/inode_type.h>
 
 #define REG_MAX_INODES 1024
-#define REG_MAX_DIRENTS 8192
+#define REG_MAX_DIRENTS 2048
 #define REG_MAX_NAME_LEN 256
 
 typedef struct dirent {
