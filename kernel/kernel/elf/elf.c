@@ -34,7 +34,16 @@ int elf_load_segments(addr_space_t addr_space, const void* elf_data, const elf_l
 			return -1;
 		}
 
-		uint32_t map_flags = MEMMAN_PRESENT | MEMMAN_USER | MEMMAN_RW;
+		// a segment without PF_W is read-only. the PTE R/W bit is what the CPU
+		// consults for a ring-3 write, and CR0.WP only governs whether the
+		// supervisor honours it, so clearing MEMMAN_RW here is enforced without
+		// touching CR0. loading still works: contents are written through
+		// ELF_LOAD_SCRATCH, a separate PTE aliasing the same frame that is
+		// mapped writable, and protection is per-PTE rather than per-frame.
+		uint32_t map_flags = MEMMAN_PRESENT | MEMMAN_USER;
+		if (seg->flags & PF_W) {
+			map_flags |= MEMMAN_RW;
+		}
 		uint32_t phys_frames[MAX_SEG_PAGES];
 
 		uint32_t mapped = 0;

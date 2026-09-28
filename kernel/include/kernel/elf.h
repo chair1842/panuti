@@ -8,6 +8,13 @@
 
 #define ELF_NIDENT 16
 
+// p_flags bits from the ELF spec. only PF_W is enforceable on this target:
+// 32-bit x86 PTEs have no execute bit outside PAE, so PF_X has nothing to
+// map onto and is carried through the loader without being applied.
+#define PF_X 0x1
+#define PF_W 0x2
+#define PF_R 0x4
+
 typedef struct {
 	uint64_t vaddr;
 	uint64_t offset;
