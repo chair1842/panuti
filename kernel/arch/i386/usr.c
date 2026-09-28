@@ -3,9 +3,6 @@
 #include <kernel/mem/usr.h>
 #include <stdint.h>
 
-#define USER_SPACE_BASE 0x08048000u
-#define USER_SPACE_END  0xC0000000u
-
 bool kernel_is_user_ptr(const void* ptr) {
 	uint32_t addr = (uint32_t)ptr;
 	return addr >= USER_SPACE_BASE && addr < USER_SPACE_END;

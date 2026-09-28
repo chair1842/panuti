@@ -27,4 +27,10 @@ addr_space_t memman_create_addr_space(void);
 void memman_destroy_addr_space(addr_space_t addr_space);
 addr_space_t memman_get_kernel_addr_space(void);
 
+// Anonymous page mapping primitives for the userspace allocator. See the
+// matching comments in vmm.h for the contracts.
+int memman_map_zeroed_run(uint32_t virt, const uint32_t* phys, uint32_t count, uint32_t flags);
+uint32_t memman_find_free_run(uint32_t hint, uint32_t count);
+int memman_unmap_run_free(uint32_t virt, uint32_t count);
+
 #endif

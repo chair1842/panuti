@@ -5,6 +5,9 @@
 
 #include <stddef.h>
 
+#define USER_SPACE_BASE 0x08048000u
+#define USER_SPACE_END  0xC0000000u
+
 bool kernel_is_user_ptr(const void* ptr);
 bool kernel_is_user_range(const void* buf, size_t len);
 // returns the length of a NUL-terminated user string if it fits entirely within

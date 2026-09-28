@@ -47,3 +47,15 @@ void* memman_create_addr_space(void) {
 void memman_destroy_addr_space(addr_space_t addr_space) {
 	vmm_destroy_page_dir(addr_space);
 }
+
+int memman_map_zeroed_run(uint32_t virt, const uint32_t* phys, uint32_t count, uint32_t flags) {
+	return vmm_map_zeroed_run(virt, phys, count, flags);
+}
+
+uint32_t memman_find_free_run(uint32_t hint, uint32_t count) {
+	return vmm_find_free_run(hint, count);
+}
+
+int memman_unmap_run_free(uint32_t virt, uint32_t count) {
+	return vmm_unmap_run_free(virt, count);
+}
