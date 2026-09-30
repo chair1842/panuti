@@ -15,15 +15,7 @@ typedef struct fs_ops {
 	struct inode* (*lookup)(void* fs_impl, struct inode* dir, const char* name, size_t len);
 	int (*create)(void* fs_impl, struct inode* dir, const char* name, size_t len, inode_type_t type);
 	int (*unlink)(void* fs_impl, struct inode* dir, const char* name, size_t len);
-	// rename/link are optional: a NULL hook means the filesystem refuses the
-	// operation outright (read-only media, or not implemented). when present
-	// they return 0 on success or a PANUTIERRNO_* code on failure, and they own
-	// their own existence and collision checks -- the registry only decides
-	// which side of the fs boundary the call landed on. new_dir/new_name may
-	// name a different directory than the source, but it has to be the same
-	// filesystem; the registry rejects cross-device calls before they get here.
-	int (*rename)(void* fs_impl, struct inode* old_dir, const char* old_name, size_t old_len,
-	              struct inode* new_dir, const char* new_name, size_t new_len);
+	int (*rename)(void* fs_impl, struct inode* old_dir, const char* old_name, size_t old_len, struct inode* new_dir, const char* new_name, size_t new_len);
 	int (*link)(void* fs_impl, struct inode* target, struct inode* dir, const char* name, size_t len);
 	int64_t (*size)(void* fs_impl, struct inode* node);
 	void* (*open)(void* fs_impl, struct inode* node);
