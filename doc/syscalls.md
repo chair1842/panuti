@@ -756,7 +756,7 @@ keeps the literal path the caller supplied.
 `type` uses the same `inode_type_t` vocabulary described under `READDIR`.
 
 `size` is `0` unless the entry came from a mounted filesystem that implements
-`fs_ops->size`, which in practice means IsoFS. The native registry records no
+`fs_ops->size`. The native registry records no
 lengths anywhere, so **native entries always report `size == 0` even when they
 have real content**. IsoFS returns the same extent length that `READDIR` hands
 out for the same entry, so `STAT` and `READDIR` agree on `size`.
