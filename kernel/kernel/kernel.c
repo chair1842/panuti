@@ -9,6 +9,8 @@
 #include <kernel/boot_mod.h>
 #include <kernel/kpanic.h>
 #include <kernel/ata/atapi.h>
+#include <kernel/ata/ata.h>
+#include "../arch/i386/drivers/ata/ide.h"
 #include "drivers/vga/vga.h"
 #include "drivers/ramblock/ramblock.h"
 #include <kernel/kbd/dvc.h>
@@ -30,7 +32,12 @@ void kernel_main(void) {
 	kbd_line_init();
 	
 	ramblock_init("/dvc/ram0", 512, 1024);
+
+	// ide_init probes both buses and hangs the irq handlers, then each
+	// protocol driver claims whichever slots turned out to speak it
+	ide_init();
 	atapi_init();
+	ata_init();
 
 	const void* elf_data;
 	size_t elf_size;

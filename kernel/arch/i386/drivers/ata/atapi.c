@@ -4,12 +4,9 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "../../io.h"
-#include "../../intpt/handlers/main.h"
 #include <kernel/ata/atapi.h>
 #include <kernel/block/block.h>
-#include <kernel/timer.h>
 #include <kernel/klog.h>
-#include <kernel/sched/sched.h>
 #include <string.h>
 
 #define ATAPI_SECTOR_SIZE 2048
@@ -17,30 +14,9 @@
 #define SCSI_READ_CAPACITY 0x25
 #define SCSI_READ10 0x28
 
-#define ATA_IRQ14_VECTOR 46
-#define ATA_IRQ15_VECTOR 47
-
-static ide_channel_t primary = {
-	.io_base = ATA_PRIMARY_IO,
-	.ctrl_base = ATA_PRIMARY_CTRL,
-};
-
-static ide_channel_t secondary = {
-	.io_base = ATA_SECONDARY_IO,
-	.ctrl_base = ATA_SECONDARY_CTRL,
-};
-
-static void ata_irq14_handler(registers_t* regs) {
-	(void)regs;
-	primary.irq_fired = true;
-	ide_read_reg(&primary, ATA_REG_STATUS);
-}
-
-static void ata_irq15_handler(registers_t* regs) {
-	(void)regs;
-	secondary.irq_fired = true;
-	ide_read_reg(&secondary, ATA_REG_STATUS);
-}
+// each registered cdrom gets the next free number, no matter which
+// slot on which bus it squats in
+static int next_cdrom_number = 0;
 
 // the atapi secret sauce: shove a scsi command packet down the drive's throat
 // and hope the data pops out the other end. transfer_bytes tells the drive
@@ -51,30 +27,14 @@ static void ata_irq15_handler(registers_t* regs) {
 // of betting on irq timing. with irqs the data can land in the buffer one
 // transfer late (the drive raises intq for the packet phase too), which
 // scrambles which sector we actually read on the next go.
-//
-// a packet exchange drives one shared set of ATA registers and then polls
-// them with `hlt`, so its owner can be descheduled part-way through. without
-// a lock, a second task that reaches the same drive in that window issues its
-// own CDB and status polls against the in-flight transfer: both then read the
-// wrong sectors and usually time out. serialize whole packet exchanges. the
-// owner never blocks (it only ever halts), so it stays runnable and a
-// yielding waiter is guaranteed to make progress.
-static void ide_channel_acquire(ide_channel_t* ch) {
-	while (__sync_lock_test_and_set(&ch->busy, (uint32_t)1)) {
-		sched_schedule();
-	}
-}
-
-static void ide_channel_release(ide_channel_t* ch) {
-	__sync_lock_release(&ch->busy);
-}
-
 static int ide_send_packet_locked(
-	ide_channel_t* ch,
+	ide_drive_t* drv,
 	const uint8_t cdb[12],
 	void* buf,
 	size_t transfer_bytes
 ) {
+	ide_channel_t* ch = drv->channel;
+
 	if (ide_poll(ch) < 0) {
 		return BLOCK_ERR_IO;
 	}
@@ -88,59 +48,53 @@ static int ide_send_packet_locked(
 	ide_write_reg(ch, ATA_REG_LBA_HI, byte_count >> 8);
 
 	// pick master or slave, then send the packet command
-	ide_write_reg(ch, ATA_REG_DRIVE_HEAD, ch->is_slave ? ATA_HEAD_SLAVE : ATA_HEAD_MASTER);
+	ide_write_reg(ch, ATA_REG_DRIVE_HEAD, drv->index ? ATA_HEAD_SLAVE : ATA_HEAD_MASTER);
 	ide_write_reg(ch, ATA_REG_COMMAND, ATA_CMD_PACKET);
 
 	// wait for the drive to accept the packet (drq set, bsy clear)
-	uint32_t timeout = timer_get_ticks() + IDE_TIMEOUT_TICKS;
-	uint8_t status;
-	do {
-		// sleep instead of spinning; the drive's intq (or the timer) wakes us
-		__asm__ __volatile__("hlt");
-		status = ide_read_reg(ch, ATA_REG_STATUS);
-		if (timer_get_ticks() > timeout) {
-			return BLOCK_ERR_IO;
-		}
-	} while ((status & ATA_SR_BSY) || !(status & ATA_SR_DRQ));
+	int status = ide_wait_drq(ch, IDE_TIMEOUT_TICKS);
+	if (status < 0) {
+		return BLOCK_ERR_IO;
+	}
+
+	if (status & ATA_SR_ERR) {
+		klog(KLOG_WARN, "atapi: PACKET aborted on 0x%x %s: %s\n",
+			 ch->io_base, drv->index ? "slave" : "master",
+			 ide_error_string(ide_read_reg(ch, ATA_REG_ERROR)));
+		return BLOCK_ERR_IO;
+	}
 
 	// the cdb is 12 bytes = 6 words. outsw/insw are word-based.
 	outsw(ch->io_base + ATA_REG_DATA, cdb, 6);
 
 	// wait for the data to be ready for pio-out: bsy clear and drq set again
-	timeout = timer_get_ticks() + IDE_TIMEOUT_TICKS;
-	do {
-		__asm__ __volatile__("hlt");
-		status = ide_read_reg(ch, ATA_REG_STATUS);
-		if (timer_get_ticks() > timeout) {
-			return BLOCK_ERR_IO;
-		}
-	} while ((status & ATA_SR_BSY) || !(status & ATA_SR_DRQ));
+	status = ide_wait_drq(ch, IDE_TIMEOUT_TICKS);
+	if (status < 0) {
+		return BLOCK_ERR_IO;
+	}
+
+	if (status & ATA_SR_ERR) {
+		klog(KLOG_WARN, "atapi: transfer failed on 0x%x %s: %s\n",
+			 ch->io_base, drv->index ? "slave" : "master",
+			 ide_error_string(ide_read_reg(ch, ATA_REG_ERROR)));
+		return BLOCK_ERR_IO;
+	}
 
 	// bytes of data are words of nothing, delivered straight to your door
 	insw(ch->io_base + ATA_REG_DATA, buf, transfer_bytes / 2);
 
 	// let the drive finish the transfer before we send the next packet
-	timeout = timer_get_ticks() + IDE_TIMEOUT_TICKS;
-	do {
-		__asm__ __volatile__("hlt");
-		status = ide_read_reg(ch, ATA_REG_STATUS);
-		if (timer_get_ticks() > timeout) {
-			return BLOCK_ERR_IO;
-		}
-	} while (status & ATA_SR_BSY);
+	if (ide_wait_ready(ch, IDE_TIMEOUT_TICKS) < 0) {
+		return BLOCK_ERR_IO;
+	}
 
 	return BLOCK_OK;
 }
 
-static int ide_send_packet(
-	ide_channel_t* ch,
-	const uint8_t cdb[12],
-	void* buf,
-	size_t transfer_bytes
-) {
-	ide_channel_acquire(ch);
-	int rc = ide_send_packet_locked(ch, cdb, buf, transfer_bytes);
-	ide_channel_release(ch);
+static int ide_send_packet(ide_drive_t* drv, const uint8_t cdb[12], void* buf, size_t transfer_bytes) {
+	ide_channel_acquire(drv->channel);
+	int rc = ide_send_packet_locked(drv, cdb, buf, transfer_bytes);
+	ide_channel_release(drv->channel);
 	return rc;
 }
 
@@ -148,10 +102,10 @@ static inline uint32_t read_be32(const uint8_t* p) {
 	return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | ((uint32_t)p[3]);
 }
 
-static void atapi_read_capacity(ide_channel_t* ch, uint32_t* sectors) {
+static void atapi_read_capacity(ide_drive_t* drv, uint32_t* sectors) {
 	uint8_t cdb[12] = { SCSI_READ_CAPACITY };
 	uint8_t res[8];
-	if (ide_send_packet(ch, cdb, res, 8) != BLOCK_OK) {
+	if (ide_send_packet(drv, cdb, res, 8) != BLOCK_OK) {
 		*sectors = 0;
 		return;
 	}
@@ -161,7 +115,7 @@ static void atapi_read_capacity(ide_channel_t* ch, uint32_t* sectors) {
 }
 
 static int atapi_read(void* impl, uint64_t block, void* buf, size_t count) {
-	ide_channel_t* ch = (ide_channel_t*)impl;
+	ide_drive_t* drv = (ide_drive_t*)impl;
 	uint8_t* out = (uint8_t*)buf;
 
 	for (size_t i = 0; i < count; i++) {
@@ -173,7 +127,7 @@ static int atapi_read(void* impl, uint64_t block, void* buf, size_t count) {
 		cdb[5] = block & 0xFF;
 		cdb[8] = 1; // 1 sector per packet
 
-		if (ide_send_packet(ch, cdb, out, ATAPI_SECTOR_SIZE) != BLOCK_OK) {
+		if (ide_send_packet(drv, cdb, out, ATAPI_SECTOR_SIZE) != BLOCK_OK) {
 			return BLOCK_ERR_IO;
 		}
 
@@ -191,13 +145,9 @@ static int atapi_write(void* impl, uint64_t block, const void* buf, size_t count
 }
 
 static uint64_t atapi_count(void* impl) {
-	ide_channel_t* ch = (ide_channel_t*)impl;
-	return ch->block_count;
+	ide_drive_t* drv = (ide_drive_t*)impl;
+	return drv->block_count;
 }
-
-// each registered cdrom gets the next free number, no matter which
-// slot on which bus it squats in
-static int next_cdrom_number = 0;
 
 static const block_ops_t atapi_ops = {
 	.read = atapi_read,
@@ -205,21 +155,10 @@ static const block_ops_t atapi_ops = {
 	.count = atapi_count,
 };
 
-static void atapi_scan_channel(ide_channel_t* ch, int bus) {
-	if (ide_probe(ch) != 0) {
-		return;
-	}
-
-	if (!ch->is_atapi) {
-		klog(KLOG_INFO, "atapi: ata disk on %s%s not supported yet\n",
-			 bus ? "2nd" : "1st", ch->is_slave ? " slave" : " master");
-		
-		return;
-	}
-
+static void atapi_attach(ide_drive_t* drv) {
 	uint32_t sectors;
-	atapi_read_capacity(ch, &sectors);
-	ch->block_count = sectors;
+	atapi_read_capacity(drv, &sectors);
+	drv->block_count = sectors;
 
 	char path[16];
 	const char* prefix = "/dvc/cdrom";
@@ -234,14 +173,19 @@ static void atapi_scan_channel(ide_channel_t* ch, int bus) {
 	memcpy(path, prefix, plen + 1);
 	path[plen] = '0' + num;
 	path[plen + 1] = '\0';
-	block_register(path, &atapi_ops, ch, ATAPI_SECTOR_SIZE, sectors);
+	block_register(path, &atapi_ops, drv, ATAPI_SECTOR_SIZE, sectors);
 	klog(KLOG_INFO, "atapi: %s registered (%u sectors)\n", path, sectors);
 }
 
 void atapi_init(void) {
-	register_handler(ATA_IRQ14_VECTOR, ata_irq14_handler);
-	register_handler(ATA_IRQ15_VECTOR, ata_irq15_handler);
+	for (int bus = 0; bus < IDE_CHANNEL_COUNT; bus++) {
+		ide_channel_t* ch = ide_channel_get(bus);
+		if (!ch) continue;
 
-	atapi_scan_channel(&primary, 0);
-	atapi_scan_channel(&secondary, 1);
+		for (int slot = 0; slot < IDE_SLAVES_PER_CHANNEL; slot++) {
+			ide_drive_t* drv = &ch->drives[slot];
+			if (!drv->present || !drv->is_atapi) continue;
+			atapi_attach(drv);
+		}
+	}
 }
