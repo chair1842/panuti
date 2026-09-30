@@ -504,10 +504,10 @@ static void ata_attach(ide_drive_t* drv) {
 	path[2] = 'v';
 	path[3] = 'c';
 	path[4] = '/';
-	path[5] = 'd';
-	path[6] = 'i';
-	path[7] = 's';
-	path[8] = 'k';
+	path[5] = 'p';
+	path[6] = 'a';
+	path[7] = 't';
+	path[8] = 'a';
 	path[9] = (char)('0' + num);
 	path[10] = '\0';
 
