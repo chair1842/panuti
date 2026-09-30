@@ -394,6 +394,21 @@ static int isofs_unlink(void* fs_impl, struct inode* dir, const char* name, size
 	return -1;
 }
 
+static int isofs_rename(void* fs_impl, struct inode* old_dir, const char* old_name, size_t old_len,
+                        struct inode* new_dir, const char* new_name, size_t new_len) {
+	(void)fs_impl; (void)old_dir; (void)old_name; (void)old_len;
+	(void)new_dir; (void)new_name; (void)new_len;
+	// iso9660 is read-only media
+	return -1;
+}
+
+static int isofs_link(void* fs_impl, struct inode* target, struct inode* dir,
+                      const char* name, size_t len) {
+	(void)fs_impl; (void)target; (void)dir; (void)name; (void)len;
+	// iso9660 has no hard links
+	return -1;
+}
+
 static int isofs_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, size_t* cursor) {
 	isofs_t* fs = fs_impl;
 
@@ -475,6 +490,8 @@ static const fs_ops_t isofs_ops = {
 	.lookup = isofs_lookup,
 	.create = isofs_create,
 	.unlink = isofs_unlink,
+	.rename = isofs_rename,
+	.link = isofs_link,
 	.size = isofs_size,
 	.open = isofs_open,
 	.read = isofs_read,

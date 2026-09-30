@@ -46,6 +46,8 @@ inode_t* registry_find(const char* path);
 inode_t* registry_root(void);
 inode_t* registry_inode_alloc(inode_type_t type);
 int registry_unlink(inode_t* dir, const char* name, size_t len);
+int registry_rename(inode_t* old_dir, const char* old_name, size_t old_len, inode_t* new_dir, const char* new_name, size_t new_len);
+int registry_link(inode_t* target, inode_t* dir, const char* name, size_t len);
 void inode_unref(inode_t* inode);
 int registry_mount(const char* path, const fs_ops_t* fs_ops, void* fs_impl);
 int registry_unmount(const char* path);

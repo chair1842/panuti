@@ -34,38 +34,7 @@ int32_t syshandler_rename(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return PANUTIERRNO_NOTFOUND;
 	}
 
-	// shuffling names around on disk is the filesystem's job
-	if (mount_find(old_parent) || mount_find(new_parent) ||
-	    old_parent->mnt || new_parent->mnt) {
-		return PANUTIERRNO_UNSUPPORTEDOP;
-	}
-
-	dirent_t* src = registry_finddirent(old_parent, old_name, old_len);
-	if (!src) {
-		return PANUTIERRNO_NOTFOUND;
-	}
-
-	// same dir, same name: nothing to do, and certainly not an error
-	if (old_parent == new_parent && old_len == new_len &&
-	    strncmp(old_name, new_name, old_len) == 0) {
-		return 0;
-	}
-
-	if (registry_finddirent(new_parent, new_name, new_len)) {
-		return PANUTIERRNO_EXISTS;
-	}
-
-	// link the new name first (bumps refcount), then drop the old one
-	if (!registry_linkdirent(new_parent, new_name, new_len, src->inode)) {
-		return PANUTIERRNO_PLAINERR;
-	}
-
-	if (registry_unlink(old_parent, old_name, old_len) != 0) {
-		// this should never happen since we just found it, but roll back
-		// anyway so the refcount doesn't leak
-		registry_unlink(new_parent, new_name, new_len);
-		return PANUTIERRNO_PLAINERR;
-	}
-
-	return 0;
+	// the registry decides whether this stays in its in-memory tree or goes
+	// down to the backing filesystem
+	return registry_rename(old_parent, old_name, old_len, new_parent, new_name, new_len);
 }

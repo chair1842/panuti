@@ -22,6 +22,20 @@ static int fatfs_unlink(void* fs_impl, struct inode* dir, const char* name, size
 	return -1;
 }
 
+static int fatfs_rename(void* fs_impl, struct inode* old_dir, const char* old_name, size_t old_len,
+                        struct inode* new_dir, const char* new_name, size_t new_len) {
+	(void)fs_impl; (void)old_dir; (void)old_name; (void)old_len;
+	(void)new_dir; (void)new_name; (void)new_len;
+	return -1;
+}
+
+static int fatfs_link(void* fs_impl, struct inode* target, struct inode* dir,
+                      const char* name, size_t len) {
+	(void)fs_impl; (void)target; (void)dir; (void)name; (void)len;
+	// fat has no hard links
+	return -1;
+}
+
 static int64_t fatfs_size(void* fs_impl, struct inode* node) {
 	(void)fs_impl; (void)node;
 	return -1; // fatfs is not implemented yet, so no length to report
@@ -50,6 +64,8 @@ static const fs_ops_t fatfs_ops = {
 	.lookup = fatfs_lookup,
 	.create = fatfs_create,
 	.unlink = fatfs_unlink,
+	.rename = fatfs_rename,
+	.link = fatfs_link,
 	.size = fatfs_size,
 	.open = fatfs_open,
 	.read = fatfs_read,

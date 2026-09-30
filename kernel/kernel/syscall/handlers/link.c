@@ -37,17 +37,7 @@ int32_t syshandler_link(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return PANUTIERRNO_NOTFOUND;
 	}
 
-	if (mount_find(new_parent) || new_parent->mnt) {
-		return PANUTIERRNO_UNSUPPORTEDOP;
-	}
-
-	if (registry_finddirent(new_parent, new_name, new_len)) {
-		return PANUTIERRNO_EXISTS;
-	}
-
-	if (!registry_linkdirent(new_parent, new_name, new_len, node)) {
-		return PANUTIERRNO_PLAINERR;
-	}
-
-	return 0;
+	// the registry decides whether this stays in its in-memory tree or goes
+	// down to the backing filesystem
+	return registry_link(node, new_parent, new_name, new_len);
 }
