@@ -5,8 +5,6 @@
 
 #include <kernel/block/block.h>
 
-#define EXT2_MAGIC 0xEF53
-
 typedef struct __attribute__((packed)) ext2_superblock {
     uint32_t inodes_count;
     uint32_t blocks_count;
@@ -35,7 +33,7 @@ typedef struct __attribute__((packed)) ext2_superblock {
     uint16_t def_resgid;
 
     // everything below is only valid if s_rev_level >= 1
-    uint32_t first_ino; // first non-reserved inode (rev 0: 11)
+    uint32_t first_inode; // first non-reserved inode (rev 0: 11)
     uint16_t inode_size; // bytes per inode (rev 0: 128)
     uint16_t block_group_nr; // which group this superblock copy is in
     uint32_t feature_compat;
@@ -66,7 +64,7 @@ typedef struct __attribute__((packed)) ext2_group_desc {
 typedef struct ext2 {
 	block_dev_t* block_device;
 	
-	ext2_superblock_t superblock;
+	ext2_superblock_t* superblock;
 
 	uint32_t block_size;
 	uint32_t first_data_block;
@@ -95,5 +93,7 @@ typedef struct ext2 {
 	uint32_t cached_indirect_block;
 	uint8_t* cached_indirect_buf;
 } ext2_t;
+
+int ext2_mount(const char* mountp, const char* blkdev);
 
 #endif
