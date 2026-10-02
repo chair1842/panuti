@@ -162,6 +162,13 @@ typedef struct ext2_inode {
 	uint32_t inum;
 } ext2_inode_t;
 
+typedef struct ext2_file {
+	ext2_t* fs;
+	uint32_t inum;
+	uint64_t size;
+	uint32_t block[15]; // copied from the inode at open, already unpacked
+} ext2_file_t;
+
 int ext2_mount(const char* mountp, const char* blkdev);
 
 #endif

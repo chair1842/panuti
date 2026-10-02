@@ -66,8 +66,14 @@ static int ext2_validate_gdt(ext2_t* fs) {
     return 0;
 }
 
-// fetch the fixed prefix of an on-disk inode. the header is shorter than the
-// smallest inode size mount accepts, so this can never run past a block.
+static uint64_t ext2_inode_size(ext2_t* fs, const ext2_inode_hdr_t* hdr) {
+	if (fs->large_files && hdr->size_high != 0) {
+		return ((uint64_t)hdr->size_high << 32) | hdr->size;
+	}
+
+	return hdr->size;
+}
+
 static int ext2_read_inode(ext2_t* fs, uint32_t inum, ext2_inode_hdr_t* out) {
 	if (inum == 0 || inum > fs->superblock->inodes_count) {
 		return -1;
@@ -402,13 +408,68 @@ static int ext2_link(void* fs_impl, struct inode* target, struct inode* dir,
 }
 
 static int64_t ext2_size(void* fs_impl, struct inode* node) {
-	(void)fs_impl; (void)node;
-	return 0;
+	ext2_t* fs = fs_impl;
+
+	if (!fs || !node) {
+		return -1;
+	}
+
+	ext2_inode_t* ii = node->impl;
+	if (!ii || ii->fs != fs) {
+		return -1;
+	}
+
+	ext2_inode_hdr_t hdr;
+	if (ext2_read_inode(fs, ii->inum, &hdr) != 0) {
+		return -1;
+	}
+
+	if (hdr.dtime != 0) {
+		return -1; // unlinked: the name is gone, so there is nothing to report
+	}
+
+	return (int64_t)ext2_inode_size(fs, &hdr);
 }
 
 static void* ext2_open(void* fs_impl, struct inode* node) {
-	(void)fs_impl; (void)node;
-	return nullptr;
+	ext2_t* fs = fs_impl;
+
+	if (!fs || !node) {
+		return nullptr;
+	}
+
+	ext2_inode_t* ii = node->impl;
+	if (!ii || ii->fs != fs) {
+		return nullptr;
+	}
+
+	ext2_inode_hdr_t hdr;
+	if (ext2_read_inode(fs, ii->inum, &hdr) != 0) {
+		return nullptr;
+	}
+
+	if (hdr.dtime != 0) {
+		return nullptr; // unlinked since the name was resolved
+	}
+
+	// trust the inode, not the name we were handed: a directory or a symlink is
+	// not a file, and opening one as a file would hand out a nonsense handle.
+	// this is the same rule readdir applies when classifying entries.
+	if ((hdr.mode & EXT2_S_IFMT) != EXT2_S_IFREG) {
+		return nullptr;
+	}
+
+	ext2_file_t* f = kmalloc(sizeof(ext2_file_t), alignof(ext2_file_t));
+	if (!f) {
+		return nullptr;
+	}
+
+	f->fs = fs;
+	f->inum = ii->inum;
+	f->size = ext2_inode_size(fs, &hdr);
+	memcpy(f->block, hdr.block, sizeof(f->block));
+
+	return f;
 }
 
 static int ext2_read(void* file_impl, void* buf, size_t len, size_t offset) {
@@ -427,7 +488,7 @@ static int ext2_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, s
 }
 
 static void ext2_close(void* file_impl) {
-	(void)file_impl;
+	kfree(file_impl);
 }
 
 static void ext2_finish(void* fs_impl) {
@@ -460,8 +521,8 @@ static void ext2_finish(void* fs_impl) {
 		kfree(fs->cached_indirect_buf);
 	}
 	
-	if (fs->scratch) {
-		kfree(fs->scratch);
+	if (fs->dir_buf) {
+		kfree(fs->dir_buf);
 	}
 
 	kfree(fs);
