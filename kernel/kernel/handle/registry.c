@@ -187,8 +187,14 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 		if (cmnt) {
 			// inside a mounted filesystem: resolve through the mount
 			if (len == 2 && seg_start[0] == '.' && seg_start[1] == '.' && current == cmnt->root) {
-				// '..' at the mount root crosses back over the boundary to the cover
-				child = cmnt->mountpoint;
+				// '..' at the mount root has no on-disk parent to follow, so it
+				// crosses back over the boundary. it has to land on the parent of
+				// the mountpoint, not on the mountpoint itself: returning the
+				// cover would drop us inside the directory we are mounted over,
+				// so '/mnt/..' could never climb back out to '/'. every namespace
+				// directory gets a '..' pointing at its parent, so follow that.
+				dirent_t* up = registry_finddirent(cmnt->mountpoint, "..", 2);
+				child = up ? up->inode : cmnt->mountpoint;
 				crossed_out = true;
 			} else if (cmnt->fs_ops->lookup) {
 				child = cmnt->fs_ops->lookup(cmnt->fs_impl, current, seg_start, len);

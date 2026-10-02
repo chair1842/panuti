@@ -5,6 +5,46 @@
 
 #include <kernel/block/block.h>
 
+#define EXT2_NDIR_BLOCKS 12
+#define EXT2_IND_BLOCK 12
+#define EXT2_DIND_BLOCK 13
+#define EXT2_TIND_BLOCK 14
+
+#define EXT2_NAME_LEN 255
+
+#define EXT2_S_IFMT 0xF000
+#define EXT2_S_IFDIR 0x4000
+#define EXT2_S_IFREG 0x8000
+#define EXT2_S_IFLNK 0xA000
+
+#define EXT2_ROOT_INO 2
+
+typedef struct __attribute__((packed)) ext2_inode_hdr {
+    uint16_t mode;
+    uint16_t uid;
+    uint32_t size; // bytes, so this is what bounds a directory
+    uint32_t atime;
+    uint32_t ctime;
+    uint32_t mtime;
+    uint32_t dtime; // nonzero once unlinked
+    uint16_t gid;
+    uint16_t links_count;
+    uint32_t blocks; // 512-byte sectors, NOT bytes
+    uint32_t flags;
+    uint32_t osd1;
+    uint32_t block[15]; // 0..11 direct, 12 indirect, 13 double, 14 triple
+    uint32_t generation;
+    uint32_t file_acl;
+    uint32_t size_high; // only meaningful with LARGE_FILE, so rev 1 only
+} ext2_inode_hdr_t;
+
+typedef struct __attribute__((packed)) ext2_dirent_hdr {
+    uint32_t inode;
+    uint16_t rec_len;
+    uint8_t name_len;
+    uint8_t file_type; // only present with the FILETYPE feature
+} ext2_dirent_hdr_t;
+
 typedef struct __attribute__((packed)) ext2_superblock {
     uint32_t inodes_count;
     uint32_t blocks_count;
@@ -61,6 +101,15 @@ typedef struct __attribute__((packed)) ext2_group_desc {
     uint8_t reserved[12];
 } ext2_group_desc_t;
 
+// Directory entries usually name sequential inodes, so a scan reads a long run
+// of neighbouring inodes. A single slot would miss every one of those, so keep a
+// small round-robin instead. Safe to keep for the whole mount: it is read-only.
+#define EXT2_INODE_CACHE_SLOTS 8
+typedef struct {
+	uint32_t num;
+	ext2_inode_hdr_t hdr;
+} ext2_inode_cache_slot_t;
+
 typedef struct ext2 {
 	block_dev_t* block_device;
 	
@@ -88,7 +137,17 @@ typedef struct ext2 {
 	bool superblock_dirty;
 	bool gdt_dirty;
 
-	uint8_t* scratch;
+	// one data block, held across readdir calls so a directory scan does not
+	// reallocate per entry. cached_dir_block says which logical block of
+	// cached_dir_inode it holds, biased so 0 can mean "nothing loaded"
+	uint8_t* dir_buf;
+	uint32_t cached_dir_inode;
+	uint32_t cached_dir_block;
+	uint64_t cached_dir_size;
+	uint32_t cached_dir_blocks[15]; // the inode's block array, already unpacked
+
+	ext2_inode_cache_slot_t inode_cache[EXT2_INODE_CACHE_SLOTS];
+	uint32_t inode_cache_next;
 
 	uint32_t cached_indirect_block;
 	uint8_t* cached_indirect_buf;
@@ -98,11 +157,6 @@ typedef struct ext2 {
 	struct inode* root_node;
 } ext2_t;
 
-// the on-disk inode number every ext2 filesystem roots at
-#define EXT2_ROOT_INO 2
-
-// per-inode state. one of these hangs off every inode this filesystem hands
-// back into the registry
 typedef struct ext2_inode {
 	ext2_t* fs;
 	uint32_t inum;

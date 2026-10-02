@@ -7,6 +7,7 @@
 #include <kernel/memman/slab.h>
 #include <kernel/block/utils.h>
 #include <stdint.h>
+#include <string.h>
 
 #define EXT2_MAGIC 0xEF53
 
@@ -65,10 +66,316 @@ static int ext2_validate_gdt(ext2_t* fs) {
     return 0;
 }
 
-// TODO: read the dirent out of dir's data blocks and walk back to its inode
+// fetch the fixed prefix of an on-disk inode. the header is shorter than the
+// smallest inode size mount accepts, so this can never run past a block.
+static int ext2_read_inode(ext2_t* fs, uint32_t inum, ext2_inode_hdr_t* out) {
+	if (inum == 0 || inum > fs->superblock->inodes_count) {
+		return -1;
+	}
+
+	uint32_t group = (inum - 1) / fs->superblock->inodes_per_group;
+	uint32_t index_in_group = (inum - 1) % fs->superblock->inodes_per_group;
+
+	if (group >= fs->group_count) {
+		return -1;
+	}
+
+	uint32_t table_block = fs->gdt[group].inode_table + index_in_group / fs->inodes_per_block;
+	uint32_t byte_off = (index_in_group % fs->inodes_per_block) * fs->inode_size;
+
+	if (table_block >= fs->superblock->blocks_count) {
+		return -1;
+	}
+
+	// inode_size is at least 128 and the header is 112, so the tail of the last
+	// inode in a block always has room for it
+	if (byte_off > fs->block_size ||
+		fs->block_size - byte_off < sizeof(ext2_inode_hdr_t)) {
+		return -1;
+	}
+
+	uint64_t offset = (uint64_t)table_block * fs->block_size + byte_off;
+
+	if (offset > UINT64_MAX - sizeof(ext2_inode_hdr_t)) {
+		return -1;
+	}
+
+	return block_read_bytes(fs->block_device, offset, sizeof(ext2_inode_hdr_t), out) == BLOCK_OK ? 0 : -1;
+}
+
+static int ext2_indirect_entry(ext2_t* fs, uint32_t block, uint32_t index, uint32_t* out) {
+	if (block == 0 || index >= fs->addrs_per_block) {
+		return -1;
+	}
+
+	if (block >= fs->superblock->blocks_count) {
+		return -1;
+	}
+
+	if (fs->cached_indirect_block != block) {
+		if (!fs->cached_indirect_buf) {
+			return -1;
+		}
+
+		if (ext2_read_block(fs, block, fs->cached_indirect_buf) != BLOCK_OK) {
+			fs->cached_indirect_block = 0;
+			return -1;
+		}
+
+		fs->cached_indirect_block = block;
+	}
+
+	// the address is unaligned as often as not
+	uint32_t value;
+
+	memcpy(&value, fs->cached_indirect_buf + (uint64_t)index * sizeof(uint32_t), sizeof(value));
+
+	if (value == 0 || value >= fs->superblock->blocks_count) {
+		return -1;
+	}
+
+	*out = value;
+
+	return 0;
+}
+
+static int ext2_map_block(ext2_t* fs, const uint32_t* i_block, uint32_t index, uint32_t* out) {
+	uint32_t apb = fs->addrs_per_block;
+
+	if (index < EXT2_NDIR_BLOCKS) {
+		if (i_block[index] == 0 || i_block[index] >= fs->superblock->blocks_count) {
+			return -1;
+		}
+
+		*out = i_block[index];
+
+		return 0;
+	}
+
+	index -= EXT2_NDIR_BLOCKS;
+
+	if (index < apb) {
+		return ext2_indirect_entry(fs, i_block[EXT2_IND_BLOCK], index, out);
+	}
+
+	index -= apb;
+
+	// apb tops out at 1024, so squaring it cannot overflow
+	uint64_t dind_span = (uint64_t)apb * apb;
+
+	if (index < dind_span) {
+		uint32_t ind;
+
+		if (ext2_indirect_entry(fs, i_block[EXT2_DIND_BLOCK], index / apb, &ind) != 0) {
+			return -1;
+		}
+
+		return ext2_indirect_entry(fs, ind, index % apb, out);
+	}
+
+	index -= dind_span;
+
+	uint32_t dind, ind;
+
+	if (ext2_indirect_entry(fs, i_block[EXT2_TIND_BLOCK], index / dind_span, &dind) != 0) {
+		return -1;
+	}
+
+	if (ext2_indirect_entry(fs, dind, (index / apb) % apb, &ind) != 0) {
+		return -1;
+	}
+
+	return ext2_indirect_entry(fs, ind, index % apb, out);
+}
+
+static void ext2_free_inode_tree(inode_t* n) {
+	for (dirent_t* d = n->children; d; d = d->next) {
+		if (d->inode == n) {
+			continue;
+		}
+
+		ext2_free_inode_tree(d->inode);
+
+		if (d->inode->impl) {
+			kfree(d->inode->impl);
+			d->inode->impl = nullptr;
+		}
+	}
+}
+
 static struct inode* ext2_lookup(void* fs_impl, struct inode* dir, const char* name, size_t len) {
-	(void)fs_impl; (void)dir; (void)name; (void)len;
-	return nullptr;
+	ext2_t* fs = fs_impl;
+
+	if (!fs || !dir || !name || len == 0 || len > EXT2_NAME_LEN) {
+		return nullptr;
+	}
+
+	if (dir->type != INODE_DIR) {
+		return nullptr;
+	}
+
+	// inode_t has nowhere to record the on-disk inode number, so it can only
+	// come from the per-inode state mount and lookup hang off impl
+	ext2_inode_t* dir_inode = dir->impl;
+
+	if (!dir_inode || dir_inode->fs != fs) {
+		return nullptr;
+	}
+
+	// walk() resolves through the mount rather than through the dirent list, so
+	// this is the only thing that stops a repeated lookup of the same name from
+	// allocating another inode every time
+	dirent_t* cached = registry_finddirent(dir, name, len);
+
+	if (cached) {
+		return cached->inode;
+	}
+
+	ext2_inode_hdr_t dih;
+
+	if (ext2_read_inode(fs, dir_inode->inum, &dih) != 0) {
+		return nullptr;
+	}
+
+	if ((dih.mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+		return nullptr;
+	}
+
+	if (dih.size == 0) {
+		return nullptr; // mke2fs gives a fresh empty directory no blocks at all
+	}
+
+	// a directory cannot be larger than the volume holding it. bounding it here
+	// keeps a corrupt size from turning into a very long scan
+	if ((uint64_t)dih.size > (uint64_t)fs->superblock->blocks_count * fs->block_size) {
+		return nullptr;
+	}
+
+	uint8_t* data = kmalloc(fs->block_size, 1);
+
+	if (!data) {
+		return nullptr;
+	}
+
+	uint32_t nblocks = div_ceil_u32(dih.size, fs->block_size);
+	uint32_t inum = 0;
+
+	// i_block lives at offset 40 of a packed record, so it is not guaranteed to
+	// be aligned. copying it out gives the block mapper a properly aligned array
+	uint32_t i_block[15];
+
+	memcpy(i_block, dih.block, sizeof(i_block));
+
+	for (uint32_t bi = 0; bi < nblocks && inum == 0; bi++) {
+		uint32_t phys;
+
+		if (ext2_map_block(fs, i_block, bi, &phys) != 0) {
+			continue; // sparse or corrupt, a later block may still be readable
+		}
+
+		if (ext2_read_block(fs, phys, data) != BLOCK_OK) {
+			continue;
+		}
+
+		uint32_t off = 0;
+
+		while (off < fs->block_size) {
+			ext2_dirent_hdr_t d;
+
+			memcpy(&d, data + off, sizeof(d));
+
+			// a zero rec_len means the rest of this block is padding and the
+			// directory picks up again in the next one
+			if (d.rec_len == 0) {
+				break;
+			}
+
+			// rec_len is the only thing bounding the name, so a corrupt one
+			// would otherwise walk us straight off the end of the buffer
+			if (d.rec_len < sizeof(ext2_dirent_hdr_t) ||
+				(d.rec_len % 4) != 0 ||
+				d.rec_len > fs->block_size ||
+				off > fs->block_size - d.rec_len) {
+				break;
+			}
+
+			if (d.inode == 0) {
+				off += d.rec_len;
+				continue; // deleted entry
+			}
+
+			if (d.name_len == 0 ||
+				d.name_len > d.rec_len - sizeof(ext2_dirent_hdr_t)) {
+				break;
+			}
+
+			if (d.name_len == len &&
+				memcmp(data + off + sizeof(d), name, len) == 0) {
+				inum = d.inode;
+				break;
+			}
+
+			off += d.rec_len;
+		}
+	}
+
+	kfree(data);
+
+	if (inum == 0) {
+		return nullptr;
+	}
+
+	// mode is the authority on the type. the dirent's file_type is only a
+	// hint and does not even exist without the FILETYPE feature, and getting it
+	// wrong would stick, because this inode is cached for the whole mount
+	ext2_inode_hdr_t child;
+
+	if (ext2_read_inode(fs, inum, &child) != 0 || child.dtime != 0) {
+		return nullptr;
+	}
+
+	inode_type_t type;
+	uint16_t fmt = child.mode & EXT2_S_IFMT;
+
+	if (fmt == EXT2_S_IFDIR) {
+		type = INODE_DIR;
+	} else if (fmt == EXT2_S_IFREG) {
+		type = INODE_FILE;
+	} else {
+		// inode_type_t has no link or device type, and reporting one as a
+		// plain file would only produce a nonsense read later
+		return nullptr;
+	}
+
+	inode_t* n = registry_inode_alloc(type);
+
+	if (!n) {
+		return nullptr;
+	}
+
+	ext2_inode_t* impl = kmalloc(sizeof(ext2_inode_t), alignof(ext2_inode_t));
+
+	if (!impl) {
+		inode_unref(n);
+		return nullptr;
+	}
+
+	impl->fs = fs;
+	impl->inum = inum;
+	n->impl = impl;
+
+	if (!registry_linkdirent(dir, name, len, n)) {
+		n->impl = nullptr;
+		kfree(impl);
+		inode_unref(n);
+		return nullptr;
+	}
+
+	// hand back the reference registry_inode_alloc started with. the dirent
+	// holds the only remaining one, and drops it on unlink or at unmount
+	inode_unref(n);
+
+	return n;
 }
 
 static int ext2_create(void* fs_impl, struct inode* dir, const char* name, size_t len, inode_type_t type) {
@@ -129,12 +436,16 @@ static void ext2_finish(void* fs_impl) {
 		return;
 	}
 
-	// the mounted root's per-inode state is ours. inodes handed back by lookup
-	// own one of these too, but lookup does not run yet, so the root is the
-	// only one to release here
-	if (fs->root_node && fs->root_node->impl) {
-		kfree(fs->root_node->impl);
-		fs->root_node->impl = nullptr;
+	// mount_detach runs this before it drops the root's last reference, and
+	// registry_destroy only walks references afterwards without telling the
+	// filesystem, so the whole cached tree has to go while it is still whole
+	if (fs->root_node) {
+		if (fs->root_node->impl) {
+			kfree(fs->root_node->impl);
+			fs->root_node->impl = nullptr;
+		}
+
+		ext2_free_inode_tree(fs->root_node);
 	}
 
 	if (fs->gdt) {
@@ -296,6 +607,11 @@ int ext2_mount(const char* mountp, const char* blkdev) {
 	fs->addrs_per_block = fs->block_size / 4;
 	fs->inodes_per_block = fs->block_size / fs->inode_size;
 
+	fs->cached_indirect_buf = kmalloc(fs->block_size, 1);
+	if (!fs->cached_indirect_buf) {
+		goto fail;
+	}
+
 	uint64_t gdt_bytes = (uint64_t)fs->group_count * sizeof(ext2_group_desc_t);
 	uint64_t gdt_blocks = (gdt_bytes + fs->block_size - 1) / fs->block_size;
 
@@ -383,7 +699,11 @@ fail:
 	if (fs->gdt) {
 		kfree(fs->gdt);
 	}
-	
+
+	if (fs->cached_indirect_buf) {
+		kfree(fs->cached_indirect_buf);
+	}
+
 	kfree(sb);
 	kfree(fs);
 	return PANUTIERRNO_PLAINERR;

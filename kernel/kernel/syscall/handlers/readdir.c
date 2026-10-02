@@ -37,6 +37,12 @@ int32_t syshandler_readdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	int rc;
 
 	if (dir_inode->mnt) {
+		// a backend is not required to implement readdir (fat has none), so
+		// check before calling through or we jump into a null pointer
+		if (!dir_inode->mnt->fs_ops->readdir) {
+			return PANUTIERRNO_UNSUPPORTEDOP;
+		}
+
 		rc = dir_inode->mnt->fs_ops->readdir(
 			dir_inode->mnt->fs_impl,
 			dir_inode,
