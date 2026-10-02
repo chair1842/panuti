@@ -80,6 +80,16 @@ static int ext2_read_inode(ext2_t* fs, uint32_t inum, ext2_inode_hdr_t* out) {
 		return -1;
 	}
 
+	// A directory scan names a long run of neighbouring inodes, and lookup asks
+	// for the same ones again and again, so a handful of slots removes most of
+	// those reads. Safe to keep for the whole mount: nothing here is writable.
+	for (uint32_t i = 0; i < EXT2_INODE_CACHE_SLOTS; i++) {
+		if (fs->inode_cache[i].num == inum) {
+			memcpy(out, &fs->inode_cache[i].hdr, sizeof(*out));
+			return 0;
+		}
+	}
+
 	uint32_t group = (inum - 1) / fs->superblock->inodes_per_group;
 	uint32_t index_in_group = (inum - 1) % fs->superblock->inodes_per_group;
 
@@ -107,7 +117,19 @@ static int ext2_read_inode(ext2_t* fs, uint32_t inum, ext2_inode_hdr_t* out) {
 		return -1;
 	}
 
-	return block_read_bytes(fs->block_device, offset, sizeof(ext2_inode_hdr_t), out) == BLOCK_OK ? 0 : -1;
+	ext2_inode_cache_slot_t* slot = &fs->inode_cache[fs->inode_cache_next];
+
+	fs->inode_cache_next = (fs->inode_cache_next + 1) % EXT2_INODE_CACHE_SLOTS;
+	slot->num = 0; // only becomes a hit once the read below actually succeeds
+
+	if (block_read_bytes(fs->block_device, offset, sizeof(ext2_inode_hdr_t), &slot->hdr) != BLOCK_OK) {
+		return -1;
+	}
+
+	slot->num = inum;
+	memcpy(out, &slot->hdr, sizeof(*out));
+
+	return 0;
 }
 
 static int ext2_indirect_entry(ext2_t* fs, uint32_t block, uint32_t index, uint32_t* out) {
@@ -580,7 +602,137 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 }
 
 static int ext2_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, size_t* cursor) {
-	(void)fs_impl; (void)dir; (void)out; (void)cursor;
+	ext2_t* fs = fs_impl;
+
+	if (!fs || !dir || !out || !cursor) {
+		return -1;
+	}
+
+	ext2_inode_t* di = dir->impl;
+	if (!di || di->fs != fs) {
+		return -1;
+	}
+
+	// the directory's own block array is needed on every call, so it is read
+	// once per directory rather than once per entry
+	uint64_t dsize;
+
+	if (fs->cached_dir_inode != di->inum) {
+		ext2_inode_hdr_t hdr;
+
+		if (ext2_read_inode(fs, di->inum, &hdr) != 0) {
+			return -1;
+		}
+
+		if ((hdr.mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+			return -1;
+		}
+
+		// mke2fs gives a fresh empty directory no blocks at all, so a zero
+		// length is normal here rather than damage
+		uint64_t len = 0;
+		if (ext2_inode_length(fs, &hdr, &len) != 0) {
+			return -1;
+		}
+
+		fs->cached_dir_inode = di->inum;
+		fs->cached_dir_size = len;
+		dsize = len;
+
+		memcpy(fs->cached_dir_blocks, hdr.block, sizeof(fs->cached_dir_blocks));
+		fs->cached_dir_block = 0;
+	} else {
+		dsize = fs->cached_dir_size;
+	}
+
+	if (dsize == 0) {
+		return 1;
+	}
+
+	if (!fs->dir_buf) {
+		return -1;
+	}
+
+	while (*cursor < dsize) {
+		uint64_t off = *cursor;
+		uint32_t block_index = (uint32_t)(off / fs->block_size);
+		uint32_t in_block = (uint32_t)(off % fs->block_size);
+
+		if (fs->cached_dir_block != block_index + 1) {
+			uint32_t phys;
+
+			if (ext2_map_block(fs, fs->cached_dir_blocks, block_index, &phys) != 0 ||
+				ext2_read_block(fs, phys, fs->dir_buf) != BLOCK_OK) {
+				fs->cached_dir_block = 0;
+				*cursor = ((uint64_t)block_index + 1) * fs->block_size;
+				continue;
+			}
+
+			fs->cached_dir_block = block_index + 1;
+		}
+
+		ext2_dirent_hdr_t d;
+		memcpy(&d, fs->dir_buf + in_block, sizeof(d));
+
+		if (d.rec_len == 0) {
+			fs->cached_dir_block = 0;
+			*cursor = ((uint64_t)block_index + 1) * fs->block_size;
+			continue;
+		}
+
+		if (d.rec_len < sizeof(ext2_dirent_hdr_t) ||
+			(d.rec_len % 4) != 0 ||
+			(uint32_t)d.rec_len > fs->block_size ||
+			in_block > fs->block_size - d.rec_len) {
+			fs->cached_dir_block = 0;
+			*cursor = ((uint64_t)block_index + 1) * fs->block_size;
+			continue;
+		}
+
+		if (d.inode == 0 ||
+			d.name_len == 0 ||
+			d.name_len > d.rec_len - sizeof(ext2_dirent_hdr_t)) {
+			*cursor = off + d.rec_len;
+			continue;
+		}
+
+		ext2_inode_hdr_t child;
+
+		if (ext2_read_inode(fs, d.inode, &child) != 0 || child.dtime != 0) {
+			*cursor = off + d.rec_len;
+			continue;
+		}
+
+		uint16_t fmt = child.mode & EXT2_S_IFMT;
+
+		if (fmt != EXT2_S_IFDIR && fmt != EXT2_S_IFREG) {
+			*cursor = off + d.rec_len;
+			continue;
+		}
+
+		size_t name_max = sizeof(out->name) - 1;
+		size_t n = d.name_len;
+
+		if (n > name_max) {
+			n = name_max;
+		}
+
+		memcpy(out->name, fs->dir_buf + in_block + sizeof(d), n);
+		out->name[n] = '\0';
+
+		out->type = (fmt == EXT2_S_IFDIR) ? INODE_DIR : INODE_FILE;
+
+		uint64_t len = 0;
+		out->size = ext2_inode_length(fs, &child, &len) == 0 ? (size_t)len : 0;
+
+		*cursor = off + d.rec_len;
+
+		return 0;
+	}
+
+	// pin the cursor at the end so repeated calls short-circuit immediately
+	*cursor = dsize;
+
 	return 1;
 }
 
@@ -767,6 +919,12 @@ int ext2_mount(const char* mountp, const char* blkdev) {
 
 	fs->cached_indirect_buf = kmalloc(fs->block_size, 1);
 	if (!fs->cached_indirect_buf) {
+		goto fail;
+	}
+
+	// held across readdir calls so a directory scan does not reallocate per entry
+	fs->dir_buf = kmalloc(fs->block_size, 1);
+	if (!fs->dir_buf) {
 		goto fail;
 	}
 
