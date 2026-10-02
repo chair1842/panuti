@@ -8,6 +8,7 @@
 #include <kernel/block/utils.h>
 #include <stdint.h>
 #include <string.h>
+#include <limits.h>
 
 #define EXT2_MAGIC 0xEF53
 
@@ -407,6 +408,22 @@ static int ext2_link(void* fs_impl, struct inode* target, struct inode* dir,
 	return PANUTIERRNO_UNSUPPORTEDOP;
 }
 
+// The length a file claims to have, or 0 if that is not believable. A file
+// cannot be larger than the volume holding it, and a length read out of a
+// corrupt inode is not a reason to hand the reader megabytes of zeroes. Both
+// size() and open() go through here so they can never disagree about whether a
+// length is usable.
+static int ext2_inode_length(ext2_t* fs, const ext2_inode_hdr_t* hdr, uint64_t* out) {
+	uint64_t len = ext2_inode_size(fs, hdr);
+
+	if (len > (uint64_t)fs->superblock->blocks_count * fs->block_size) {
+		return -1; // zero is a real length, so it cannot double as the failure mark
+	}
+
+	*out = len;
+	return 0;
+}
+
 static int64_t ext2_size(void* fs_impl, struct inode* node) {
 	ext2_t* fs = fs_impl;
 
@@ -428,7 +445,12 @@ static int64_t ext2_size(void* fs_impl, struct inode* node) {
 		return -1; // unlinked: the name is gone, so there is nothing to report
 	}
 
-	return (int64_t)ext2_inode_size(fs, &hdr);
+	uint64_t len = 0;
+	if (ext2_inode_length(fs, &hdr, &len) != 0) {
+		return -1; // an impossible length is a length we cannot vouch for
+	}
+
+	return (int64_t)len;
 }
 
 static void* ext2_open(void* fs_impl, struct inode* node) {
@@ -459,6 +481,13 @@ static void* ext2_open(void* fs_impl, struct inode* node) {
 		return nullptr;
 	}
 
+	// refuse a length that does not fit on the volume, so read is never asked to
+	// walk a corrupt size across millions of blocks that hold nothing
+	uint64_t len = 0;
+	if (ext2_inode_length(fs, &hdr, &len) != 0) {
+		return nullptr;
+	}
+
 	ext2_file_t* f = kmalloc(sizeof(ext2_file_t), alignof(ext2_file_t));
 	if (!f) {
 		return nullptr;
@@ -466,15 +495,83 @@ static void* ext2_open(void* fs_impl, struct inode* node) {
 
 	f->fs = fs;
 	f->inum = ii->inum;
-	f->size = ext2_inode_size(fs, &hdr);
+	f->size = len;
 	memcpy(f->block, hdr.block, sizeof(f->block));
 
 	return f;
 }
 
+static int ext2_read_part(ext2_t* fs, uint32_t block, uint32_t within, void* buf, size_t len) {
+	if (len == 0) {
+		return BLOCK_OK;
+	}
+
+	if (block >= fs->superblock->blocks_count) {
+		return BLOCK_ERR_INVAL;
+	}
+
+	uint64_t offset = (uint64_t)block * fs->block_size + within;
+	if (offset > UINT64_MAX - len) {
+		return BLOCK_ERR_INVAL;
+	}
+
+	return block_read_bytes(fs->block_device, offset, len, buf);
+}
+
 static int ext2_read(void* file_impl, void* buf, size_t len, size_t offset) {
-	(void)file_impl; (void)buf; (void)len; (void)offset;
-	return -1;
+	if (!file_impl || !buf) {
+		return -1;
+	}
+
+	ext2_file_t* f = file_impl;
+	ext2_t* fs = f->fs;
+
+	if (!fs || !fs->block_device || !fs->superblock) {
+		return -1;
+	}
+
+	if (len > (size_t)INT_MAX) {
+		len = (size_t)INT_MAX;
+	}
+
+	if ((uint64_t)offset >= f->size) {
+		return 0;
+	}
+
+	uint64_t avail = f->size - (uint64_t)offset;
+	if ((uint64_t)len > avail) {
+		len = (size_t)avail;
+	}
+
+	uint64_t pos = (uint64_t)offset;
+	size_t done = 0;
+
+	while (done < len) {
+		uint32_t index = (uint32_t)(pos / fs->block_size);
+		uint32_t within = (uint32_t)(pos % fs->block_size);
+
+		size_t chunk = fs->block_size - within;
+		if (chunk > len - done) {
+			chunk = len - done;
+		}
+
+		uint8_t* dst = (uint8_t*)buf + done;
+		uint32_t phys = 0;
+
+		if (ext2_map_block(fs, f->block, index, &phys) == 0) {
+			if (ext2_read_part(fs, phys, within, dst, chunk) != BLOCK_OK) {
+				return -1;
+			}
+		} else {
+			// inside the file but unmapped: a hole.
+			memset(dst, 0, chunk);
+		}
+
+		done += chunk;
+		pos += chunk;
+	}
+
+	return (int)done;
 }
 
 static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offset) {
