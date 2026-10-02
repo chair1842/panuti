@@ -660,5 +660,9 @@ int isofs_mount(const char *mountp, const char *blkdev) {
 		return PANUTIERRNO_PLAINERR;
 	}
 
+	// mount_attach took its own reference, so hand back the one
+	// registry_inode_alloc started with
+	inode_unref(root_node);
+
 	return PANUTIERRNO_PLAINSUCCESS;
 }

@@ -92,7 +92,21 @@ typedef struct ext2 {
 
 	uint32_t cached_indirect_block;
 	uint8_t* cached_indirect_buf;
+
+	// the inode handed to mount_attach as the mounted namespace root. kept so
+	// finish() can release the ext2_inode_t hanging off it
+	struct inode* root_node;
 } ext2_t;
+
+// the on-disk inode number every ext2 filesystem roots at
+#define EXT2_ROOT_INO 2
+
+// per-inode state. one of these hangs off every inode this filesystem hands
+// back into the registry
+typedef struct ext2_inode {
+	ext2_t* fs;
+	uint32_t inum;
+} ext2_inode_t;
 
 int ext2_mount(const char* mountp, const char* blkdev);
 

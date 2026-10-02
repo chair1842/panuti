@@ -79,12 +79,15 @@ int mount_detach(struct inode* mountpoint) {
 		m->fs_ops->finish(m->fs_impl);
 	}
 	if (m->root) {
-		// drop the mount's own reference on the root inode
-		if (m->root->refcount > 0) {
-			m->root->refcount--;
-		}
-		// the mounted root no longer hangs off anything
+		// the mounted root no longer hangs off anything. clear this before
+		// the drop, so a destroy triggered by the last reference does not see
+		// a stale mount
 		m->root->mnt = nullptr;
+		
+		// drop the mount's own reference on the root inode. this has to go
+		// through inode_unref rather than a bare decrement, or the inode slot
+		// is never returned to the registry and repeated mounts exhaust it
+		inode_unref(m->root);
 	}
 	if (m->mountpoint) {
 		// just in case a walk ever left a stale pointer on the cover

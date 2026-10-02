@@ -3,6 +3,7 @@
 #include <kernel/handle/registry.h>
 #include <kernel/fs/isofs.h>
 #include <kernel/fs/fatfs.h>
+#include <kernel/fs/ext2.h>
 #include <panuti/errno.h>
 #include <kernel/syscall/handlers.h>
 #include <kernel/mem/usr.h>
@@ -29,6 +30,10 @@ int32_t syshandler_mount(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 
 	if (strcmp(fstype, "fatfs") == 0) {
 		return fatfs_mount(mountp, blkdev);
+	}
+
+	if (strcmp(fstype, "ext2") == 0) {
+		return ext2_mount(mountp, blkdev);
 	}
 
 	return PANUTIERRNO_NOTSUPPORTED;

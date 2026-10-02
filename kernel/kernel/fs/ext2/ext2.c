@@ -65,6 +65,112 @@ static int ext2_validate_gdt(ext2_t* fs) {
     return 0;
 }
 
+// TODO: read the dirent out of dir's data blocks and walk back to its inode
+static struct inode* ext2_lookup(void* fs_impl, struct inode* dir, const char* name, size_t len) {
+	(void)fs_impl; (void)dir; (void)name; (void)len;
+	return nullptr;
+}
+
+static int ext2_create(void* fs_impl, struct inode* dir, const char* name, size_t len, inode_type_t type) {
+	(void)fs_impl; (void)dir; (void)name; (void)len; (void)type;
+	return PANUTIERRNO_UNSUPPORTEDOP;
+}
+
+static int ext2_unlink(void* fs_impl, struct inode* dir, const char* name, size_t len) {
+	(void)fs_impl; (void)dir; (void)name; (void)len;
+	return PANUTIERRNO_UNSUPPORTEDOP;
+}
+
+static int ext2_rename(void* fs_impl, struct inode* old_dir, const char* old_name, size_t old_len,
+                       struct inode* new_dir, const char* new_name, size_t new_len) {
+	(void)fs_impl; (void)old_dir; (void)old_name; (void)old_len;
+	(void)new_dir; (void)new_name; (void)new_len;
+	return PANUTIERRNO_UNSUPPORTEDOP;
+}
+
+static int ext2_link(void* fs_impl, struct inode* target, struct inode* dir,
+                     const char* name, size_t len) {
+	(void)fs_impl; (void)target; (void)dir; (void)name; (void)len;
+	return PANUTIERRNO_UNSUPPORTEDOP;
+}
+
+static int64_t ext2_size(void* fs_impl, struct inode* node) {
+	(void)fs_impl; (void)node;
+	return 0;
+}
+
+static void* ext2_open(void* fs_impl, struct inode* node) {
+	(void)fs_impl; (void)node;
+	return nullptr;
+}
+
+static int ext2_read(void* file_impl, void* buf, size_t len, size_t offset) {
+	(void)file_impl; (void)buf; (void)len; (void)offset;
+	return -1;
+}
+
+static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offset) {
+	(void)file_impl; (void)buf; (void)len; (void)offset;
+	return PANUTIERRNO_UNSUPPORTEDOP;
+}
+
+static int ext2_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, size_t* cursor) {
+	(void)fs_impl; (void)dir; (void)out; (void)cursor;
+	return 1;
+}
+
+static void ext2_close(void* file_impl) {
+	(void)file_impl;
+}
+
+static void ext2_finish(void* fs_impl) {
+	ext2_t* fs = fs_impl;
+	if (!fs) {
+		return;
+	}
+
+	// the mounted root's per-inode state is ours. inodes handed back by lookup
+	// own one of these too, but lookup does not run yet, so the root is the
+	// only one to release here
+	if (fs->root_node && fs->root_node->impl) {
+		kfree(fs->root_node->impl);
+		fs->root_node->impl = nullptr;
+	}
+
+	if (fs->gdt) {
+		kfree(fs->gdt);
+	}
+	
+	if (fs->superblock) {
+		kfree(fs->superblock);
+	}
+	
+	if (fs->cached_indirect_buf) {
+		kfree(fs->cached_indirect_buf);
+	}
+	
+	if (fs->scratch) {
+		kfree(fs->scratch);
+	}
+
+	kfree(fs);
+}
+
+static const fs_ops_t ext2_ops = {
+	.lookup = ext2_lookup,
+	.create = ext2_create,
+	.unlink = ext2_unlink,
+	.rename = ext2_rename,
+	.link = ext2_link,
+	.size = ext2_size,
+	.open = ext2_open,
+	.read = ext2_read,
+	.write = ext2_write,
+	.close = ext2_close,
+	.finish = ext2_finish,
+	.readdir = ext2_readdir,
+};
+
 int ext2_mount(const char* mountp, const char* blkdev) {
 	block_dev_t* dev = block_find(blkdev);
 	if (!dev) {
@@ -235,6 +341,41 @@ int ext2_mount(const char* mountp, const char* blkdev) {
 	if (!mountpoint || mountpoint->type != INODE_DIR) {
 		goto fail;
 	}
+
+	// the mounted namespace gets its own root inode pointing at EXT2_ROOT_INO,
+	// so resolution inside the mount starts from the filesystem root rather
+	// than from the mountpoint
+	inode_t* root_node = registry_inode_alloc(INODE_DIR);
+	if (!root_node) {
+		goto fail;
+	}
+
+	ext2_inode_t* root_inode = kmalloc(sizeof(ext2_inode_t), alignof(ext2_inode_t));
+	if (!root_inode) {
+		inode_unref(root_node);
+		goto fail;
+	}
+
+	root_inode->fs = fs;
+	root_inode->inum = EXT2_ROOT_INO;
+	root_node->impl = root_inode;
+
+	// only for finish()'s benefit: mount_attach takes its own reference on the
+	// root inode, so this needs none of its own
+	fs->root_node = root_node;
+
+	if (mount_attach(mountpoint, &ext2_ops, fs, root_node) != 0) {
+		fs->root_node = nullptr;
+		root_node->impl = nullptr;
+		kfree(root_inode);
+		inode_unref(root_node);
+		goto fail;
+	}
+
+	// mount_attach took its own reference, so hand back the one
+	// registry_inode_alloc started with. the mount now holds the only one, and
+	// mount_detach will drop it through inode_unref
+	inode_unref(root_node);
 
 	return PANUTIERRNO_PLAINSUCCESS;
 
