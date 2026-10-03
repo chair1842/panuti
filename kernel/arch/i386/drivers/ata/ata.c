@@ -8,6 +8,7 @@
 #include <kernel/block/block.h>
 #include <kernel/memman/slab.h>
 #include <kernel/klog.h>
+#include <kernel/pardet.h>
 #include <string.h>
 
 // lba28 tops out here: 28 address bits, 512 byte sectors
@@ -20,17 +21,6 @@
 // rep insw/outsw take their counter in cx, so a single rep is capped at 65535
 // words. 32768 leaves headroom and lands on a tidy 64 KiB
 #define ATA_MAX_TRANSFER_WORDS 32768
-
-// MBR: a 512 byte sector whose last two bytes are 0x55 0xAA, with four
-// 16 byte partition entries starting at offset 0x1BE
-#define MBR_SIZE 512
-#define MBR_SIGNATURE 0xAA55
-#define MBR_TABLE_OFFSET 0x1BE
-#define MBR_ENTRY_SIZE 16
-#define MBR_MAX_PARTITIONS 4
-
-#define MBR_TYPE_EMPTY 0x00
-#define MBR_TYPE_GPT_PROTECTIVE 0xEE
 
 // ATA strings in the identify data are byte swapped pairs with the trailing
 // space and nul already stripped. the first character of the string sits in
@@ -101,10 +91,6 @@ static void ata_apply_identify(ide_drive_t* drv, const uint16_t* words) {
 	}
 
 	drv->block_count = sectors;
-}
-
-static inline uint32_t read_le32(const uint8_t* p) {
-	return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3]);
 }
 
 static uint8_t ata_head(ide_drive_t* drv) {
@@ -358,116 +344,6 @@ static const block_ops_t ata_ops = {
 	.count = ata_count,
 };
 
-// a partition is just a window onto its parent device: same block ops, an
-// offset baked in. stacking one block_register on another is all it takes
-typedef struct {
-	block_dev_t* parent;
-	uint64_t start_lba;
-	uint64_t block_count;
-} ata_partition_t;
-
-static int part_read(void* impl, uint64_t block, void* buf, size_t count) {
-	ata_partition_t* part = (ata_partition_t*)impl;
-	if (block + count > part->block_count) {
-		return BLOCK_ERR_INVAL;
-	}
-	return part->parent->ops->read(part->parent->impl, part->start_lba + block, buf, count);
-}
-
-static int part_write(void* impl, uint64_t block, const void* buf, size_t count) {
-	ata_partition_t* part = (ata_partition_t*)impl;
-	if (block + count > part->block_count) {
-		return BLOCK_ERR_INVAL;
-	}
-	return part->parent->ops->write(part->parent->impl, part->start_lba + block, buf, count);
-}
-
-static uint64_t part_count(void* impl) {
-	return ((ata_partition_t*)impl)->block_count;
-}
-
-static const block_ops_t part_ops = {
-	.read = part_read,
-	.write = part_write,
-	.count = part_count,
-};
-
-// walk the mbr and publish each partition as /dvc/diskNp<n>. no extended
-// partition chains, no gpt: a linear read of the four primary entries is
-// enough to boot a fat drive
-static void ata_scan_partitions(block_dev_t* disk, const char* disk_path) {
-	uint8_t mbr[MBR_SIZE];
-
-	if (disk->ops->read(disk->impl, 0, mbr, 1) != BLOCK_OK) {
-		return;
-	}
-
-	uint16_t signature = (uint16_t)mbr[510] | ((uint16_t)mbr[511] << 8);
-	if (signature != MBR_SIGNATURE) {
-		return; // no partition table, could be a superfloppy
-	}
-
-	size_t dlen = strlen(disk_path);
-
-	for (int i = 0; i < MBR_MAX_PARTITIONS; i++) {
-		const uint8_t* entry = mbr + MBR_TABLE_OFFSET + i * MBR_ENTRY_SIZE;
-
-		uint8_t status = entry[0];
-		uint8_t type = entry[4];
-		uint32_t start = read_le32(entry + 8);
-		uint32_t count = read_le32(entry + 12);
-
-		if (type == MBR_TYPE_EMPTY || type == MBR_TYPE_GPT_PROTECTIVE) {
-			continue;
-		}
-
-		// 0x00 for a plain primary, 0x80 for a bootable one
-		if (status != 0x00 && status != 0x80) {
-			continue;
-		}
-
-		if (count == 0) {
-			continue;
-		}
-
-		// a lying partition table would hand isofs or fatfs a window off the
-		// end of the disk, and they would read whatever is there instead
-		if ((uint64_t)start + count > disk->block_count) {
-			klog(KLOG_WARN, "ata: %s p%d claims sectors %u..%u, past the end of the disk\n",
-					disk_path, i + 1, start, (uint32_t)((uint64_t)start + count));
-			continue;
-		}
-
-		ata_partition_t* part = kmalloc(sizeof(ata_partition_t), alignof(ata_partition_t));
-		if (!part) {
-			klog(KLOG_WARN, "ata: kmalloc failed for %s p%d\n", disk_path, i + 1);
-			return;
-		}
-
-		part->parent = disk;
-		part->start_lba = start;
-		part->block_count = count;
-
-		char path[24];
-		if (dlen + 3 >= sizeof(path)) {
-			kfree(part);
-			return;
-		}
-
-		memcpy(path, disk_path, dlen);
-		path[dlen] = 'p';
-		path[dlen + 1] = (char)('1' + i);
-		path[dlen + 2] = '\0';
-
-		if (!block_register(path, &part_ops, part, disk->block_size, count)) {
-			kfree(part);
-			return;
-		}
-
-		klog(KLOG_INFO, "ata: %s type 0x%02x, %u sectors at lba %u\n", path, type, count, start);
-	}
-}
-
 static int next_disk_number = 0;
 
 static void ata_attach(ide_drive_t* drv) {
@@ -519,7 +395,7 @@ static void ata_attach(ide_drive_t* drv) {
 
 	klog(KLOG_INFO, "ata: %s registered (%llu sectors)\n", path, (unsigned long long)drv->block_count);
 
-	ata_scan_partitions(disk, path);
+	pardet_create_partitions(path);
 }
 
 void ata_init(void) {

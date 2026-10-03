@@ -32,6 +32,7 @@ LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS)
 KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
 kernel/kernel.o \
+kernel/pardet.o \
 kernel/memman/slab/slab.o \
 kernel/memman/vmalloc/vmalloc.o \
 kernel/klog.o \
