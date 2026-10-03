@@ -6,5 +6,6 @@
 #include <kernel/block/block.h>
 
 int block_read_bytes(block_dev_t* dev, uint64_t offset, uint32_t len, void* buf);
+int block_write_bytes(block_dev_t* dev, uint64_t offset, uint32_t len, const void* buf);
 
 #endif
