@@ -22,7 +22,7 @@
 
 #define EXT2_STATE_CLEAN 1
 
-#define EXT2_WRITES_IMPLEMENTED 0
+#define EXT2_WRITES_IMPLEMENTED 1
 
 #define EXT2_MAX_INODE_SIZE 256
 
@@ -425,8 +425,124 @@ static int ext2_read(void* file_impl, void* buf, size_t len, size_t offset) {
 }
 
 static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offset) {
-	(void)file_impl; (void)buf; (void)len; (void)offset;
-	return PANUTIERRNO_UNSUPPORTEDOP;
+	if (!file_impl || (!buf && len != 0)) {
+		return -1;
+	}
+
+	ext2_file_t* f = file_impl;
+	ext2_t* fs = f->fs;
+
+	if (!fs || !fs->block_device || !fs->superblock) {
+		return -1;
+	}
+
+	// a mount that came up read-only must never reach the disk, no matter what
+	// the caller asks for. the fs layer does not police this for us.
+	if (fs->read_only) {
+		return -1;
+	}
+
+	if (len == 0) {
+		return 0;
+	}
+
+	if (len > (size_t)INT_MAX) {
+		len = (size_t)INT_MAX;
+	}
+
+	uint64_t end = (uint64_t)offset + (uint64_t)len;
+
+	if (end < (uint64_t)offset) {
+		return -1; // wrapped
+	}
+
+	if (end > (uint64_t)fs->superblock->blocks_count * fs->block_size) {
+		return -1; // past the end of the volume
+	}
+
+	for (uint64_t p = (uint64_t)offset; p < end; ) {
+		uint32_t index = (uint32_t)(p / fs->block_size);
+		uint32_t within = (uint32_t)(p % fs->block_size);
+
+		size_t chunk = fs->block_size - within;
+		if ((uint64_t)chunk > end - p) {
+			chunk = (size_t)(end - p);
+		}
+
+		uint32_t phys = 0;
+
+		if (ext2_map_block(fs, f->block, index, &phys) != 0 || phys == 0) {
+			return -1;
+		}
+
+		p += chunk;
+	}
+
+	// pass 2: the blocks are ours, so write them
+	size_t done = 0;
+	uint64_t pos = (uint64_t)offset;
+
+	while (done < len) {
+		uint32_t index = (uint32_t)(pos / fs->block_size);
+		uint32_t within = (uint32_t)(pos % fs->block_size);
+
+		size_t chunk = fs->block_size - within;
+		if (chunk > len - done) {
+			chunk = len - done;
+		}
+
+		uint32_t phys = 0;
+		ext2_map_block(fs, f->block, index, &phys); // prevalidated above
+
+		uint64_t base = (uint64_t)phys * fs->block_size;
+		const uint8_t* src = (const uint8_t*)buf + done;
+		int rc;
+
+		if (within == 0 && chunk == fs->block_size) {
+			rc = block_write_bytes(fs->block_device, base, chunk, src);
+		} else {
+			uint8_t* tmp = kmalloc(fs->block_size, fs->block_size);
+
+			if (!tmp) {
+				return -1;
+			}
+
+			if (block_read_bytes(fs->block_device, base, fs->block_size, tmp) != BLOCK_OK) {
+				kfree(tmp);
+				return -1;
+			}
+
+			memcpy(tmp + within, src, chunk);
+			rc = block_write_bytes(fs->block_device, base, fs->block_size, tmp);
+			kfree(tmp);
+		}
+
+		if (rc != BLOCK_OK) {
+			return -1;
+		}
+
+		done += chunk;
+		pos += chunk;
+	}
+
+	if (end > f->size) {
+		ext2_inode_hdr_t hdr;
+
+		if (ext2_read_inode(fs, f->inum, &hdr) != 0) {
+			return -1;
+		}
+
+		hdr.size = (uint32_t)end;
+		hdr.size_high = fs->large_files ? (uint32_t)(end >> 32) : 0;
+
+		if (ext2_write_inode(fs, f->inum, &hdr) != BLOCK_OK) {
+			return -1;
+		}
+
+		f->size = end;
+	}
+
+	return (int)len;
 }
 
 static int ext2_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, size_t* cursor) {
