@@ -56,16 +56,16 @@ string/memchr.o \
 string/strcpy.o \
 panuti/process/procreate.o \
 panuti/mount/mount.o \
-panuti/fs/mkdir.o \
+panuti/registry/mkdir.o \
 panuti/mount/unmount.o \
 panuti/process/wait.o \
 panuti/handle/write.o \
 panuti/handle/read.o \
 panuti/handle/close.o \
-	panuti/handle/open.o \
-	panuti/stat/stat.o \
-	panuti/stat/nexist.o \
-	panuti/stat/readdir.o \
+panuti/handle/open.o \
+panuti/stat/stat.o \
+panuti/stat/nexist.o \
+panuti/stat/readdir.o \
 panuti/stream/stream_write.o \
 panuti/stream/stream_read.o \
 panuti/stream/nstream.o \

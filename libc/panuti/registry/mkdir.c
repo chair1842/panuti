@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
-#include <panuti/fs.h>
+#include <panuti/registry.h>
 #include <panuti/syscall/syscallsf.h>
 
 int32_t mkdir(const char* path) {
