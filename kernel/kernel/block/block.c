@@ -45,11 +45,19 @@ static int block_write_op(void* impl, const void* buf, size_t len) {
 
 	if (len == 0) return 0;
 
+	if (!dev->ops->write) {
+		return BLOCK_ERR_INVAL;
+	}
+
 	uint64_t first_block = bh->offset / bs;
 	uint64_t last_block = (bh->offset + len - 1) / bs;
 	size_t num_blocks = (size_t)(last_block - first_block + 1);
 	size_t buf_off = (size_t)(bh->offset % bs);
 	size_t copy_len = len;
+
+	if (first_block + num_blocks > dev->block_count) {
+		return BLOCK_ERR_INVAL;
+	}
 
 	void* tmp = kmalloc(num_blocks * bs, 1);
 	if (!tmp) return 0;
