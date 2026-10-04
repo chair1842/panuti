@@ -56,6 +56,8 @@ string/memchr.o \
 string/strcpy.o \
 panuti/process/procreate.o \
 panuti/mount/mount.o \
+panuti/fs/mkdir.o \
+panuti/mount/unmount.o \
 panuti/process/wait.o \
 panuti/handle/write.o \
 panuti/handle/read.o \
