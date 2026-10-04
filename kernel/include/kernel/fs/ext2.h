@@ -19,6 +19,8 @@
 
 #define EXT2_ROOT_INO 2
 
+#define EXT2_INODE_CACHE_SLOTS 8
+
 typedef struct __attribute__((packed)) ext2_inode_hdr {
     uint16_t mode;
     uint16_t uid;
@@ -101,14 +103,16 @@ typedef struct __attribute__((packed)) ext2_group_desc {
     uint8_t reserved[12];
 } ext2_group_desc_t;
 
-// Directory entries usually name sequential inodes, so a scan reads a long run
-// of neighbouring inodes. A single slot would miss every one of those, so keep a
-// small round-robin instead. Safe to keep for the whole mount: it is read-only.
-#define EXT2_INODE_CACHE_SLOTS 8
 typedef struct {
 	uint32_t num;
 	ext2_inode_hdr_t hdr;
 } ext2_inode_cache_slot_t;
+
+typedef struct {
+	uint8_t* buf;
+	uint32_t cached;
+	bool dirty;
+} ext2_bitmap_cache_t;
 
 typedef struct ext2 {
 	block_dev_t* block_device;
@@ -151,6 +155,12 @@ typedef struct ext2 {
 
 	uint32_t cached_indirect_block;
 	uint8_t* cached_indirect_buf;
+
+	ext2_bitmap_cache_t block_bitmap;
+	ext2_bitmap_cache_t inode_bitmap;
+
+	uint32_t block_alloc_hint;
+	uint32_t inode_alloc_hint;
 
 	// the inode handed to mount_attach as the mounted namespace root. kept so
 	// finish() can release the ext2_inode_t hanging off it

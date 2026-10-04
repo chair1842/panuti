@@ -1,0 +1,36 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
+#ifndef KERNEL_FS_EXT2_HELPERS_H
+#define KERNEL_FS_EXT2_HELPERS_H
+
+#include <kernel/fs/ext2.h>
+#include <stdint.h>
+
+static inline uint32_t div_ceil_u32(uint32_t x, uint32_t y) {
+    return (uint32_t)(((uint64_t)x + y - 1) / y);
+}
+
+uint32_t ext2_sectors_per_block(const ext2_t* fs);
+int ext2_read_block(ext2_t* fs, uint32_t block, void* buf);
+int ext2_write_block(ext2_t* fs, uint32_t block, const void* buf);
+uint64_t ext2_inode_size(ext2_t* fs, const ext2_inode_hdr_t* hdr);
+int ext2_read_inode(ext2_t* fs, uint32_t inum, ext2_inode_hdr_t* out);
+void ext2_inode_cache_store(ext2_t* fs, uint32_t inum, const ext2_inode_hdr_t* hdr);
+int ext2_inode_locate(ext2_t* fs, uint32_t inum, uint32_t* table_block, uint32_t* byte_off);
+int ext2_write_inode(ext2_t* fs, uint32_t inum, const ext2_inode_hdr_t* hdr);
+int ext2_indirect_entry(ext2_t* fs, uint32_t block, uint32_t index, uint32_t* out);
+int ext2_indirect_peek(ext2_t* fs, uint32_t block, uint32_t index, uint32_t* out);
+int ext2_indirect_store(ext2_t* fs, uint32_t block, uint32_t index, uint32_t value);
+int ext2_zero_block(ext2_t* fs, uint32_t block);
+int ext2_map_block(ext2_t* fs, const uint32_t* i_block, uint32_t index, uint32_t* out);
+int ext2_map_block_alloc(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint32_t* out);
+int ext2_bitmap_sync(ext2_t* fs, ext2_bitmap_cache_t* bc);
+int ext2_bitmap_get(ext2_t* fs, ext2_bitmap_cache_t* bc, uint32_t bitmap_block, uint8_t** out);
+uint32_t ext2_group_blocks(ext2_t* fs, uint32_t group);
+uint32_t ext2_first_allocatable(ext2_t* fs);
+int ext2_alloc_block(ext2_t* fs, uint32_t* out);
+int ext2_free_block(ext2_t* fs, uint32_t block);
+int ext2_alloc_inode(ext2_t* fs, uint32_t* out);
+int ext2_free_inode(ext2_t* fs, uint32_t inum);
+
+#endif

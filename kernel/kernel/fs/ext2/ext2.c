@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <limits.h>
+#include "helpers.h"
 
 #define EXT2_MAGIC 0xEF53
 
@@ -24,24 +25,6 @@
 #define EXT2_WRITES_IMPLEMENTED 0
 
 #define EXT2_MAX_INODE_SIZE 256
-
-static inline uint32_t div_ceil_u32(uint32_t x, uint32_t y) {
-    return (uint32_t)(((uint64_t)x + y - 1) / y);
-}
-
-static int ext2_read_block(ext2_t* fs, uint32_t block, void* buf) {
-    uint64_t offset = (uint64_t)block * fs->block_size;
-
-    if (offset > UINT64_MAX - fs->block_size) {
-        return BLOCK_ERR_INVAL;
-    }
-
-    if (block >= fs->superblock->blocks_count) {
-        return BLOCK_ERR_INVAL;
-    }
-
-    return block_read_bytes(fs->block_device, offset, fs->block_size, buf);
-}
 
 static int ext2_validate_gdt(ext2_t* fs) {
     uint32_t itables_in_group = div_ceil_u32(fs->inode_size * fs->superblock->inodes_per_group, fs->block_size);
@@ -65,156 +48,6 @@ static int ext2_validate_gdt(ext2_t* fs) {
     }
 
     return 0;
-}
-
-static uint64_t ext2_inode_size(ext2_t* fs, const ext2_inode_hdr_t* hdr) {
-	if (fs->large_files && hdr->size_high != 0) {
-		return ((uint64_t)hdr->size_high << 32) | hdr->size;
-	}
-
-	return hdr->size;
-}
-
-static int ext2_read_inode(ext2_t* fs, uint32_t inum, ext2_inode_hdr_t* out) {
-	if (inum == 0 || inum > fs->superblock->inodes_count) {
-		return -1;
-	}
-
-	// A directory scan names a long run of neighbouring inodes, and lookup asks
-	// for the same ones again and again, so a handful of slots removes most of
-	// those reads. Safe to keep for the whole mount: nothing here is writable.
-	for (uint32_t i = 0; i < EXT2_INODE_CACHE_SLOTS; i++) {
-		if (fs->inode_cache[i].num == inum) {
-			memcpy(out, &fs->inode_cache[i].hdr, sizeof(*out));
-			return 0;
-		}
-	}
-
-	uint32_t group = (inum - 1) / fs->superblock->inodes_per_group;
-	uint32_t index_in_group = (inum - 1) % fs->superblock->inodes_per_group;
-
-	if (group >= fs->group_count) {
-		return -1;
-	}
-
-	uint32_t table_block = fs->gdt[group].inode_table + index_in_group / fs->inodes_per_block;
-	uint32_t byte_off = (index_in_group % fs->inodes_per_block) * fs->inode_size;
-
-	if (table_block >= fs->superblock->blocks_count) {
-		return -1;
-	}
-
-	// inode_size is at least 128 and the header is 112, so the tail of the last
-	// inode in a block always has room for it
-	if (byte_off > fs->block_size ||
-		fs->block_size - byte_off < sizeof(ext2_inode_hdr_t)) {
-		return -1;
-	}
-
-	uint64_t offset = (uint64_t)table_block * fs->block_size + byte_off;
-
-	if (offset > UINT64_MAX - sizeof(ext2_inode_hdr_t)) {
-		return -1;
-	}
-
-	ext2_inode_cache_slot_t* slot = &fs->inode_cache[fs->inode_cache_next];
-
-	fs->inode_cache_next = (fs->inode_cache_next + 1) % EXT2_INODE_CACHE_SLOTS;
-	slot->num = 0; // only becomes a hit once the read below actually succeeds
-
-	if (block_read_bytes(fs->block_device, offset, sizeof(ext2_inode_hdr_t), &slot->hdr) != BLOCK_OK) {
-		return -1;
-	}
-
-	slot->num = inum;
-	memcpy(out, &slot->hdr, sizeof(*out));
-
-	return 0;
-}
-
-static int ext2_indirect_entry(ext2_t* fs, uint32_t block, uint32_t index, uint32_t* out) {
-	if (block == 0 || index >= fs->addrs_per_block) {
-		return -1;
-	}
-
-	if (block >= fs->superblock->blocks_count) {
-		return -1;
-	}
-
-	if (fs->cached_indirect_block != block) {
-		if (!fs->cached_indirect_buf) {
-			return -1;
-		}
-
-		if (ext2_read_block(fs, block, fs->cached_indirect_buf) != BLOCK_OK) {
-			fs->cached_indirect_block = 0;
-			return -1;
-		}
-
-		fs->cached_indirect_block = block;
-	}
-
-	// the address is unaligned as often as not
-	uint32_t value;
-
-	memcpy(&value, fs->cached_indirect_buf + (uint64_t)index * sizeof(uint32_t), sizeof(value));
-
-	if (value == 0 || value >= fs->superblock->blocks_count) {
-		return -1;
-	}
-
-	*out = value;
-
-	return 0;
-}
-
-static int ext2_map_block(ext2_t* fs, const uint32_t* i_block, uint32_t index, uint32_t* out) {
-	uint32_t apb = fs->addrs_per_block;
-
-	if (index < EXT2_NDIR_BLOCKS) {
-		if (i_block[index] == 0 || i_block[index] >= fs->superblock->blocks_count) {
-			return -1;
-		}
-
-		*out = i_block[index];
-
-		return 0;
-	}
-
-	index -= EXT2_NDIR_BLOCKS;
-
-	if (index < apb) {
-		return ext2_indirect_entry(fs, i_block[EXT2_IND_BLOCK], index, out);
-	}
-
-	index -= apb;
-
-	// apb tops out at 1024, so squaring it cannot overflow
-	uint64_t dind_span = (uint64_t)apb * apb;
-
-	if (index < dind_span) {
-		uint32_t ind;
-
-		if (ext2_indirect_entry(fs, i_block[EXT2_DIND_BLOCK], index / apb, &ind) != 0) {
-			return -1;
-		}
-
-		return ext2_indirect_entry(fs, ind, index % apb, out);
-	}
-
-	index -= dind_span;
-
-	uint32_t dind, ind;
-
-	if (ext2_indirect_entry(fs, i_block[EXT2_TIND_BLOCK], index / dind_span, &dind) != 0) {
-		return -1;
-	}
-
-	if (ext2_indirect_entry(fs, dind, (index / apb) % apb, &ind) != 0) {
-		return -1;
-	}
-
-	return ext2_indirect_entry(fs, ind, index % apb, out);
 }
 
 static void ext2_free_inode_tree(inode_t* n) {
@@ -430,11 +263,6 @@ static int ext2_link(void* fs_impl, struct inode* target, struct inode* dir,
 	return PANUTIERRNO_UNSUPPORTEDOP;
 }
 
-// The length a file claims to have, or 0 if that is not believable. A file
-// cannot be larger than the volume holding it, and a length read out of a
-// corrupt inode is not a reason to hand the reader megabytes of zeroes. Both
-// size() and open() go through here so they can never disagree about whether a
-// length is usable.
 static int ext2_inode_length(ext2_t* fs, const ext2_inode_hdr_t* hdr, uint64_t* out) {
 	uint64_t len = ext2_inode_size(fs, hdr);
 
@@ -774,6 +602,14 @@ static void ext2_finish(void* fs_impl) {
 		kfree(fs->dir_buf);
 	}
 
+	if (fs->block_bitmap.buf) {
+		kfree(fs->block_bitmap.buf);
+	}
+
+	if (fs->inode_bitmap.buf) {
+		kfree(fs->inode_bitmap.buf);
+	}
+
 	kfree(fs);
 }
 
@@ -925,6 +761,18 @@ int ext2_mount(const char* mountp, const char* blkdev) {
 	// held across readdir calls so a directory scan does not reallocate per entry
 	fs->dir_buf = kmalloc(fs->block_size, 1);
 	if (!fs->dir_buf) {
+		goto fail;
+	}
+
+	// one bitmap block each, so interleaving a block allocation with an inode
+	// allocation does not evict the other's dirty copy
+	fs->block_bitmap.buf = kmalloc(fs->block_size, 1);
+	if (!fs->block_bitmap.buf) {
+		goto fail;
+	}
+
+	fs->inode_bitmap.buf = kmalloc(fs->block_size, 1);
+	if (!fs->inode_bitmap.buf) {
 		goto fail;
 	}
 

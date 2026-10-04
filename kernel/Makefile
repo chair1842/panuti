@@ -85,7 +85,8 @@ kernel/syscall/handlers/stat.o \
 kernel/syscall/handlers/nexist.o \
 kernel/syscall/handlers/mmapan.o \
 kernel/syscall/handlers/munmap.o \
-kernel/fs/ext2/ext2.o
+kernel/fs/ext2/ext2.o \
+kernel/fs/ext2/helpers.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \
