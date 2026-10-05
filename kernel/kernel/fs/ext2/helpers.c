@@ -444,7 +444,51 @@ int ext2_bitmap_sync(ext2_t* fs, ext2_bitmap_cache_t* bc) {
 
 	int rc = ext2_write_block(fs, bc->cached - 1, bc->buf);
 
-	bc->dirty = false;
+	if (rc == BLOCK_OK) {
+		bc->dirty = false;
+	}
+
+	return rc;
+}
+
+int ext2_sync_metadata(ext2_t* fs) {
+	if (!fs || !fs->block_device || !fs->superblock || !fs->gdt) {
+		return BLOCK_ERR_INVAL;
+	}
+
+	// a read-only mount never dirtied anything and must not write
+	if (fs->read_only) {
+		return BLOCK_OK;
+	}
+
+	int rc = ext2_bitmap_sync(fs, &fs->block_bitmap);
+
+	if (rc == BLOCK_OK) {
+		rc = ext2_bitmap_sync(fs, &fs->inode_bitmap);
+	}
+
+	if (rc == BLOCK_OK && fs->superblock_dirty) {
+		rc = block_write_bytes(fs->block_device, 1024, sizeof(ext2_superblock_t), fs->superblock);
+
+		if (rc == BLOCK_OK) {
+			fs->superblock_dirty = false;
+		}
+	}
+
+	if (rc == BLOCK_OK && fs->gdt_dirty) {
+		for (uint32_t i = 0; i < fs->gdt_blocks; i++) {
+			rc = ext2_write_block(fs, fs->first_data_block + 1 + i,
+								 (uint8_t*)fs->gdt + (uint64_t)i * fs->block_size);
+
+			if (rc != BLOCK_OK) {
+				break;
+			}
+		}
+
+		if (rc == BLOCK_OK) {
+			fs->gdt_dirty = false;
+		}
+	}
 
 	return rc;
 }

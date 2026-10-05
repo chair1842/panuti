@@ -690,6 +690,10 @@ static void ext2_finish(void* fs_impl) {
 		return;
 	}
 
+	if (!fs->read_only) {
+		ext2_sync_metadata(fs);
+	}
+
 	// mount_detach runs this before it drops the root's last reference, and
 	// registry_destroy only walks references afterwards without telling the
 	// filesystem, so the whole cached tree has to go while it is still whole
