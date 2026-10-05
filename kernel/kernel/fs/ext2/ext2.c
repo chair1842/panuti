@@ -140,24 +140,12 @@ static struct inode* ext2_lookup(void* fs_impl, struct inode* dir, const char* n
 		}
 
 		uint32_t off = 0;
+		uint32_t hdr_len = ext2_dirent_hdr_len(fs);
 
 		while (off < fs->block_size) {
 			ext2_dirent_hdr_t d;
 
-			memcpy(&d, data + off, sizeof(d));
-
-			// a zero rec_len means the rest of this block is padding and the
-			// directory picks up again in the next one
-			if (d.rec_len == 0) {
-				break;
-			}
-
-			// rec_len is the only thing bounding the name, so a corrupt one
-			// would otherwise walk us straight off the end of the buffer
-			if (d.rec_len < sizeof(ext2_dirent_hdr_t) ||
-				(d.rec_len % 4) != 0 ||
-				d.rec_len > fs->block_size ||
-				off > fs->block_size - d.rec_len) {
+			if (ext2_dirent_at(fs, data, off, &d) != 1) {
 				break;
 			}
 
@@ -167,12 +155,12 @@ static struct inode* ext2_lookup(void* fs_impl, struct inode* dir, const char* n
 			}
 
 			if (d.name_len == 0 ||
-				d.name_len > d.rec_len - sizeof(ext2_dirent_hdr_t)) {
+				d.name_len > d.rec_len - hdr_len) {
 				break;
 			}
 
 			if (d.name_len == len &&
-				memcmp(data + off + sizeof(d), name, len) == 0) {
+				memcmp(data + off + hdr_len, name, len) == 0) {
 				inum = d.inode;
 				break;
 			}
@@ -187,9 +175,9 @@ static struct inode* ext2_lookup(void* fs_impl, struct inode* dir, const char* n
 		return nullptr;
 	}
 
-	// mode is the authority on the type. the dirent's file_type is only a
-	// hint and does not even exist without the FILETYPE feature, and getting it
-	// wrong would stick, because this inode is cached for the whole mount
+	// mode is the authority on the type. without the FILETYPE feature byte 7 of
+	// the record is not a type at all, and even with it the value is only a hint,
+	// so trusting it would stick, because this inode is cached for the whole mount
 	ext2_inode_hdr_t child;
 
 	if (ext2_read_inode(fs, inum, &child) != 0 || child.dtime != 0) {
@@ -780,18 +768,9 @@ static int ext2_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, s
 		}
 
 		ext2_dirent_hdr_t d;
-		memcpy(&d, fs->dir_buf + in_block, sizeof(d));
+		uint32_t hdr_len = ext2_dirent_hdr_len(fs);
 
-		if (d.rec_len == 0) {
-			fs->cached_dir_block = 0;
-			*cursor = ((uint64_t)block_index + 1) * fs->block_size;
-			continue;
-		}
-
-		if (d.rec_len < sizeof(ext2_dirent_hdr_t) ||
-			(d.rec_len % 4) != 0 ||
-			(uint32_t)d.rec_len > fs->block_size ||
-			in_block > fs->block_size - d.rec_len) {
+		if (ext2_dirent_at(fs, fs->dir_buf, in_block, &d) != 1) {
 			fs->cached_dir_block = 0;
 			*cursor = ((uint64_t)block_index + 1) * fs->block_size;
 			continue;
@@ -799,7 +778,7 @@ static int ext2_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, s
 
 		if (d.inode == 0 ||
 			d.name_len == 0 ||
-			d.name_len > d.rec_len - sizeof(ext2_dirent_hdr_t)) {
+			d.name_len > d.rec_len - hdr_len) {
 			*cursor = off + d.rec_len;
 			continue;
 		}
@@ -825,7 +804,7 @@ static int ext2_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, s
 			n = name_max;
 		}
 
-		memcpy(out->name, fs->dir_buf + in_block + sizeof(d), n);
+		memcpy(out->name, fs->dir_buf + in_block + hdr_len, n);
 		out->name[n] = '\0';
 
 		out->type = (fmt == EXT2_S_IFDIR) ? INODE_DIR : INODE_FILE;

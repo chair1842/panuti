@@ -15,6 +15,9 @@
 #define EXT2_S_IFMT 0xF000
 #define EXT2_S_IFDIR 0x4000
 #define EXT2_S_IFREG 0x8000
+
+#define EXT2_FT_REG 1
+#define EXT2_FT_DIR 2
 #define EXT2_S_IFLNK 0xA000
 
 #define EXT2_ROOT_INO 2

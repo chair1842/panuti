@@ -746,6 +746,358 @@ int ext2_bitmap_sync(ext2_t* fs, ext2_bitmap_cache_t* bc) {
 	return rc;
 }
 
+uint32_t ext2_dirent_rec_len(const ext2_t* fs, size_t name_len) {
+	return (ext2_dirent_hdr_len(fs) + (uint32_t)name_len + 3u) & ~3u;
+}
+
+static int ext2_all_zero(const uint8_t* p, uint32_t len) {
+	for (uint32_t i = 0; i < len; i++) {
+		if (p[i] != 0) {
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+int ext2_dirent_at(const ext2_t* fs, const uint8_t* buf, uint32_t off, ext2_dirent_hdr_t* out) {
+	uint32_t hdr_len = ext2_dirent_hdr_len(fs);
+
+	if (off > fs->block_size - hdr_len) {
+		return 0;
+	}
+
+	memset(out, 0, sizeof(*out));
+	memcpy(out, buf + off, hdr_len);
+
+	if (out->rec_len == 0) {
+		return 0; // the rest of this block is unused
+	}
+
+	if (out->rec_len < hdr_len ||
+		(out->rec_len % 4) != 0 ||
+		out->rec_len > fs->block_size ||
+		off > fs->block_size - out->rec_len) {
+		return -1;
+	}
+
+	return 1;
+}
+
+static void ext2_dirent_write(const ext2_t* fs, uint8_t* buf, uint32_t off,
+	uint32_t inum, const char* name, size_t name_len, uint8_t file_type, uint32_t rec_len) {
+
+	uint32_t hdr_len = ext2_dirent_hdr_len(fs);
+
+	memset(buf + off, 0, rec_len);
+
+	ext2_dirent_hdr_t h;
+
+	memset(&h, 0, sizeof(h));
+
+	h.inode = inum;
+	h.rec_len = (uint16_t)rec_len;
+	h.name_len = (uint8_t)name_len;
+	h.file_type = fs->has_filetype ? file_type : 0;
+
+	memcpy(buf + off, &h, hdr_len);
+	memcpy(buf + off + hdr_len, name, name_len);
+}
+
+static int ext2_dirent_place(const ext2_t* fs, uint8_t* buf, uint32_t need,
+	const char* name, size_t name_len, uint32_t inum, uint8_t file_type) {
+
+	uint32_t hdr_len = ext2_dirent_hdr_len(fs);
+	uint32_t off = 0;
+	uint32_t split_off = UINT32_MAX;
+	uint32_t hole_off = UINT32_MAX;
+	uint32_t hole_len = 0;
+	uint32_t last_off = 0;
+	uint32_t last_len = 0;
+	int seen = 0;
+
+	for (;;) {
+		ext2_dirent_hdr_t d;
+		int st = ext2_dirent_at(fs, buf, off, &d);
+
+		if (st < 0) {
+			return EXT2_DIRENT_CORRUPT;
+		}
+
+		if (st == 0) {
+			break;
+		}
+
+		// a deleted record has no name worth validating
+		if (d.inode != 0) {
+			if (d.name_len == 0 || d.name_len > d.rec_len - hdr_len) {
+				return EXT2_DIRENT_CORRUPT;
+			}
+
+			if (d.name_len == name_len &&
+				memcmp(buf + off + hdr_len, name, name_len) == 0) {
+				return EXT2_DIRENT_EXISTS;
+			}
+		}
+
+		if (d.inode == 0) {
+			if (d.rec_len >= need && d.rec_len > hole_len) {
+				hole_len = d.rec_len;
+				hole_off = off;
+			}
+		} else if (split_off == UINT32_MAX && d.rec_len > need) {
+			if (d.rec_len - need >= ext2_dirent_rec_len(fs, d.name_len)) {
+				split_off = off;
+			}
+		}
+
+		last_off = off;
+		last_len = d.rec_len;
+		seen = 1;
+
+		off += d.rec_len;
+	}
+
+	// an existing hole needs no surgery at all
+	if (hole_len >= need) {
+		ext2_dirent_write(fs, buf, hole_off, inum, name, name_len, file_type, hole_len);
+		return EXT2_DIRENT_PLACED;
+	}
+
+	// otherwise carve the tail off a record that is longer than we need
+	if (split_off != UINT32_MAX) {
+		ext2_dirent_hdr_t d;
+		uint32_t keep;
+		uint32_t self;
+
+		ext2_dirent_at(fs, buf, split_off, &d);
+
+		keep = d.rec_len - need;
+		self = ext2_dirent_rec_len(fs, d.name_len);
+
+		d.rec_len = (uint16_t)keep;
+		memcpy(buf + split_off, &d, hdr_len);
+		memset(buf + split_off + self, 0, keep - self);
+
+		ext2_dirent_write(fs, buf, split_off + keep, inum, name, name_len, file_type, need);
+		return EXT2_DIRENT_PLACED;
+	}
+
+	if (!seen) {
+		// a wholly empty block is all free space
+		ext2_dirent_write(fs, buf, 0, inum, name, name_len, file_type, need);
+		return EXT2_DIRENT_PLACED;
+	}
+
+	uint32_t tail_off = last_off + last_len;
+
+	if (fs->block_size - tail_off >= need &&
+		ext2_all_zero(buf + tail_off, fs->block_size - tail_off)) {
+		ext2_dirent_write(fs, buf, tail_off, inum, name, name_len, file_type, need);
+		return EXT2_DIRENT_PLACED;
+	}
+
+	return EXT2_DIRENT_FULL;
+}
+
+int ext2_dirent_add(ext2_t* fs, ext2_inode_hdr_t* dir, uint32_t dir_inum,
+	uint32_t inum, const char* name, size_t name_len, uint8_t file_type) {
+
+	if (!fs || !dir || !name || inum == 0) {
+		return -1;
+	}
+
+	if ((dir->mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+		return -1;
+	}
+
+	if (name_len == 0 || name_len > EXT2_NAME_LEN) {
+		return -1;
+	}
+
+	uint32_t need = ext2_dirent_rec_len(fs, name_len);
+
+	if (need > fs->block_size) {
+		return -1;
+	}
+
+	uint32_t i_block[15];
+
+	memcpy(i_block, dir->block, sizeof(i_block));
+
+	uint32_t dsize = dir->size;
+
+	if ((uint64_t)dsize > (uint64_t)fs->superblock->blocks_count * fs->block_size) {
+		return -1;
+	}
+
+	uint32_t nblocks = (dsize + fs->block_size - 1) / fs->block_size;
+	uint8_t* buf = kmalloc(fs->block_size, fs->block_size);
+
+	if (!buf) {
+		return -1;
+	}
+
+	int rc = -1;
+	int stop = 0;
+
+	for (uint32_t bi = 0; bi < nblocks && !stop; bi++) {
+		uint32_t phys = 0;
+		int st;
+
+		if (ext2_map_block(fs, i_block, bi, &phys) != 0 || phys == 0) {
+			continue; // sparse directory, a later block may still have room
+		}
+
+		if (ext2_read_block(fs, phys, buf) != BLOCK_OK) {
+			continue;
+		}
+
+		st = ext2_dirent_place(fs, buf, need, name, name_len, inum, file_type);
+
+		if (st == EXT2_DIRENT_EXISTS || st == EXT2_DIRENT_CORRUPT) {
+			rc = -1;
+			stop = 1;
+		} else if (st == EXT2_DIRENT_PLACED) {
+			rc = (ext2_write_block(fs, phys, buf) == BLOCK_OK) ? 0 : -1;
+			stop = 1;
+		}
+	}
+
+	if (rc == -1 && !stop) {
+		uint32_t phys = 0;
+		uint32_t old_blocks = dir->blocks;
+
+		if (ext2_map_block(fs, i_block, nblocks, &phys) == 0 && phys != 0) {
+			rc = -1;
+		} else if (ext2_map_block_alloc(fs, dir, nblocks, &phys) != 0) {
+			rc = -1;
+		} else {
+			ext2_dirent_write(fs, buf, 0, inum, name, name_len, file_type, fs->block_size);
+
+			if (ext2_write_block(fs, phys, buf) == BLOCK_OK) {
+				dir->size = (nblocks + 1) * fs->block_size;
+
+				if (ext2_write_inode(fs, dir_inum, dir) != 0) {
+					uint32_t freed = 0;
+
+					ext2_free_index(fs, dir, nblocks, &freed);
+					dir->size = dsize;
+					dir->blocks = old_blocks;
+				} else {
+					rc = 0;
+				}
+			} else {
+				uint32_t freed = 0;
+
+				ext2_free_index(fs, dir, nblocks, &freed);
+			}
+		}
+	}
+
+	kfree(buf);
+
+	return rc;
+}
+
+int ext2_dirent_remove(ext2_t* fs, ext2_inode_hdr_t* dir, const char* name, size_t name_len) {
+	uint32_t hdr_len;
+	uint32_t dsize;
+	uint32_t nblocks;
+	uint32_t i_block[15];
+	uint8_t* buf;
+	int rc = -1;
+
+	if (!fs || !dir || !name) {
+		return -1;
+	}
+
+	if ((dir->mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+		return -1;
+	}
+
+	if (name_len == 0 || name_len > EXT2_NAME_LEN) {
+		return -1;
+	}
+
+	hdr_len = ext2_dirent_hdr_len(fs);
+	dsize = dir->size;
+
+	memcpy(i_block, dir->block, sizeof(i_block));
+
+	if ((uint64_t)dsize > (uint64_t)fs->superblock->blocks_count * fs->block_size) {
+		return -1;
+	}
+
+	nblocks = (dsize + fs->block_size - 1) / fs->block_size;
+	buf = kmalloc(fs->block_size, fs->block_size);
+
+	if (!buf) {
+		return -1;
+	}
+
+	for (uint32_t bi = 0; bi < nblocks; bi++) {
+		uint32_t phys = 0;
+		uint32_t off = 0;
+
+		if (ext2_map_block(fs, i_block, bi, &phys) != 0 || phys == 0) {
+			continue;
+		}
+
+		if (ext2_read_block(fs, phys, buf) != BLOCK_OK) {
+			continue;
+		}
+
+		for (;;) {
+			ext2_dirent_hdr_t d;
+			ext2_dirent_hdr_t nx;
+			uint32_t total;
+			uint32_t next;
+			int st = ext2_dirent_at(fs, buf, off, &d);
+
+			if (st <= 0) {
+				break; // padding or an untrustworthy record, move on
+			}
+
+			if (d.inode != 0 &&
+				(d.name_len == 0 || d.name_len > d.rec_len - hdr_len)) {
+				break;
+			}
+
+			if (d.inode != 0 &&
+				d.name_len == name_len &&
+				memcmp(buf + off + hdr_len, name, name_len) == 0) {
+
+				total = d.rec_len;
+				next = off + total;
+
+				if (ext2_dirent_at(fs, buf, next, &nx) == 1 && nx.inode == 0) {
+					total += nx.rec_len;
+					memset(buf + next, 0, nx.rec_len); // rec_len 0 ends this block's list
+				}
+
+				d.inode = 0;
+				d.name_len = 0;
+				d.file_type = 0;
+				d.rec_len = (uint16_t)total;
+
+				memcpy(buf + off, &d, hdr_len);
+				memset(buf + off + hdr_len, 0, total - hdr_len);
+
+				rc = (ext2_write_block(fs, phys, buf) == BLOCK_OK) ? 0 : -1;
+				goto done;
+			}
+
+			off += d.rec_len;
+		}
+	}
+
+done:
+	kfree(buf);
+
+	return rc;
+}
+
 int ext2_sync_metadata(ext2_t* fs) {
 	if (!fs || !fs->block_device || !fs->superblock || !fs->gdt) {
 		return BLOCK_ERR_INVAL;
