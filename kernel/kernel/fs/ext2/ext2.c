@@ -647,6 +647,10 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 	f->size = disk_size;
 	memcpy(f->block, hdr.block, sizeof(f->block));
 
+	uint32_t i_block[15];
+
+	memcpy(i_block, hdr.block, sizeof(i_block));
+
 	uint32_t* claimed = NULL;
 	uint32_t claimed_count = 0;
 	uint32_t claimed_cap = 0;
@@ -664,14 +668,12 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 
 		uint32_t phys = 0;
 
-		if (ext2_map_block(fs, f->block, index, &phys) != 0 || phys == 0) {
+		if (ext2_map_block(fs, i_block, index, &phys) != 0 || phys == 0) {
 			if (ext2_map_block_alloc(fs, &hdr, index, &phys) != 0) {
 				goto out;
 			}
 
-			if (index < EXT2_NDIR_BLOCKS) {
-				f->block[index] = phys;
-			}
+			memcpy(i_block, hdr.block, sizeof(i_block));
 
 			if (claimed_count == claimed_cap) {
 				uint32_t cap = claimed_cap ? claimed_cap * 2 : 8;
@@ -700,6 +702,10 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 	// ownership must be durable before any data lands in those blocks
 	if (grew_blocks || end > f->size) {
 		if (end > f->size) {
+			if (!fs->large_files && end > 0xFFFFFFFFu) {
+				goto out;
+			}
+
 			hdr.size = (uint32_t)end;
 			hdr.size_high = fs->large_files ? (uint32_t)(end >> 32) : 0;
 		}
@@ -722,7 +728,12 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 		}
 
 		uint32_t phys = 0;
-		ext2_map_block(fs, f->block, index, &phys);
+
+		memcpy(i_block, hdr.block, sizeof(i_block));
+
+		if (ext2_map_block(fs, i_block, index, &phys) != 0 || phys == 0) {
+			goto out;
+		}
 
 		uint64_t base = (uint64_t)phys * fs->block_size;
 		const uint8_t* src = (const uint8_t*)buf + done;

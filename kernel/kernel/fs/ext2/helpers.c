@@ -499,10 +499,11 @@ static int ext2_free_slot(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uin
 	uint32_t containers[3];
 	uint32_t reached = 0;
 	uint32_t container = hdr->block[root];
+	int walked = 0;
 
 	for (uint32_t d = 0; d < depth; d++) {
 		if (container == 0 || container >= fs->superblock->blocks_count) {
-			break; // unmapped above: nothing below to release
+			goto prune; // unmapped above: nothing below to release
 		}
 
 		containers[d] = container;
@@ -515,14 +516,16 @@ static int ext2_free_slot(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uin
 		}
 
 		if (entry == 0) {
-			break; // hole below: prune the containers we did reach
+			goto prune; // hole below: prune the containers we did reach
 		}
 
 		container = entry;
 	}
 
-	// only a walk that reached the bottom owns a data block to release
-	if (reached == depth && container != 0 && container < fs->superblock->blocks_count) {
+	walked = 1;
+
+prune:
+	if (walked && container != 0 && container < fs->superblock->blocks_count) {
 		if (ext2_free_block(fs, container) != 0) {
 			return -1;
 		}
