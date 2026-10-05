@@ -911,7 +911,7 @@ int ext2_dirent_add(ext2_t* fs, ext2_inode_hdr_t* dir, uint32_t dir_inum,
 		return -1;
 	}
 
-	if (name_len == 0 || name_len > EXT2_NAME_LEN) {
+	if (!ext2_dirent_name_ok(name, name_len)) {
 		return -1;
 	}
 
@@ -940,6 +940,7 @@ int ext2_dirent_add(ext2_t* fs, ext2_inode_hdr_t* dir, uint32_t dir_inum,
 
 	int rc = -1;
 	int stop = 0;
+	int verdict = 0;
 
 	for (uint32_t bi = 0; bi < nblocks && !stop; bi++) {
 		uint32_t phys = 0;
@@ -957,9 +958,11 @@ int ext2_dirent_add(ext2_t* fs, ext2_inode_hdr_t* dir, uint32_t dir_inum,
 
 		if (st == EXT2_DIRENT_EXISTS || st == EXT2_DIRENT_CORRUPT) {
 			rc = -1;
+			verdict = 1;
 			stop = 1;
 		} else if (st == EXT2_DIRENT_PLACED) {
 			rc = (ext2_write_block(fs, phys, buf) == BLOCK_OK) ? 0 : -1;
+			verdict = 1;
 			stop = 1;
 		}
 	}
@@ -997,7 +1000,11 @@ int ext2_dirent_add(ext2_t* fs, ext2_inode_hdr_t* dir, uint32_t dir_inum,
 
 	kfree(buf);
 
-	return rc;
+	// a name that is already taken is a different answer from one that simply
+	// will not fit, and a caller that has to act on the difference cannot guess.
+	// every other failure keeps the plain -1, so callers testing != 0 are
+	// unaffected
+	return rc == -1 && !verdict ? EXT2_DIRENT_NO_SPACE : rc;
 }
 
 int ext2_dirent_remove(ext2_t* fs, ext2_inode_hdr_t* dir, const char* name, size_t name_len) {
@@ -1016,7 +1023,7 @@ int ext2_dirent_remove(ext2_t* fs, ext2_inode_hdr_t* dir, const char* name, size
 		return -1;
 	}
 
-	if (name_len == 0 || name_len > EXT2_NAME_LEN) {
+	if (!ext2_dirent_name_ok(name, name_len)) {
 		return -1;
 	}
 
@@ -1096,6 +1103,231 @@ done:
 	kfree(buf);
 
 	return rc;
+}
+
+int ext2_dirent_name_ok(const char* name, size_t name_len) {
+	if (!name || name_len == 0 || name_len > EXT2_NAME_LEN) {
+		return 0;
+	}
+
+	// a name with a slash in it cannot be turned back into a path, and a path is
+	// the only way a name is ever looked up again. storing one would leave the
+	// directory on disk disagreeing with the namespace above it
+	for (size_t i = 0; i < name_len; i++) {
+		if (name[i] == '/') {
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+int ext2_dirent_find(ext2_t* fs, const ext2_inode_hdr_t* dir,
+	const char* name, size_t name_len, uint32_t* inum) {
+
+	uint32_t hdr_len;
+	uint32_t nblocks;
+	uint32_t i_block[15];
+	uint8_t* buf;
+	int rc = -1;
+
+	if (!fs || !dir || !name || !inum) {
+		return -1;
+	}
+
+	if ((dir->mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+		return -1;
+	}
+
+	if (!ext2_dirent_name_ok(name, name_len)) {
+		return -1;
+	}
+
+	hdr_len = ext2_dirent_hdr_len(fs);
+
+	if ((uint64_t)dir->size > (uint64_t)fs->superblock->blocks_count * fs->block_size) {
+		return -1;
+	}
+
+	nblocks = (dir->size + fs->block_size - 1) / fs->block_size;
+	memcpy(i_block, dir->block, sizeof(i_block));
+
+	buf = kmalloc(fs->block_size, fs->block_size);
+
+	if (!buf) {
+		return -1;
+	}
+
+	for (uint32_t bi = 0; bi < nblocks && rc != 0; bi++) {
+		uint32_t phys = 0;
+		uint32_t off = 0;
+
+		if (ext2_map_block(fs, i_block, bi, &phys) != 0 || phys == 0) {
+			continue;
+		}
+
+		if (ext2_read_block(fs, phys, buf) != BLOCK_OK) {
+			continue;
+		}
+
+		for (;;) {
+			ext2_dirent_hdr_t d;
+			int st = ext2_dirent_at(fs, buf, off, &d);
+
+			if (st <= 0) {
+				break; // padding or an untrustworthy record, move on
+			}
+
+			if (d.inode != 0) {
+				if (d.name_len == 0 || d.name_len > d.rec_len - hdr_len) {
+					break;
+				}
+
+				if (d.name_len == name_len &&
+					memcmp(buf + off + hdr_len, name, name_len) == 0) {
+					*inum = d.inode;
+					rc = 0;
+					break;
+				}
+			}
+
+			off += d.rec_len;
+		}
+	}
+
+	kfree(buf);
+
+	return rc;
+}
+
+int ext2_dirent_is_empty(ext2_t* fs, const ext2_inode_hdr_t* dir, bool* empty) {
+	uint32_t hdr_len;
+	uint32_t nblocks;
+	uint32_t i_block[15];
+	uint8_t* buf;
+	int rc = -1;
+
+	if (!fs || !dir || !empty) {
+		return -1;
+	}
+
+	if ((dir->mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+		return -1;
+	}
+
+	*empty = true;
+
+	hdr_len = ext2_dirent_hdr_len(fs);
+
+	if ((uint64_t)dir->size > (uint64_t)fs->superblock->blocks_count * fs->block_size) {
+		return -1;
+	}
+
+	nblocks = (dir->size + fs->block_size - 1) / fs->block_size;
+	memcpy(i_block, dir->block, sizeof(i_block));
+
+	buf = kmalloc(fs->block_size, fs->block_size);
+
+	if (!buf) {
+		return -1;
+	}
+
+	rc = 0;
+
+	for (uint32_t bi = 0; bi < nblocks; bi++) {
+		uint32_t phys = 0;
+		uint32_t off = 0;
+
+		if (ext2_map_block(fs, i_block, bi, &phys) != 0 || phys == 0) {
+			continue;
+		}
+
+		if (ext2_read_block(fs, phys, buf) != BLOCK_OK) {
+			continue;
+		}
+
+		for (;;) {
+			ext2_dirent_hdr_t d;
+			int st = ext2_dirent_at(fs, buf, off, &d);
+
+			if (st <= 0) {
+				break;
+			}
+
+			if (d.inode != 0) {
+				if (d.name_len == 0 || d.name_len > d.rec_len - hdr_len) {
+					// a record we cannot read is a record we cannot clear. saying
+					// the directory is empty here would let unlink free an inode
+					// that still has a name pointing at it
+					*empty = false;
+					goto done;
+				}
+
+				// "." and ".." are what a directory always has, so they do not
+				// count against emptiness
+				if (!((d.name_len == 1 && buf[off + hdr_len] == '.') ||
+				      (d.name_len == 2 && buf[off + hdr_len] == '.' &&
+				       buf[off + hdr_len + 1] == '.'))) {
+					*empty = false;
+					goto done;
+				}
+			}
+
+			off += d.rec_len;
+		}
+	}
+
+done:
+	kfree(buf);
+
+	return rc;
+}
+
+int ext2_inode_retire(ext2_t* fs, uint32_t inum) {
+	ext2_inode_hdr_t hdr;
+	uint32_t nblocks;
+	uint32_t last;
+	uint32_t freed = 0;
+
+	if (!fs) {
+		return -1;
+	}
+
+	if (ext2_read_inode(fs, inum, &hdr) != 0) {
+		return -1;
+	}
+
+	// retiring twice would free the same blocks again, which hands the same
+	// physical blocks to two files
+	if (hdr.dtime != 0) {
+		return -1;
+	}
+
+	nblocks = (hdr.size + fs->block_size - 1) / fs->block_size;
+	last = nblocks ? nblocks - 1 : 0;
+
+	// the blocks go first. if this fails the inode is left intact and still
+	// linked, which leaks nothing; the other order would leave a name pointing
+	// at blocks that no longer belong to it
+	if (ext2_free_blocks_from(fs, &hdr, 0, last, &freed) != 0) {
+		return -1;
+	}
+
+	uint32_t drop = freed * ext2_sectors_per_block(fs);
+
+	hdr.blocks = drop > hdr.blocks ? 0 : hdr.blocks - drop;
+
+	// a deleted inode keeps its mode and size, and is only marked deleted with
+	// no links left. zeroing the whole inode instead leaves mode 0 and
+	// extra_isize 0, which e2fsck objects to
+	hdr.dtime = EXT2_RETIRED_TIME;
+	hdr.links_count = 0;
+
+	if (ext2_write_inode(fs, inum, &hdr) != BLOCK_OK) {
+		return -1;
+	}
+
+	return ext2_free_inode(fs, inum);
 }
 
 int ext2_sync_metadata(ext2_t* fs) {

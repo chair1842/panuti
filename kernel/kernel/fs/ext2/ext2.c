@@ -234,8 +234,98 @@ static int ext2_create(void* fs_impl, struct inode* dir, const char* name, size_
 }
 
 static int ext2_unlink(void* fs_impl, struct inode* dir, const char* name, size_t len) {
-	(void)fs_impl; (void)dir; (void)name; (void)len;
-	return PANUTIERRNO_UNSUPPORTEDOP;
+	ext2_t* fs = fs_impl;
+	ext2_inode_hdr_t dih;
+	ext2_inode_hdr_t tgt;
+	uint32_t inum = 0;
+
+	if (!fs || !dir || !name) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (fs->read_only) {
+		return PANUTIERRNO_NOTSUPPORTED;
+	}
+
+	if (!ext2_dirent_name_ok(name, len)) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	ext2_inode_t* di = dir->impl;
+
+	if (!di || di->fs != fs) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	// "." and ".." are how the tree stays connected.
+	if ((len == 1 && name[0] == '.') ||
+		(len == 2 && name[0] == '.' && name[1] == '.')) {
+		return PANUTIERRNO_UNSUPPORTEDOP;
+	}
+
+	if (ext2_read_inode(fs, di->inum, &dih) != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if ((dih.mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if (ext2_dirent_find(fs, &dih, name, len, &inum) != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if (ext2_read_inode(fs, inum, &tgt) != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if (tgt.dtime != 0) {
+		if (ext2_dirent_remove(fs, &dih, name, len) != 0) {
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		return 0;
+	}
+
+	if ((tgt.mode & EXT2_S_IFMT) == EXT2_S_IFDIR) {
+		bool empty = false;
+
+		if (ext2_dirent_is_empty(fs, &tgt, &empty) != 0) {
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		if (!empty) {
+			return PANUTIERRNO_BUSY;
+		}
+	}
+
+	if (ext2_dirent_remove(fs, &dih, name, len) != 0) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	uint32_t drop = ((tgt.mode & EXT2_S_IFMT) == EXT2_S_IFDIR) ? 2 : 1;
+
+	if (tgt.links_count > drop) {
+		tgt.links_count -= drop;
+
+		if (ext2_write_inode(fs, inum, &tgt) == BLOCK_OK) {
+			return 0;
+		}
+
+		ext2_dirent_add(fs, &dih, di->inum, inum, name, len,
+			(tgt.mode & EXT2_S_IFMT) == EXT2_S_IFDIR ? EXT2_FT_DIR : EXT2_FT_REG);
+
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	if (ext2_inode_retire(fs, inum) != 0) {
+		ext2_dirent_add(fs, &dih, di->inum, inum, name, len,
+			(tgt.mode & EXT2_S_IFMT) == EXT2_S_IFDIR ? EXT2_FT_DIR : EXT2_FT_REG);
+
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	return 0;
 }
 
 static int ext2_rename(void* fs_impl, struct inode* old_dir, const char* old_name, size_t old_len,
@@ -247,8 +337,83 @@ static int ext2_rename(void* fs_impl, struct inode* old_dir, const char* old_nam
 
 static int ext2_link(void* fs_impl, struct inode* target, struct inode* dir,
                      const char* name, size_t len) {
-	(void)fs_impl; (void)target; (void)dir; (void)name; (void)len;
-	return PANUTIERRNO_UNSUPPORTEDOP;
+	ext2_t* fs = fs_impl;
+	ext2_inode_hdr_t dih;
+	ext2_inode_hdr_t tgt;
+	uint32_t inum;
+
+	if (!fs || !target || !dir || !name) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (fs->read_only) {
+		return PANUTIERRNO_NOTSUPPORTED;
+	}
+
+	if (!ext2_dirent_name_ok(name, len)) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	ext2_inode_t* ti = target->impl;
+	ext2_inode_t* di = dir->impl;
+
+	if (!ti || !di || ti->fs != fs || di->fs != fs) {
+		return PANUTIERRNO_UNSUPPORTEDOP;
+	}
+
+	if (target->type != INODE_FILE) {
+		return PANUTIERRNO_UNSUPPORTEDOP;
+	}
+
+	inum = ti->inum;
+
+	if (inum == 0 || inum == di->inum) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (ext2_read_inode(fs, inum, &tgt) != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if (tgt.dtime != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if ((tgt.mode & EXT2_S_IFMT) != EXT2_S_IFREG) {
+		return PANUTIERRNO_UNSUPPORTEDOP;
+	}
+
+	if (ext2_read_inode(fs, di->inum, &dih) != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if ((dih.mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	int added = ext2_dirent_add(fs, &dih, di->inum, inum, name, len, EXT2_FT_REG);
+	if (added == EXT2_DIRENT_NO_SPACE) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	if (added != 0) {
+		return PANUTIERRNO_EXISTS;
+	}
+
+	if (tgt.links_count == UINT16_MAX) {
+		ext2_dirent_remove(fs, &dih, name, len);
+		return PANUTIERRNO_BUSY;
+	}
+
+	tgt.links_count++;
+
+	if (ext2_write_inode(fs, inum, &tgt) == BLOCK_OK) {
+		return 0;
+	}
+
+	ext2_dirent_remove(fs, &dih, name, len);
+
+	return PANUTIERRNO_PLAINERR;
 }
 
 static int ext2_inode_length(ext2_t* fs, const ext2_inode_hdr_t* hdr, uint64_t* out) {

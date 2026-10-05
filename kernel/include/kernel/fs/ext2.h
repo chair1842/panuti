@@ -22,6 +22,8 @@
 
 #define EXT2_ROOT_INO 2
 
+#define EXT2_RETIRED_TIME UINT32_MAX
+
 #define EXT2_INODE_CACHE_SLOTS 8
 
 typedef struct __attribute__((packed)) ext2_inode_hdr {
