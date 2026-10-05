@@ -24,6 +24,9 @@ int ext2_indirect_store(ext2_t* fs, uint32_t block, uint32_t index, uint32_t val
 int ext2_zero_block(ext2_t* fs, uint32_t block);
 int ext2_map_block(ext2_t* fs, const uint32_t* i_block, uint32_t index, uint32_t* out);
 int ext2_map_block_alloc(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint32_t* out);
+int ext2_block_slot(uint32_t index, uint32_t apb, uint32_t* root, uint32_t* depth, uint32_t* slots);
+int ext2_free_index(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint32_t* freed);
+int ext2_free_blocks_from(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t first_index, uint32_t last_index, uint32_t* freed);
 int ext2_bitmap_sync(ext2_t* fs, ext2_bitmap_cache_t* bc);
 int ext2_sync_metadata(ext2_t* fs);
 int ext2_bitmap_get(ext2_t* fs, ext2_bitmap_cache_t* bc, uint32_t bitmap_block, uint8_t** out);

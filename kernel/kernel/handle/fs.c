@@ -3,6 +3,7 @@
 #include <kernel/handle/fs.h>
 #include <kernel/handle/registry.h>
 #include <kernel/memman/slab.h>
+#include <panuti/errno.h>
 
 typedef struct fs_file {
 	void* file_impl;
@@ -58,12 +59,13 @@ static int fs_file_resize(void* impl, uint64_t new_size) {
 		return f->fs_ops->resize(f->file_impl, new_size);
 	}
 
-	return -1;
+	return PANUTIERRNO_UNSUPPORTEDOP;
 }
 
 const handle_ops_t fs_file_ops = {
 	.read = fs_file_read,
 	.write = fs_file_write,
+	.resize = fs_file_resize,
 	.activate = fs_file_activate,
 	.ready = fs_file_rdy,
 	.close = fs_file_close,

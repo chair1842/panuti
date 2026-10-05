@@ -9,6 +9,10 @@
 #include <string.h>
 #include <limits.h>
 
+// the free path is reached from ext2_map_block_alloc's rollback, which sits
+// above it in the file
+static int ext2_free_slot(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint32_t* freed);
+
 uint32_t ext2_sectors_per_block(const ext2_t* fs) {
 	return fs->block_size / 512;
 }
@@ -273,6 +277,48 @@ int ext2_zero_block(ext2_t* fs, uint32_t block) {
 	return rc == BLOCK_OK ? 0 : -1;
 }
 
+int ext2_block_slot(uint32_t index, uint32_t apb, uint32_t* root, uint32_t* depth, uint32_t* slots) {
+	if (index < EXT2_NDIR_BLOCKS) {
+		return -1;
+	}
+
+	index -= EXT2_NDIR_BLOCKS;
+
+	if (index < apb) {
+		*root = EXT2_IND_BLOCK;
+		*depth = 1;
+		slots[0] = index;
+
+		return 0;
+	}
+
+	index -= apb;
+
+	// apb tops out at 1024, so squaring it cannot overflow 32 bits
+	uint32_t dind_span = apb * apb;
+
+	if (index < dind_span) {
+		*root = EXT2_DIND_BLOCK;
+		*depth = 2;
+
+		slots[0] = index / apb;
+		slots[1] = index % apb;
+
+		return 0;
+	}
+
+	index -= dind_span;
+
+	*root = EXT2_TIND_BLOCK;
+	*depth = 3;
+
+	slots[0] = index / dind_span;
+	slots[1] = (index / apb) % apb;
+	slots[2] = index % apb;
+
+	return 0;
+}
+
 int ext2_map_block(ext2_t* fs, const uint32_t* i_block, uint32_t index, uint32_t* out) {
 	uint32_t apb = fs->addrs_per_block;
 
@@ -286,49 +332,32 @@ int ext2_map_block(ext2_t* fs, const uint32_t* i_block, uint32_t index, uint32_t
 		return 0;
 	}
 
-	index -= EXT2_NDIR_BLOCKS;
+	uint32_t root = 0, depth = 0, slots[3] = {0};
 
-	if (index < apb) {
-		return ext2_indirect_entry(fs, i_block[EXT2_IND_BLOCK], index, out);
+	if (ext2_block_slot(index, apb, &root, &depth, slots) != 0) {
+		return -1;
 	}
 
-	index -= apb;
+	uint32_t container = i_block[root];
 
-	// apb tops out at 1024, so squaring it cannot overflow
-	uint64_t dind_span = (uint64_t)apb * apb;
+	for (uint32_t d = 0; d < depth; d++) {
+		uint32_t entry = 0;
 
-	if (index < dind_span) {
-		uint32_t ind;
-
-		if (ext2_indirect_entry(fs, i_block[EXT2_DIND_BLOCK], index / apb, &ind) != 0) {
+		if (ext2_indirect_entry(fs, container, slots[d], &entry) != 0) {
 			return -1;
 		}
 
-		return ext2_indirect_entry(fs, ind, index % apb, out);
+		container = entry;
 	}
 
-	index -= dind_span;
+	*out = container;
 
-	uint32_t dind, ind;
-
-	if (ext2_indirect_entry(fs, i_block[EXT2_TIND_BLOCK], index / dind_span, &dind) != 0) {
-		return -1;
-	}
-
-	if (ext2_indirect_entry(fs, dind, (index / apb) % apb, &ind) != 0) {
-		return -1;
-	}
-
-	return ext2_indirect_entry(fs, ind, index % apb, out);
+	return 0;
 }
 
 int ext2_map_block_alloc(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint32_t* out) {
 	uint32_t apb = fs->addrs_per_block;
 	uint32_t spb = ext2_sectors_per_block(fs);
-
-	// at most a root plus one block per level, so the rollback list is fixed
-	uint32_t taken[4];
-	uint32_t taken_count = 0;
 
 	if (index < EXT2_NDIR_BLOCKS) {
 		if (hdr->block[index] == 0) {
@@ -338,7 +367,6 @@ int ext2_map_block_alloc(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint
 				return -1;
 			}
 
-			taken[taken_count++] = nb;
 			hdr->block[index] = nb;
 			hdr->blocks += spb;
 		}
@@ -347,34 +375,10 @@ int ext2_map_block_alloc(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint
 		return 0;
 	}
 
-	index -= EXT2_NDIR_BLOCKS;
+	uint32_t root = 0, depth = 0, slots[3] = {0};
 
-	uint32_t root = EXT2_IND_BLOCK;
-	uint32_t depth = 1;
-	uint32_t slots[3];
-
-	if (index < apb) {
-		slots[0] = index;
-	} else {
-		index -= apb;
-
-		uint32_t dind_span = apb * apb;
-
-		if (index < dind_span) {
-			root = EXT2_DIND_BLOCK;
-			depth = 2;
-			
-			slots[0] = index / apb;
-			slots[1] = index % apb;
-		} else {
-			index -= dind_span;
-			root = EXT2_TIND_BLOCK;
-			depth = 3;
-			
-			slots[0] = index / dind_span;
-			slots[1] = (index / apb) % apb;
-			slots[2] = index % apb;
-		}
+	if (ext2_block_slot(index, apb, &root, &depth, slots) != 0) {
+		return -1;
 	}
 
 	uint32_t container = hdr->block[root];
@@ -386,7 +390,6 @@ int ext2_map_block_alloc(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint
 			return -1;
 		}
 
-		taken[taken_count++] = nb;
 		container = nb;
 		
 		hdr->block[root] = nb;
@@ -412,7 +415,6 @@ int ext2_map_block_alloc(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint
 				goto fail;
 			}
 
-			taken[taken_count++] = nb;
 			hdr->blocks += spb;
 			entry = nb;
 		}
@@ -424,13 +426,306 @@ int ext2_map_block_alloc(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint
 	return 0;
 
 fail:
-	hdr->blocks -= taken_count * spb;
+	uint32_t freed = 0;
 
-	while (taken_count > 0) {
-		ext2_free_block(fs, taken[--taken_count]);
+	if (ext2_free_slot(fs, hdr, index, &freed) == 0) {
+		hdr->blocks -= freed * spb;
 	}
 
 	return -1;
+}
+
+static int ext2_block_empty(ext2_t* fs, uint32_t block, int* empty) {
+	uint8_t* buf = kmalloc(fs->block_size, fs->block_size);
+
+	if (!buf) {
+		return -1;
+	}
+
+	int rc = 0;
+
+	if (ext2_read_block(fs, block, buf) != BLOCK_OK) {
+		rc = -1;
+		goto out;
+	}
+
+	*empty = 1;
+
+	// only the address slots matter, and padding past them stays zero
+	uint64_t span = (uint64_t)fs->addrs_per_block * sizeof(uint32_t);
+
+	for (uint64_t i = 0; i < span; i++) {
+		if (buf[i] != 0) {
+			*empty = 0;
+			break;
+		}
+	}
+
+out:
+	kfree(buf);
+	return rc;
+}
+
+static int ext2_free_slot(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint32_t* freed) {
+	*freed = 0;
+
+	if (index >= fs->superblock->blocks_count) {
+		return -1;
+	}
+
+	if (index < EXT2_NDIR_BLOCKS) {
+		uint32_t block = hdr->block[index];
+
+		if (block == 0 || block >= fs->superblock->blocks_count) {
+			return 0; // already free
+		}
+
+		if (ext2_free_block(fs, block) != 0) {
+			return -1;
+		}
+
+		hdr->block[index] = 0;
+		*freed = 1;
+
+		return 0;
+	}
+
+	uint32_t root = 0, depth = 0, slots[3] = {0};
+
+	if (ext2_block_slot(index, fs->addrs_per_block, &root, &depth, slots) != 0) {
+		return -1;
+	}
+
+	uint32_t containers[3];
+	uint32_t reached = 0;
+	uint32_t container = hdr->block[root];
+
+	for (uint32_t d = 0; d < depth; d++) {
+		if (container == 0 || container >= fs->superblock->blocks_count) {
+			break; // unmapped above: nothing below to release
+		}
+
+		containers[d] = container;
+		reached = d + 1;
+
+		uint32_t entry = 0;
+
+		if (ext2_indirect_peek(fs, container, slots[d], &entry) != 0) {
+			return -1;
+		}
+
+		if (entry == 0) {
+			break; // hole below: prune the containers we did reach
+		}
+
+		container = entry;
+	}
+
+	// only a walk that reached the bottom owns a data block to release
+	if (reached == depth && container != 0 && container < fs->superblock->blocks_count) {
+		if (ext2_free_block(fs, container) != 0) {
+			return -1;
+		}
+
+		*freed = 1;
+
+		if (ext2_indirect_store(fs, containers[depth - 1], slots[depth - 1], 0) != 0) {
+			return -1;
+		}
+	}
+
+	for (uint32_t d = reached; d-- > 0;) {
+		int empty = 0;
+
+		if (ext2_block_empty(fs, containers[d], &empty) != 0) {
+			return -1;
+		}
+
+		if (!empty) {
+			break;
+		}
+
+		if (ext2_free_block(fs, containers[d]) != 0) {
+			return -1;
+		}
+
+		*freed += 1;
+
+		if (d == 0) {
+			hdr->block[root] = 0;
+		} else if (ext2_indirect_store(fs, containers[d - 1], slots[d - 1], 0) != 0) {
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+int ext2_free_index(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t index, uint32_t* freed) {
+	if (!fs || !hdr) {
+		return -1;
+	}
+
+	return ext2_free_slot(fs, hdr, index, freed);
+}
+
+static int ext2_free_level(ext2_t* fs, uint32_t container, uint32_t base, uint32_t stride,
+                           uint32_t depth, uint32_t first_index, uint32_t last_index,
+                           uint32_t* freed, int* emptied) {
+	uint8_t* buf = kmalloc(fs->block_size, fs->block_size);
+
+	if (!buf) {
+		return -1;
+	}
+
+	if (ext2_read_block(fs, container, buf) != BLOCK_OK) {
+		kfree(buf);
+		return -1;
+	}
+
+	int changed = 0;
+
+	for (uint32_t k = 0; k < fs->addrs_per_block; k++) {
+		uint64_t idx = (uint64_t)base + (uint64_t)k * stride;
+
+		if (idx > last_index) {
+			break;
+		}
+
+		uint32_t entry = 0;
+		memcpy(&entry, buf + (uint64_t)k * sizeof(uint32_t), sizeof(entry));
+
+		if (entry == 0) {
+			continue;
+		}
+
+		if (depth == 0) {
+			if (idx < first_index) {
+				continue;   // inside the part that survives
+			}
+
+			if (ext2_free_block(fs, entry) != 0) {
+				kfree(buf);
+				return -1;
+			}
+
+			memset(buf + (uint64_t)k * sizeof(uint32_t), 0, sizeof(entry));
+			changed = 1;
+			(*freed)++;
+			continue;
+		}
+
+		uint32_t child_stride = (depth == 2) ? fs->addrs_per_block : 1;
+		int child_empty = 0;
+
+		if (ext2_free_level(fs, entry, (uint32_t)idx, child_stride, depth - 1,
+		                    first_index, last_index, freed, &child_empty) != 0) {
+			kfree(buf);
+			return -1;
+		}
+
+		if (child_empty) {
+			if (ext2_free_block(fs, entry) != 0) {
+				kfree(buf);
+				return -1;
+			}
+
+			memset(buf + (uint64_t)k * sizeof(uint32_t), 0, sizeof(entry));
+			changed = 1;
+			(*freed)++;
+		}
+	}
+
+	if (changed && ext2_write_block(fs, container, buf) != BLOCK_OK) {
+		kfree(buf);
+		return -1;
+	}
+
+	*emptied = 1;
+
+	for (uint32_t k = 0; k < fs->addrs_per_block; k++) {
+		uint32_t entry = 0;
+		memcpy(&entry, buf + (uint64_t)k * sizeof(uint32_t), sizeof(entry));
+
+		if (entry != 0) {
+			*emptied = 0;
+			break;
+		}
+	}
+
+	kfree(buf);
+
+	return 0;
+}
+
+int ext2_free_blocks_from(ext2_t* fs, ext2_inode_hdr_t* hdr, uint32_t first_index, uint32_t last_index, uint32_t* freed) {
+	if (!fs || !hdr) {
+		return -1;
+	}
+
+	*freed = 0;
+
+	if (first_index > last_index) {
+		return 0;
+	}
+
+	// direct slots first
+	for (uint32_t i = first_index; i < EXT2_NDIR_BLOCKS && i <= last_index; i++) {
+		uint32_t block = hdr->block[i];
+
+		if (block == 0 || block >= fs->superblock->blocks_count) {
+			continue;
+		}
+
+		if (ext2_free_block(fs, block) != 0) {
+			return -1;
+		}
+
+		hdr->block[i] = 0;
+		(*freed)++;
+	}
+
+	uint32_t apb = fs->addrs_per_block;
+
+	// one row per level: which i_block slot roots it, where its slots start in
+	// logical block numbers, how far apart they sit, and how deep it goes
+	const struct {
+		uint32_t root;
+		uint32_t base;
+		uint32_t stride;
+		uint32_t depth;
+	} levels[3] = {
+		{EXT2_IND_BLOCK,  EXT2_NDIR_BLOCKS, 1u, 0u},
+		{EXT2_DIND_BLOCK, EXT2_NDIR_BLOCKS + apb, apb, 1u},
+		{EXT2_TIND_BLOCK, EXT2_NDIR_BLOCKS + apb + apb * apb, apb * apb, 2u},
+	};
+
+	for (int level = 0; level < 3; level++) {
+		uint32_t container = hdr->block[levels[level].root];
+
+		if (container == 0 || container >= fs->superblock->blocks_count) {
+			continue;
+		}
+
+		int emptied = 0;
+
+		if (ext2_free_level(fs, container, levels[level].base, levels[level].stride,
+		                    levels[level].depth, first_index, last_index,
+		                    freed, &emptied) != 0) {
+			return -1;
+		}
+
+		if (emptied) {
+			if (ext2_free_block(fs, container) != 0) {
+				return -1;
+			}
+
+			hdr->block[levels[level].root] = 0;
+			(*freed)++;
+		}
+	}
+
+	return 0;
 }
 
 int ext2_bitmap_sync(ext2_t* fs, ext2_bitmap_cache_t* bc) {

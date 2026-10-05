@@ -384,6 +384,21 @@ static int ext2_read(void* file_impl, void* buf, size_t len, size_t offset) {
 		len = (size_t)INT_MAX;
 	}
 
+	ext2_inode_hdr_t hdr;
+
+	if (ext2_read_inode(fs, f->inum, &hdr) != 0) {
+		return -1;
+	}
+
+	uint64_t on_disk = 0;
+
+	if (ext2_inode_length(fs, &hdr, &on_disk) != 0) {
+		return -1;
+	}
+
+	f->size = on_disk;
+	memcpy(f->block, hdr.block, sizeof(f->block));
+
 	if ((uint64_t)offset >= f->size) {
 		return 0;
 	}
@@ -460,6 +475,31 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 		return -1; // past the end of the volume
 	}
 
+	ext2_inode_hdr_t hdr;
+
+	if (ext2_read_inode(fs, f->inum, &hdr) != 0) {
+		return -1;
+	}
+
+	uint32_t spb = ext2_sectors_per_block(fs);
+
+	uint64_t disk_size = 0;
+
+	if (ext2_inode_length(fs, &hdr, &disk_size) != 0) {
+		return -1;
+	}
+
+	uint64_t orig_size = disk_size;
+
+	f->size = disk_size;
+	memcpy(f->block, hdr.block, sizeof(f->block));
+
+	uint32_t* claimed = NULL;
+	uint32_t claimed_count = 0;
+	uint32_t claimed_cap = 0;
+	int grew_blocks = 0;
+	int rc_ret = -1;
+
 	for (uint64_t p = (uint64_t)offset; p < end; ) {
 		uint32_t index = (uint32_t)(p / fs->block_size);
 		uint32_t within = (uint32_t)(p % fs->block_size);
@@ -472,13 +512,50 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 		uint32_t phys = 0;
 
 		if (ext2_map_block(fs, f->block, index, &phys) != 0 || phys == 0) {
-			return -1;
+			if (ext2_map_block_alloc(fs, &hdr, index, &phys) != 0) {
+				goto out;
+			}
+
+			if (index < EXT2_NDIR_BLOCKS) {
+				f->block[index] = phys;
+			}
+
+			if (claimed_count == claimed_cap) {
+				uint32_t cap = claimed_cap ? claimed_cap * 2 : 8;
+				uint32_t* bigger = kmalloc(cap * sizeof(uint32_t), sizeof(uint32_t));
+
+				if (!bigger) {
+					goto out;
+				}
+
+				if (claimed_count) {
+					memcpy(bigger, claimed, claimed_count * sizeof(uint32_t));
+				}
+
+				kfree(claimed);
+				claimed = bigger;
+				claimed_cap = cap;
+			}
+
+			claimed[claimed_count++] = index;
+			grew_blocks = 1;
 		}
 
 		p += chunk;
 	}
 
-	// pass 2: the blocks are ours, so write them
+	// ownership must be durable before any data lands in those blocks
+	if (grew_blocks || end > f->size) {
+		if (end > f->size) {
+			hdr.size = (uint32_t)end;
+			hdr.size_high = fs->large_files ? (uint32_t)(end >> 32) : 0;
+		}
+
+		if (ext2_write_inode(fs, f->inum, &hdr) != BLOCK_OK) {
+			goto out;
+		}
+	}
+
 	size_t done = 0;
 	uint64_t pos = (uint64_t)offset;
 
@@ -492,7 +569,7 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 		}
 
 		uint32_t phys = 0;
-		ext2_map_block(fs, f->block, index, &phys); // prevalidated above
+		ext2_map_block(fs, f->block, index, &phys);
 
 		uint64_t base = (uint64_t)phys * fs->block_size;
 		const uint8_t* src = (const uint8_t*)buf + done;
@@ -504,12 +581,12 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 			uint8_t* tmp = kmalloc(fs->block_size, fs->block_size);
 
 			if (!tmp) {
-				return -1;
+				goto out;
 			}
 
 			if (block_read_bytes(fs->block_device, base, fs->block_size, tmp) != BLOCK_OK) {
 				kfree(tmp);
-				return -1;
+				goto out;
 			}
 
 			memcpy(tmp + within, src, chunk);
@@ -518,7 +595,7 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 		}
 
 		if (rc != BLOCK_OK) {
-			return -1;
+			goto out;
 		}
 
 		done += chunk;
@@ -526,23 +603,110 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 	}
 
 	if (end > f->size) {
-		ext2_inode_hdr_t hdr;
-
-		if (ext2_read_inode(fs, f->inum, &hdr) != 0) {
-			return -1;
-		}
-
-		hdr.size = (uint32_t)end;
-		hdr.size_high = fs->large_files ? (uint32_t)(end >> 32) : 0;
-
-		if (ext2_write_inode(fs, f->inum, &hdr) != BLOCK_OK) {
-			return -1;
-		}
-
 		f->size = end;
 	}
 
-	return (int)len;
+	rc_ret = (int)len;
+
+out:
+	if (rc_ret < 0 && claimed_count) {
+		uint32_t freed = 0;
+
+		for (uint32_t i = 0; i < claimed_count; i++) {
+			uint32_t got = 0;
+
+			if (ext2_free_index(fs, &hdr, claimed[i], &got) == 0) {
+				freed += got;
+
+				if (claimed[i] < EXT2_NDIR_BLOCKS) {
+					f->block[claimed[i]] = 0;
+				}
+			}
+		}
+
+		if (freed) {
+			uint32_t drop = freed * spb;
+
+			hdr.blocks = drop > hdr.blocks ? 0 : hdr.blocks - drop;
+		}
+
+		hdr.size = (uint32_t)orig_size;
+		hdr.size_high = fs->large_files ? (uint32_t)(orig_size >> 32) : 0;
+
+		ext2_write_inode(fs, f->inum, &hdr);
+	}
+
+	kfree(claimed);
+
+	return rc_ret;
+}
+
+static int ext2_resize(void* file_impl, uint64_t new_size) {
+	if (!file_impl) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	ext2_file_t* f = file_impl;
+	ext2_t* fs = f->fs;
+
+	if (!fs || !fs->block_device || !fs->superblock) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (fs->read_only) {
+		return PANUTIERRNO_NOTSUPPORTED;
+	}
+
+	if (new_size > (uint64_t)fs->superblock->blocks_count * fs->block_size) {
+		return PANUTIERRNO_INVALIDARG; // past the end of the volume
+	}
+
+	ext2_inode_hdr_t hdr;
+
+	if (ext2_read_inode(fs, f->inum, &hdr) != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if ((hdr.mode & EXT2_S_IFMT) != EXT2_S_IFREG) {
+		return PANUTIERRNO_UNSUPPORTEDOP; // ftruncate needs a regular file
+	}
+
+	uint64_t cur_size = 0;
+
+	if (ext2_inode_length(fs, &hdr, &cur_size) != 0) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	if (new_size < cur_size) {
+		uint32_t first = (uint32_t)((new_size + fs->block_size - 1) / fs->block_size);
+		uint32_t last = (uint32_t)((cur_size + fs->block_size - 1) / fs->block_size);
+
+		if (last > 0) {
+			last--;
+		}
+
+		uint32_t freed = 0;
+
+		if (ext2_free_blocks_from(fs, &hdr, first, last, &freed) != 0) {
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		uint32_t drop = freed * ext2_sectors_per_block(fs);
+
+		hdr.blocks = drop > hdr.blocks ? 0 : hdr.blocks - drop;
+	}
+
+	hdr.size = (uint32_t)new_size;
+	hdr.size_high = fs->large_files ? (uint32_t)(new_size >> 32) : 0;
+
+	if (ext2_write_inode(fs, f->inum, &hdr) != BLOCK_OK) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	f->size = new_size;
+	memcpy(f->block, hdr.block, sizeof(f->block));
+
+	return 0;
 }
 
 static int ext2_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, size_t* cursor) {
@@ -746,6 +910,7 @@ static const fs_ops_t ext2_ops = {
 	.close = ext2_close,
 	.finish = ext2_finish,
 	.readdir = ext2_readdir,
+	.resize = ext2_resize,
 };
 
 int ext2_mount(const char* mountp, const char* blkdev) {
