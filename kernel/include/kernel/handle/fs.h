@@ -24,6 +24,7 @@ typedef struct fs_ops {
 	int (*readdir)(void* fs_impl, struct inode* dir, dirent_entry_t* out, size_t* cursor);
 	void (*close)(void* file_impl);
 	void (*finish)(void* fs_impl);
+	int (*resize)(void* file_impl, uint64_t new_size);
 } fs_ops_t;
 
 extern const handle_ops_t fs_file_ops;

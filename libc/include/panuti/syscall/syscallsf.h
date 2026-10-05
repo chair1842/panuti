@@ -149,6 +149,10 @@ static inline int32_t panutisysf_munmap(void* addr, size_t len) {
 	return panuti_syscall(SYSHANDLER_MUNMAP, (uint32_t)addr, (uint32_t)len, 0, 0);
 }
 
+static inline int32_t panutisysf_resize(int fd, uint64_t* new_size) {
+	return panuti_syscall(SYSHANDLER_RESIZE, (uint32_t)fd, (uint32_t)new_size, 0, 0);
+}
+
 #if defined(__cplusplus)
 }
 #endif

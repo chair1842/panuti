@@ -35,6 +35,7 @@ extern "C" {
 #define SYSHANDLER_NEXIST 25
 #define SYSHANDLER_MMAPAN 26
 #define SYSHANDLER_MUNMAP 27
+#define SYSHANDLER_RESIZE 28
 
 #if defined(__cplusplus)
 }

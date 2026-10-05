@@ -17,6 +17,7 @@ static int fs_file_read(void* impl, void* buf, size_t len) {
 	if (ret > 0) {
 		f->offset += (size_t)ret;
 	}
+	
 	return ret;
 }
 
@@ -26,6 +27,7 @@ static int fs_file_write(void* impl, const void* buf, size_t len) {
 	if (ret > 0) {
 		f->offset += (size_t)ret;
 	}
+	
 	return ret;
 }
 
@@ -45,8 +47,18 @@ static int fs_file_close(void* impl, struct task* self) {
 	if (f->fs_ops->close) {
 		f->fs_ops->close(f->file_impl);
 	}
+	
 	kfree(f);
 	return 0;
+}
+
+static int fs_file_resize(void* impl, uint64_t new_size) {
+	fs_file_t* f = (fs_file_t*)impl;
+	if (f->fs_ops->resize) {
+		return f->fs_ops->resize(f->file_impl, new_size);
+	}
+
+	return -1;
 }
 
 const handle_ops_t fs_file_ops = {
@@ -72,6 +84,7 @@ void* fs_open_file(void* fs_impl, const fs_ops_t* fs_ops, struct inode* node) {
 		if (fs_ops->close) {
 			fs_ops->close(file_impl);
 		}
+		
 		return nullptr;
 	}
 

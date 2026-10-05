@@ -31,6 +31,11 @@ int op_not_supported_close(void* impl, struct task* self) {
 	return 0;
 }
 
+int op_not_supported_resize(void* impl, uint64_t new_size) {
+	(void)impl; (void)new_size;
+	return PANUTIERRNO_UNSUPPORTEDOP;
+}
+
 int handle_alloc(task_t* t, inode_type_t type) {
 	for (int i = 0; i < MAX_HANDLES; i++) {
 		if (t->handles[i].type == INODE_NONE) {

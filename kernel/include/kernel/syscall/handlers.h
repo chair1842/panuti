@@ -90,4 +90,7 @@ int32_t syshandler_mmapan(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // release a run of anonymous pages
 int32_t syshandler_munmap(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// resize a handle
+int32_t syshandler_resize(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif
