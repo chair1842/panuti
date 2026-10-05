@@ -48,7 +48,9 @@ int ext2_dirent_at(const ext2_t* fs, const uint8_t* buf, uint32_t off, ext2_dire
 int ext2_dirent_find(ext2_t* fs, const ext2_inode_hdr_t* dir, const char* name, size_t name_len, uint32_t* inum);
 int ext2_dirent_is_empty(ext2_t* fs, const ext2_inode_hdr_t* dir, bool* empty);
 int ext2_inode_retire(ext2_t* fs, uint32_t inum);
+int ext2_dirs_count_adjust(ext2_t* fs, uint32_t inum, int delta);
 int ext2_dirent_add(ext2_t* fs, ext2_inode_hdr_t* dir, uint32_t dir_inum, uint32_t inum, const char* name, size_t name_len, uint8_t file_type);
+int ext2_dirent_init_dir(const ext2_t* fs, uint8_t* buf, uint32_t inum, uint32_t parent);
 int ext2_dirent_remove(ext2_t* fs, ext2_inode_hdr_t* dir, const char* name, size_t name_len);
 int ext2_bitmap_sync(ext2_t* fs, ext2_bitmap_cache_t* bc);
 int ext2_sync_metadata(ext2_t* fs);

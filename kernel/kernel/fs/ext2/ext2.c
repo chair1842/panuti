@@ -229,8 +229,154 @@ static struct inode* ext2_lookup(void* fs_impl, struct inode* dir, const char* n
 }
 
 static int ext2_create(void* fs_impl, struct inode* dir, const char* name, size_t len, inode_type_t type) {
-	(void)fs_impl; (void)dir; (void)name; (void)len; (void)type;
-	return PANUTIERRNO_UNSUPPORTEDOP;
+	ext2_t* fs = fs_impl;
+	ext2_inode_hdr_t dih;
+	uint32_t inum = 0;
+
+	if (!fs || !dir || !name) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (fs->read_only) {
+		return PANUTIERRNO_NOTSUPPORTED;
+	}
+
+	if (!ext2_dirent_name_ok(name, len)) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (type != INODE_DIR && type != INODE_FILE) {
+		return PANUTIERRNO_UNSUPPORTEDOP;
+	}
+
+	ext2_inode_t* di = dir->impl;
+
+	if (!di || di->fs != fs) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (ext2_read_inode(fs, di->inum, &dih) != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if ((dih.mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if (ext2_dirent_find(fs, &dih, name, len, &inum) == 0) {
+		return PANUTIERRNO_EXISTS;
+	}
+
+	if (ext2_alloc_inode(fs, &inum) != 0) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	ext2_inode_hdr_t tgt;
+
+	memset(&tgt, 0, sizeof(tgt));
+	tgt.links_count = 1;
+	tgt.size = 0;
+	tgt.blocks = 0;
+	tgt.atime = tgt.mtime = tgt.ctime = 0;
+
+	uint8_t file_type = (type == INODE_DIR) ? EXT2_FT_DIR : EXT2_FT_REG;
+
+	if (type == INODE_DIR) {
+		tgt.mode = EXT2_S_IFDIR | 0755;
+
+		tgt.links_count = 2;
+	} else {
+		tgt.mode = EXT2_S_IFREG | 0644;
+	}
+
+	if (ext2_write_inode(fs, inum, &tgt) != BLOCK_OK) {
+		ext2_free_inode(fs, inum);
+
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	if (type == INODE_DIR && ext2_dirs_count_adjust(fs, inum, 1) != 0) {
+		ext2_inode_retire(fs, inum);
+		ext2_free_inode(fs, inum);
+
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	if (type == INODE_DIR) {
+		uint32_t phys = 0;
+
+		if (ext2_alloc_block(fs, &phys) != 0) {
+			ext2_inode_retire(fs, inum);
+			ext2_free_inode(fs, inum);
+
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		uint8_t* buf = kmalloc(fs->block_size, fs->block_size);
+
+		if (!buf) {
+			ext2_free_block(fs, phys);
+			ext2_inode_retire(fs, inum);
+			ext2_free_inode(fs, inum);
+
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		int built = ext2_dirent_init_dir(fs, buf, inum, di->inum);
+
+		if (built != 0 || ext2_write_block(fs, phys, buf) != BLOCK_OK) {
+			kfree(buf);
+			ext2_free_block(fs, phys);
+			ext2_inode_retire(fs, inum);
+			ext2_free_inode(fs, inum);
+
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		kfree(buf);
+
+		tgt.block[0] = phys;
+		tgt.size = fs->block_size;
+		tgt.blocks = ext2_sectors_per_block(fs);
+
+		if (ext2_write_inode(fs, inum, &tgt) != BLOCK_OK) {
+			ext2_free_block(fs, phys);
+			ext2_inode_retire(fs, inum);
+			ext2_free_inode(fs, inum);
+
+			return PANUTIERRNO_PLAINERR;
+		}
+	}
+
+	int added = ext2_dirent_add(fs, &dih, di->inum, inum, name, len, file_type);
+
+	if (added == 0 && type == INODE_DIR) {
+		dih.links_count++;
+
+		if (ext2_write_inode(fs, di->inum, &dih) != BLOCK_OK) {
+			ext2_dirent_remove(fs, &dih, name, len);
+			ext2_inode_retire(fs, inum);
+			ext2_free_inode(fs, inum);
+
+			return PANUTIERRNO_PLAINERR;
+		}
+	}
+
+	if (added == EXT2_DIRENT_NO_SPACE) {
+		ext2_inode_retire(fs, inum);
+		ext2_free_inode(fs, inum);
+
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	if (added != 0) {
+		ext2_inode_retire(fs, inum);
+		ext2_free_inode(fs, inum);
+
+		return PANUTIERRNO_EXISTS;
+	}
+
+	return 0;
 }
 
 static int ext2_unlink(void* fs_impl, struct inode* dir, const char* name, size_t len) {
@@ -303,29 +449,54 @@ static int ext2_unlink(void* fs_impl, struct inode* dir, const char* name, size_
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	uint32_t drop = ((tgt.mode & EXT2_S_IFMT) == EXT2_S_IFDIR) ? 2 : 1;
+	bool is_dir = (tgt.mode & EXT2_S_IFMT) == EXT2_S_IFDIR;
+	uint32_t drop = is_dir ? 2 : 1;
+
+	if (is_dir) {
+		if (dih.links_count <= 1) {
+			ext2_dirent_add(fs, &dih, di->inum, inum, name, len, EXT2_FT_DIR);
+
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		dih.links_count--;
+	}
 
 	if (tgt.links_count > drop) {
 		tgt.links_count -= drop;
 
-		if (ext2_write_inode(fs, inum, &tgt) == BLOCK_OK) {
+		if (ext2_write_inode(fs, inum, &tgt) != BLOCK_OK) {
+			ext2_dirent_add(fs, &dih, di->inum, inum, name, len,
+				is_dir ? EXT2_FT_DIR : EXT2_FT_REG);
+
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		if (!is_dir || ext2_write_inode(fs, di->inum, &dih) == BLOCK_OK) {
+			return 0;
+		}
+	} else if (ext2_inode_retire(fs, inum) == 0) {
+		if (!is_dir || ext2_write_inode(fs, di->inum, &dih) == BLOCK_OK) {
 			return 0;
 		}
 
-		ext2_dirent_add(fs, &dih, di->inum, inum, name, len,
-			(tgt.mode & EXT2_S_IFMT) == EXT2_S_IFDIR ? EXT2_FT_DIR : EXT2_FT_REG);
-
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	if (ext2_inode_retire(fs, inum) != 0) {
-		ext2_dirent_add(fs, &dih, di->inum, inum, name, len,
-			(tgt.mode & EXT2_S_IFMT) == EXT2_S_IFDIR ? EXT2_FT_DIR : EXT2_FT_REG);
+	if (is_dir) {
+		dih.links_count++;
+	}
 
+	if (ext2_dirent_add(fs, &dih, di->inum, inum, name, len,
+		is_dir ? EXT2_FT_DIR : EXT2_FT_REG) != 0) {
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	return 0;
+	if (is_dir && ext2_write_inode(fs, di->inum, &dih) != BLOCK_OK) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	return PANUTIERRNO_PLAINERR;
 }
 
 static int ext2_rename(void* fs_impl, struct inode* old_dir, const char* old_name, size_t old_len,

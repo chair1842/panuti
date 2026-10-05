@@ -807,6 +807,35 @@ static void ext2_dirent_write(const ext2_t* fs, uint8_t* buf, uint32_t off,
 	memcpy(buf + off + hdr_len, name, name_len);
 }
 
+int ext2_dirent_init_dir(const ext2_t* fs, uint8_t* buf, uint32_t inum, uint32_t parent) {
+	if (!fs || !buf || inum == 0) {
+		return -1;
+	}
+
+	uint32_t self_len = ext2_dirent_rec_len(fs, 1);
+	uint32_t up_len = ext2_dirent_rec_len(fs, 2);
+
+	if (fs->block_size < self_len + up_len + ext2_dirent_hdr_len(fs)) {
+		return -1;
+	}
+
+	memset(buf, 0, fs->block_size);
+
+	ext2_dirent_write(fs, buf, 0, inum, ".", 1, EXT2_FT_DIR, self_len);
+	ext2_dirent_write(fs, buf, self_len, parent, "..", 2, EXT2_FT_DIR, up_len);
+
+	uint32_t rest = fs->block_size - self_len - up_len;
+
+	ext2_dirent_hdr_t free_rec;
+
+	memset(&free_rec, 0, sizeof(free_rec));
+	free_rec.rec_len = (uint16_t)rest;
+
+	memcpy(buf + self_len + up_len, &free_rec, ext2_dirent_hdr_len(fs));
+
+	return 0;
+}
+
 static int ext2_dirent_place(const ext2_t* fs, uint8_t* buf, uint32_t need,
 	const char* name, size_t name_len, uint32_t inum, uint8_t file_type) {
 
@@ -1286,11 +1315,39 @@ done:
 	return rc;
 }
 
+int ext2_dirs_count_adjust(ext2_t* fs, uint32_t inum, int delta) {
+	if (!fs || delta == 0 || inum == 0) {
+		return -1;
+	}
+
+	uint32_t ipg = fs->superblock->inodes_per_group;
+	uint32_t group = (inum - 1) / ipg;
+
+	if (group >= fs->group_count) {
+		return -1;
+	}
+
+	if (delta > 0) {
+		fs->gdt[group].used_dirs_count++;
+	} else {
+		if (fs->gdt[group].used_dirs_count == 0) {
+			return -1;
+		}
+
+		fs->gdt[group].used_dirs_count--;
+	}
+
+	fs->gdt_dirty = true;
+
+	return 0;
+}
+
 int ext2_inode_retire(ext2_t* fs, uint32_t inum) {
 	ext2_inode_hdr_t hdr;
 	uint32_t nblocks;
 	uint32_t last;
 	uint32_t freed = 0;
+	bool was_dir;
 
 	if (!fs) {
 		return -1;
@@ -1305,6 +1362,10 @@ int ext2_inode_retire(ext2_t* fs, uint32_t inum) {
 	if (hdr.dtime != 0) {
 		return -1;
 	}
+
+	// read before the header is rewritten, because a retired directory still
+	// carries its mode and that is the only hint of what it used to be
+	was_dir = (hdr.mode & EXT2_S_IFMT) == EXT2_S_IFDIR;
 
 	nblocks = (hdr.size + fs->block_size - 1) / fs->block_size;
 	last = nblocks ? nblocks - 1 : 0;
@@ -1327,6 +1388,12 @@ int ext2_inode_retire(ext2_t* fs, uint32_t inum) {
 	hdr.links_count = 0;
 
 	if (ext2_write_inode(fs, inum, &hdr) != BLOCK_OK) {
+		return -1;
+	}
+
+	// the group tally only moves once the inode is actually gone from the disk,
+	// so a failure above leaves it counting something that still exists
+	if (was_dir && ext2_dirs_count_adjust(fs, inum, -1) != 0) {
 		return -1;
 	}
 
