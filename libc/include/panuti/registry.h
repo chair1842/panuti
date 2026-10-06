@@ -9,7 +9,9 @@
 extern "C" {
 #endif
 
-int32_t mkdir(const char* path);
+int mkdir(const char* path);
+
+int mkfile(const char* path);
 
 #if defined(__cplusplus)
 }

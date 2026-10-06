@@ -3,6 +3,6 @@
 #include <panuti/registry.h>
 #include <panuti/syscall/syscallsf.h>
 
-int mkdir(const char* path) {
-	return panutisysf_mkdir(path);
+int mkfile(const char* path) {
+	return panutisysf_mkfile(path);
 }
