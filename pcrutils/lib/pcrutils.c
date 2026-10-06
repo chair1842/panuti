@@ -5,7 +5,9 @@
 #include <limits.h>
 #include <string.h>
 
+#include <panuti/handle.h>
 #include <panuti/stream.h>
+#include <panuti/syscall/syscallsf.h>
 
 #include <pcrutils/pcrutils.h>
 
@@ -22,6 +24,47 @@ int pcr_write_all(int stream, const char* buf, size_t len) {
 	}
 
 	return 0;
+}
+
+// the handle equivalent of pcr_write_all: a file write can stop short
+int pcr_handle_write_all(int fd, const char* buf, size_t len) {
+	size_t off = 0;
+
+	while (off < len) {
+		int w = handle_write(fd, buf + off, len - off);
+		if (w <= 0) {
+			return -1;
+		}
+
+		off += (size_t)w;
+	}
+
+	return 0;
+}
+
+// move a handle's write position to the end of the file, the only way to
+// append without a seek. reading pulls the offset along, and a device that
+// cannot be read is left alone
+int pcr_handle_to_end(int fd) {
+	char buf[128];
+
+	for (;;) {
+		int n = handle_read(fd, buf, sizeof(buf));
+		if (n <= 0) {
+			return n;
+		}
+	}
+}
+
+// open a path, creating the file first if it is not there yet. mkfile is
+// a "create if absent" by nature, and when it fails the open decides whether
+// the path really exists. returns an fd or a negative error
+int pcr_open_or_create(const char* path) {
+	if (panutisysf_mkfile(path) < 0) {
+		// the name may simply already be there; let open say what is what
+	}
+
+	return handle_open(path);
 }
 
 // this libc declares strchr but never builds it, so the utils get one here.

@@ -19,6 +19,15 @@ typedef struct {
 
 int pcr_write_all(int stream, const char* buf, size_t len);
 
+// write to a file handle, retrying until every byte is out
+int pcr_handle_write_all(int fd, const char* buf, size_t len);
+
+// pull a handle's write position to the end of the file by reading through
+int pcr_handle_to_end(int fd);
+
+// open a path, creating the file first if it is not there yet
+int pcr_open_or_create(const char* path);
+
 int pcr_output(int no_streams, const char* buf, size_t len, int only_out0);
 
 const char* pcr_strchr(const char* s, char c);

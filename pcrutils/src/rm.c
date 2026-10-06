@@ -1,31 +1,36 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include <panuti/errno.h>
+#include <panuti/handle.h>
 #include <panuti/inode_type.h>
 #include <panuti/stat.h>
 #include <panuti/syscall/syscallsf.h>
 #include <pcrutils/pcrutils.h>
 
+#define RM_MAXDEPTH 64
+
 static bool force = false;
-static bool dirs = false;
+static bool recurse = false;
 
 static const char HELP[] =
 	"rm - a pcrutils utility\n\n"
-	"rm removes nodes from the registry\n\n"
+	"rm removes files and empty directories\n\n"
 	"usage:\n"
-	"  rm [-f] [-d] <path ...>\n\n"
+	"  rm [-f] [-r] <path ...>\n\n"
 	"args:\n"
 	"  -f - do not complain about a path that is not there\n"
-	"  -d - remove a directory as well as a file. registry directories\n"
-	"       can be taken this way; a directory inside a mounted filesystem\n"
-	"       may not be, that is up to the filesystem\n"
+	"  -r - remove a directory's whole tree as well, empty or not\n"
 	"  -h - prints this help message\n\n"
+	"an empty directory comes off without any help; one that still holds\n"
+	"something needs -r. a directory inside a mounted filesystem comes\n"
+	"off only if the filesystem allows it\n\n"
 	"examples:\n"
 	"  rm /tmp/junk\n"
-	"  rm -d /tmp/old\n";
+	"  rm -r /tmp/old\n";
 
 static const char* reason(int32_t rc) {
 	switch (rc) {
@@ -36,6 +41,76 @@ static const char* reason(int32_t rc) {
 		case PANUTIERRNO_INVALIDARG: return "bad argument";
 		default: return NULL;
 	}
+}
+
+// a directory with nothing in it but '.' and '..'
+static bool is_empty_dir(const char* path) {
+	int fd = handle_open(path);
+	if (fd < 0) {
+		return false;
+	}
+
+	bool empty = true;
+	dirent_entry_t entry;
+	int rc;
+
+	while ((rc = readdir(fd, &entry)) == 0) {
+		if (strcmp(entry.name, ".") == 0 || strcmp(entry.name, "..") == 0) {
+			continue;
+		}
+
+		empty = false;
+		break;
+	}
+
+	handle_close(fd);
+	return empty;
+}
+
+// clear out a directory's contents, leaving it empty but in place. reports
+// nothing itself; the caller decides whether to complain
+static int clear_dir(const char* path, int depth) {
+	if (depth > RM_MAXDEPTH) {
+		return -1;
+	}
+
+	int fd = handle_open(path);
+	if (fd < 0) {
+		return -1;
+	}
+
+	int failed = 0;
+	dirent_entry_t entry;
+	int rc;
+
+	while ((rc = readdir(fd, &entry)) == 0) {
+		if (strcmp(entry.name, ".") == 0 || strcmp(entry.name, "..") == 0) {
+			continue;
+		}
+
+		char* full = pcr_path_join(path, entry.name);
+		if (!full) {
+			failed = 1;
+			continue;
+		}
+
+		if (entry.type == INODE_DIR) {
+			if (clear_dir(full, depth + 1) != 0) {
+				failed = 1;
+			}
+
+			if (panutisysf_unlink(full) != PANUTIERRNO_PLAINSUCCESS) {
+				failed = 1;
+			}
+		} else if (panutisysf_unlink(full) != PANUTIERRNO_PLAINSUCCESS) {
+			failed = 1;
+		}
+
+		free(full);
+	}
+
+	handle_close(fd);
+	return failed ? -1 : 0;
 }
 
 int main(int argc, char** argv) {
@@ -55,8 +130,11 @@ int main(int argc, char** argv) {
 
 		if (strcmp(a, "-f") == 0) {
 			force = true;
+		} else if (strcmp(a, "-r") == 0) {
+			recurse = true;
 		} else if (strcmp(a, "-d") == 0) {
-			dirs = true;
+			printf("pcrutils: rm: -d is gone; an empty directory comes off by itself\n");
+			return -1;
 		} else {
 			printf("pcrutils: rm: invalid option '%s'\n", a + 1);
 			return -1;
@@ -84,10 +162,21 @@ int main(int argc, char** argv) {
 			continue;
 		}
 
-		if (e.type == INODE_DIR && !dirs) {
-			printf("pcrutils: rm: cannot remove '%s': it is a directory, give -d\n", path);
-			failed = 1;
-			continue;
+		if (e.type == INODE_DIR && !is_empty_dir(path)) {
+			if (recurse) {
+				if (clear_dir(path, 0) != 0) {
+					if (!force) {
+						printf("pcrutils: rm: could not clear everything under '%s'\n", path);
+					}
+					failed = 1;
+				}
+			} else {
+				if (!force) {
+					printf("pcrutils: rm: cannot remove '%s': it holds something, give -r\n", path);
+				}
+				failed = 1;
+				continue;
+			}
 		}
 
 		int32_t rc = panutisysf_unlink(path);
@@ -95,10 +184,12 @@ int main(int argc, char** argv) {
 		if (rc != PANUTIERRNO_PLAINSUCCESS && !force) {
 			const char* why = reason(rc);
 
+			printf("pcrutils: rm: cannot remove '%s': ", path);
+
 			if (why) {
-				printf("pcrutils: rm: cannot remove '%s': %s\n", path, why);
+				printf("%s\n", why);
 			} else {
-				printf("pcrutils: rm: cannot remove '%s': unknown error %d\n", path, (int)rc);
+				printf("unknown error %d\n", (int)rc);
 			}
 
 			failed = 1;

@@ -78,7 +78,7 @@ static size_t dir_max_width(const char* path) {
 static int list_dir(const char* path, size_t maxw) {
 	int fd = handle_open(path);
 	if (fd < 0) {
-		printf("ls: %s: cannot open directory\n", path);
+		printf("pcrutils: ls: %s: cannot open directory\n", path);
 		return -1;
 	}
 
@@ -113,7 +113,7 @@ int main(int argc, char** argv) {
 		} else if (strcmp(a, "-p") == 0) {
 			no_type = 1;
 		} else {
-			printf("ls: invalid option '%s'\n", a + 1);
+			printf("pcrutils: ls: invalid option '%s'\n", a + 1);
 			return -1;
 		}
 	}
@@ -137,7 +137,7 @@ int main(int argc, char** argv) {
 	for (; i < argc; i++) {
 		size_t maxw = no_type ? 0 : dir_max_width(argv[i]);
 		if (maxw == (size_t)-1) {
-			printf("ls: %s: cannot open directory\n", argv[i]);
+			printf("pcrutils: ls: %s: cannot open directory\n", argv[i]);
 			failed = 1;
 			continue;
 		}
