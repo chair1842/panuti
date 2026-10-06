@@ -71,14 +71,17 @@ int main(int argc, char** argv) {
 	for (int i = 2; i < argc; i++) {
 		const char* a = argv[i];
 
-		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'o') {
-				broadcast = false;
-			} else {
-				printf("pcrutils: in: invalid option '%c'\n", a[j]);
-				return -1;
-			}
+		if (a[0] != '-' || a[1] == '\0') {
+			printf("pcrutils: in: unexpected argument '%s'\n", a);
+			return -1;
 		}
+
+		if (strcmp(a, "-o") != 0) {
+			printf("pcrutils: in: invalid option '%s'\n", a + 1);
+			return -1;
+		}
+
+		broadcast = false;
 	}
 
 	int counts[2] = {0};

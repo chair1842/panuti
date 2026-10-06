@@ -181,14 +181,12 @@ int main(int argc, char** argv) {
 			break;
 		}
 
-		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'p') {
-				make_parents = 1;
-			} else {
-				printf("pcrutils: mkdir: invalid option '%c'\n", a[j]);
-				return -1;
-			}
+		if (strcmp(a, "-p") != 0) {
+			printf("pcrutils: mkdir: invalid option '%s'\n", a + 1);
+			return -1;
 		}
+
+		make_parents = 1;
 	}
 
 	if (first == argc) {

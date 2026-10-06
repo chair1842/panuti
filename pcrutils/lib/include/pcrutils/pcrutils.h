@@ -11,4 +11,6 @@ int pcr_output(int no_streams, const char* buf, size_t len, int only_out0);
 
 bool pcr_help_wanted(int argc, char** argv, const char* help);
 
+bool pcr_option_provided(int argc, char** argv, const char* option);
+
 #endif

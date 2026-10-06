@@ -147,20 +147,12 @@ static int parse_args(int argc, char** argv) {
 			return -1;
 		}
 
-		for (int j = 1; a[j]; j++) {
-			char c = a[j];
-
-			if (c == 'w') {
-				mode = SPLIT_WORDS;
-				continue;
-			}
-
-			if (c == 'c') {
-				mode = SPLIT_CHARS;
-				continue;
-			}
-
-			printf("pcrutils: split: invalid option '%c'\n", c);
+		if (strcmp(a, "-w") == 0) {
+			mode = SPLIT_WORDS;
+		} else if (strcmp(a, "-c") == 0) {
+			mode = SPLIT_CHARS;
+		} else {
+			printf("pcrutils: split: invalid option '%s'\n", a + 1);
 			return -1;
 		}
 	}

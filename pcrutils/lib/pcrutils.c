@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include <stdio.h>
+#include <string.h>
 
 #include <panuti/stream.h>
 
@@ -34,9 +35,19 @@ int pcr_output(int no_streams, const char* buf, size_t len, int only_out0) {
 	return failed ? -1 : 0;
 }
 
-// an arg is only looked at if it looks like an option, so a file that
-// happens to have an h in it never brings up the help message
 bool pcr_help_wanted(int argc, char** argv, const char* help) {
+	if (!pcr_option_provided(argc, argv, "h")) {
+		return false;
+	}
+
+	printf("%s", help);
+
+	return true;
+}
+
+bool pcr_option_provided(int argc, char** argv, const char* option) {
+	const char* opt = (option[0] == '-') ? option + 1 : option;
+
 	for (int i = 1; i < argc; i++) {
 		const char* a = argv[i];
 
@@ -44,12 +55,8 @@ bool pcr_help_wanted(int argc, char** argv, const char* help) {
 			continue;
 		}
 
-		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'h') {
-				printf("%s", help);
-
-				return true;
-			}
+		if (strcmp(a + 1, opt) == 0) {
+			return true;
 		}
 	}
 

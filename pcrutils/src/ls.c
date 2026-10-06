@@ -101,18 +101,20 @@ int main(int argc, char** argv) {
 	}
 
 	int i = 1;
-	for (; i < argc && argv[i][0] == '-'; i++) {
+	for (; i < argc; i++) {
 		const char* a = argv[i];
 
-		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'a') {
-				show_hidden = 1;
-			} else if (a[j] == 'p') {
-				no_type = 1;
-			} else {
-				printf("ls: invalid option '%c'\n", a[j]);
-				return -1;
-			}
+		if (a[0] != '-' || a[1] == '\0') {
+			break;
+		}
+
+		if (strcmp(a, "-a") == 0) {
+			show_hidden = 1;
+		} else if (strcmp(a, "-p") == 0) {
+			no_type = 1;
+		} else {
+			printf("ls: invalid option '%s'\n", a + 1);
+			return -1;
 		}
 	}
 

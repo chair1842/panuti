@@ -48,10 +48,8 @@ int main(int argc, char** argv) {
 			break;
 		}
 
-		for (int j = 1; a[j]; j++) {
-			printf("pcrutils: mount: invalid option '%c'\n", a[j]);
-			return -1;
-		}
+		printf("pcrutils: mount: invalid option '%s'\n", a + 1);
+		return -1;
 	}
 
 	if (first == argc) {

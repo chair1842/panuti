@@ -109,14 +109,12 @@ int main(int argc, char** argv) {
 			break;
 		}
 
-		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'o') {
-				only_out0 = true;
-			} else {
-				printf("pcrutils: cat: invalid option '%c'\n", a[j]);
-				return -1;
-			}
+		if (strcmp(a, "-o") != 0) {
+			printf("pcrutils: cat: invalid option '%s'\n", a + 1);
+			return -1;
 		}
+
+		only_out0 = true;
 	}
 
 	int counts[2] = {0, 0};

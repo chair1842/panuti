@@ -84,14 +84,12 @@ int main(int argc, char** argv) {
 			break;
 		}
 
-		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'o') {
-				only_out0 = true;
-			} else {
-				printf("pcrutils: grep: invalid option '%c'\n", a[j]);
-				return -1;
-			}
+		if (strcmp(a, "-o") != 0) {
+			printf("pcrutils: grep: invalid option '%s'\n", a + 1);
+			return -1;
 		}
+
+		only_out0 = true;
 	}
 
 	if (first == argc) {

@@ -197,19 +197,17 @@ int main(int argc, char** argv) {
 			break;
 		}
 
-		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'l') {
-				want_lines = true;
-			} else if (a[j] == 'w') {
-				want_words = true;
-			} else if (a[j] == 'c') {
-				want_chars = true;
-			} else if (a[j] == 's') {
-				want_streams = true;
-			} else {
-				printf("pcrutils: wc: invalid option '%c'\n", a[j]);
-				return -1;
-			}
+		if (strcmp(a, "-l") == 0) {
+			want_lines = true;
+		} else if (strcmp(a, "-w") == 0) {
+			want_words = true;
+		} else if (strcmp(a, "-c") == 0) {
+			want_chars = true;
+		} else if (strcmp(a, "-s") == 0) {
+			want_streams = true;
+		} else {
+			printf("pcrutils: wc: invalid option '%s'\n", a + 1);
+			return -1;
 		}
 	}
 

@@ -33,10 +33,9 @@ int main(int argc, char** argv) {
 			return -1;
 		}
 
-		for (int j = (a[0] == '-') ? 1 : 0; a[j]; j++) {
-			printf("pcrutils: mul: invalid option '%c'\n", a[j]);
-			return -1;
-		}
+		printf("pcrutils: mul: invalid option '%s'\n",
+		       (a[0] == '-') ? a + 1 : a);
+		return -1;
 	}
 
 	int counts[2] = {0, 0};
