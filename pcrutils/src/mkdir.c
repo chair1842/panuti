@@ -38,8 +38,6 @@ static const char HELP[] =
 	"       if the directory already exists\n"
 	"  -h - prints this help message\n\n"
 	"with -p, every component but the last may already exist\n\n"
-	"a directory inside a mounted filesystem cannot be created:\n"
-	"ext2 is read-only and no filesystem implements directory creation\n\n"
 	"examples:\n"
 	"  mkdir /tmp\n"
 	"  mkdir -p /a/b/c\n";
