@@ -45,8 +45,11 @@ kernel/memman/tempmap.o \
 kernel/handle/handle.o \
 kernel/handle/registry.o \
 kernel/handle/mount.o \
-kernel/drivers/vga/vga.o \
+kernel/drivers/console/console.o \
 kernel/drivers/ramblock/ramblock.o \
+kernel/drivers/kdev/null.o \
+kernel/drivers/kdev/zero.o \
+kernel/drivers/kdev/random.o \
 kernel/handle/fs.o \
 kernel/block/block.o \
 kernel/syscall/syscall.o \

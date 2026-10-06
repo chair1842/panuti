@@ -11,8 +11,9 @@
 #include <kernel/ata/atapi.h>
 #include <kernel/ata/ata.h>
 #include "../arch/i386/drivers/ata/ide.h"
-#include "drivers/vga/vga.h"
+#include "drivers/console/console.h"
 #include "drivers/ramblock/ramblock.h"
+#include "drivers/kdev/kdev.h"
 #include <kernel/kbd/dvc.h>
 
 static void idle_task_entry(void) {
@@ -27,11 +28,15 @@ void kernel_main(void) {
 	
 	registry_mkdir("/dvc");
 	registry_mkdir("/dvc/kbd");
-	vga_register_console();
+	console_register();
 	
 	kbd_line_init();
 	
 	ramblock_init("/dvc/ram0", 512, 1024);
+
+	kdev_null_register();
+	kdev_zero_register();
+	kdev_random_register();
 
 	// ide_init probes both buses and hangs the irq handlers, then each
 	// protocol driver claims whichever slots turned out to speak it

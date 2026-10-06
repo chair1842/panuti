@@ -3,9 +3,9 @@
 #include <kernel/handle/handle.h>
 #include <kernel/handle/registry.h>
 #include <stdio.h>
-#include "vga.h"
+#include "console.h"
 
-static int vga_write(void* impl, const void* buf, size_t len) {
+static int console_write(void* impl, const void* buf, size_t len) {
 	(void)impl;
 	const char* p = (const char*)buf;
 	for (size_t i = 0; i < len; i++) {
@@ -14,14 +14,14 @@ static int vga_write(void* impl, const void* buf, size_t len) {
 	return (int)len;
 }
 
-static const handle_ops_t vga_file_ops = {
+static const handle_ops_t console_file_ops = {
 	.read = op_not_supported_rw,
-	.write = vga_write,
+	.write = console_write,
 	.activate = op_not_supported_act,
 	.ready = op_not_supported_rdy,
 	.close = op_not_supported_close,
 };
 
-void vga_register_console(void) {
-	registry_add("/dvc/console", INODE_FILE, nullptr, &vga_file_ops);
+void console_register(void) {
+	registry_add("/dvc/console", INODE_FILE, nullptr, &console_file_ops);
 }
