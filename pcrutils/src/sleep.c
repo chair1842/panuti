@@ -1,20 +1,19 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include <stdio.h>
-#include <string.h>
 #include <panuti/syscall/syscallsf.h>
+#include <pcrutils/pcrutils.h>
+
+static const char HELP[] =
+	"sleep - a pcrutils utility\n\n"
+	"sleep for a given number of seconds\n\n"
+	"args (only the first argument is considered):\n"
+	"  -h - prints this help message\n"
+	"  <seconds> - number of seconds (whole, non-negative)\n";
 
 int main(int argc, char** argv) {
-	if (argc > 1) {
-		if (strcmp(argv[1], "-h") == 0) {
-			printf("sleep - a pcrutils utility\n\n");
-			printf("sleep for a given number of seconds\n\n");
-			printf("args (only the first argument is considered):\n");
-			printf("  -h - prints this help message\n");
-			printf("  <seconds> - number of seconds (whole, non-negative)\n");
-
-			return 1;
-		}
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
 	}
 
 	if (argc < 2) {

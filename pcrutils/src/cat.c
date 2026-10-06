@@ -12,16 +12,15 @@
 
 static bool only_out0 = false;
 
-static void print_help(void) {
-	printf("cat - a pcrutils utility\n\n");
-	printf("cat copies files to all out streams, or copies in0\n");
-	printf("when no file is given\n\n");
-	printf("usage:\n");
-	printf("  cat [path ...]\n\n");
-	printf("args:\n");
-	printf("  -o - only output to out0\n");
-	printf("  -h - prints this help message\n");
-}
+static const char HELP[] =
+	"cat - a pcrutils utility\n\n"
+	"cat copies files to all out streams, or copies in0\n"
+	"when no file is given\n\n"
+	"usage:\n"
+	"  cat [path ...]\n\n"
+	"args:\n"
+	"  -o - only output to out0\n"
+	"  -h - prints this help message\n";
 
 static int copy_in(int no_streams) {
 	int counts[2] = {0, 0};
@@ -96,6 +95,10 @@ static int copy_file(int no_streams, const char* path) {
 }
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
 	int first = argc;
 
 	for (int i = 1; i < argc; i++) {
@@ -109,9 +112,6 @@ int main(int argc, char** argv) {
 		for (int j = 1; a[j]; j++) {
 			if (a[j] == 'o') {
 				only_out0 = true;
-			} else if (a[j] == 'h') {
-				print_help();
-				return 1;
 			} else {
 				printf("pcrutils: cat: invalid option '%c'\n", a[j]);
 				return -1;

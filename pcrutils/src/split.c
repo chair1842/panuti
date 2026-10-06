@@ -7,6 +7,7 @@
 #include <panuti/errno.h>
 #include <panuti/handle.h>
 #include <panuti/stream.h>
+#include <pcrutils/pcrutils.h>
 
 #define SPLIT_BUFSZ 128
 #define SPLIT_OUTSZ 128
@@ -24,24 +25,23 @@ static size_t buf_cap;
 
 static int mode = SPLIT_LINES;
 
-static void print_help(void) {
-	printf("split - a pcrutils utility\n\n");
-	printf("split reads in0, cuts it into as many parts as there are out streams,\n");
-	printf("and gives one part to each out stream.\n");
-	printf("the parts are cut as evenly as they can be, so they come out the same size to within one line,\n");
-	printf("word or character, and putting them back together gives the input back\n\n");
-	printf("with fewer lines, words or characters than there are out streams,\n");
-	printf("some of the parts come out empty\n\n");
-	printf("the whole input is held in memory,\n");
-	printf("so it has to fit in what is left of memory once everything else has taken its share\n\n");
-	printf("usage:\n");
-	printf("  split [-w] [-c]\n\n");
-	printf("args:\n");
-	printf("  -w - cut on words, the default is to cut on lines\n");
-	printf("  -c - cut on characters\n");
-	printf("  -h - prints this help message\n\n");
-	printf("split reads a stream, so it takes no paths, try in a > split\n");
-}
+static const char HELP[] =
+	"split - a pcrutils utility\n\n"
+	"split reads in0, cuts it into as many parts as there are out streams,\n"
+	"and gives one part to each out stream.\n"
+	"the parts are cut as evenly as they can be, so they come out the same size to within one line,\n"
+	"word or character, and putting them back together gives the input back\n\n"
+	"with fewer lines, words or characters than there are out streams,\n"
+	"some of the parts come out empty\n\n"
+	"the whole input is held in memory,\n"
+	"so it has to fit in what is left of memory once everything else has taken its share\n\n"
+	"usage:\n"
+	"  split [-w] [-c]\n\n"
+	"args:\n"
+	"  -w - cut on words, the default is to cut on lines\n"
+	"  -c - cut on characters\n"
+	"  -h - prints this help message\n\n"
+	"split reads a stream, so it takes no paths, try in a > split\n";
 
 // grow the input buffer so it can take `need` bytes in all
 static int buf_reserve(size_t need) {
@@ -136,7 +136,7 @@ static size_t boundary(size_t k, size_t len) {
 	return p;
 }
 
-// returns 0 to carry on, 1 when the help was asked for, -1 on a bad arg
+// returns 0 to carry on, -1 on a bad arg
 static int parse_args(int argc, char** argv) {
 	for (int i = 1; i < argc; i++) {
 		const char* a = argv[i];
@@ -149,11 +149,6 @@ static int parse_args(int argc, char** argv) {
 
 		for (int j = 1; a[j]; j++) {
 			char c = a[j];
-
-			if (c == 'h') {
-				print_help();
-				return 1;
-			}
 
 			if (c == 'w') {
 				mode = SPLIT_WORDS;
@@ -174,10 +169,14 @@ static int parse_args(int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
 	int parsed = parse_args(argc, argv);
 
 	if (parsed != 0) {
-		return parsed > 0 ? 0 : -1;
+		return -1;
 	}
 
 	int counts[2] = {0};

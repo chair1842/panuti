@@ -1,17 +1,18 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include <stdio.h>
-#include <string.h>
 #include <panuti/handle.h>
 #include <panuti/errno.h>
+#include <pcrutils/pcrutils.h>
+
+static const char HELP[] =
+	"clear - a pcrutils utility\n\n"
+	"clear writes a form feed to the console, clearing the screen\n\n"
+	"args (only the first argument is considered):\n"
+	"  -h - prints this help message\n";
 
 int main(int argc, char** argv) {
-	if (argc > 1 && strcmp(argv[1], "-h") == 0) {
-		printf("clear - a pcrutils utility\n\n");
-		printf("clear writes a form feed to the console, clearing the screen\n\n");
-		printf("args (only the first argument is considered):\n");
-		printf("  -h - prints this help message\n");
-
+	if (pcr_help_wanted(argc, argv, HELP)) {
 		return 0;
 	}
 

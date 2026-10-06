@@ -40,16 +40,15 @@ static int line_reserve(size_t need) {
 	return 0;
 }
 
-static void print_help(void) {
-	printf("grep - a pcrutils utility\n\n");
-	printf("grep reads in0, and outputs every line that holds the word it is given.\n");
-	printf("a line is copied out as it came in, newline and all\n\n");
-	printf("usage:\n");
-	printf("  grep <word>\n\n");
-	printf("args:\n");
-	printf("  -h - prints this help message\n");
-	printf("  -o - only output to out0\n");
-}
+static const char HELP[] =
+	"grep - a pcrutils utility\n\n"
+	"grep reads in0, and outputs every line that holds the word it is given.\n"
+	"a line is copied out as it came in, newline and all\n\n"
+	"usage:\n"
+	"  grep <word>\n\n"
+	"args:\n"
+	"  -h - prints this help message\n"
+	"  -o - only output to out0\n";
 
 // this libc has no strstr, so slide the needle over the haystack
 static bool contains(const char* hay, size_t hlen, const char* needle, size_t nlen) {
@@ -71,6 +70,10 @@ static bool contains(const char* hay, size_t hlen, const char* needle, size_t nl
 }
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
 	int first = argc;
 
 	for (int i = 1; i < argc; i++) {
@@ -82,10 +85,7 @@ int main(int argc, char** argv) {
 		}
 
 		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'h') {
-				print_help();
-				return 1;
-			} else if (a[j] == 'o') {
+			if (a[j] == 'o') {
 				only_out0 = true;
 			} else {
 				printf("pcrutils: grep: invalid option '%c'\n", a[j]);

@@ -7,6 +7,7 @@
 #include <panuti/errno.h>
 #include <panuti/handle.h>
 #include <panuti/stream.h>
+#include <pcrutils/pcrutils.h>
 
 #define TAIL_BUFSZ 128
 #define TAIL_OUTSZ 128
@@ -34,21 +35,20 @@ static char* part;
 static size_t part_cap;
 static size_t part_len;
 
-static void print_help(void) {
-	printf("tail - a pcrutils utility\n\n");
-	printf("tail reads in0, and copies the last lines of it out to every out stream,\n");
-	printf("a line is copied out as it came in, newline and all\n");	
-	printf("and the last line is copied out even with no newline on it\n\n");
-	printf("usage:\n");
-	printf("  tail [-n count]\n\n");
-	printf("args:\n");
-	printf("  -n count - copy the last count lines, 10 if not given\n");
-	printf("  -o - only output to out0\n");
-	printf("  -h - prints this help message\n\n");
-	printf("the count can also be given the short way, as in tail -5\n");
-	printf("tail reads a stream, so it takes no paths, try in a > tail\n");
-	printf("the lines it keeps have to fit in what is left of memory\n");
-}
+static const char HELP[] =
+	"tail - a pcrutils utility\n\n"
+	"tail reads in0, and copies the last lines of it out to every out stream,\n"
+	"a line is copied out as it came in, newline and all\n"
+	"and the last line is copied out even with no newline on it\n\n"
+	"usage:\n"
+	"  tail [-n count]\n\n"
+	"args:\n"
+	"  -n count - copy the last count lines, 10 if not given\n"
+	"  -o - only output to out0\n"
+	"  -h - prints this help message\n\n"
+	"the count can also be given the short way, as in tail -5\n"
+	"tail reads a stream, so it takes no paths, try in a > tail\n"
+	"the lines it keeps have to fit in what is left of memory\n";
 
 static bool parse_count(const char* s, long* out) {
 	if (*s == '\0') {
@@ -74,7 +74,7 @@ static bool parse_count(const char* s, long* out) {
 	return true;
 }
 
-// returns 0 to carry on, 1 when the help was asked for, -1 on a bad arg
+// returns 0 to carry on, -1 on a bad arg
 static int parse_args(int argc, char** argv) {
 	for (int i = 1; i < argc; i++) {
 		const char* a = argv[i];
@@ -87,11 +87,6 @@ static int parse_args(int argc, char** argv) {
 
 		for (int j = 1; a[j]; j++) {
 			char c = a[j];
-
-			if (c == 'h') {
-				print_help();
-				return 1;
-			}
 
 			if (c == 'o') {
 				only_out0 = true;
@@ -302,10 +297,14 @@ static int part_push(char c) {
 }
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
 	int parsed = parse_args(argc, argv);
 
 	if (parsed != 0) {
-		return parsed > 0 ? 0 : -1;
+		return -1;
 	}
 
 	int counts[2] = {0};

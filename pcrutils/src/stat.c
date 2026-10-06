@@ -5,6 +5,7 @@
 #include <panuti/stat.h>
 #include <panuti/inode_type.h>
 #include <panuti/errno.h>
+#include <pcrutils/pcrutils.h>
 
 static const char* type_label(inode_type_t type) {
 	switch (type) {
@@ -16,14 +17,13 @@ static const char* type_label(inode_type_t type) {
 	}
 }
 
-static void print_help(void) {
-	printf("stat - a pcrutils utility\n\n");
-	printf("stat describes nodes in the registry without opening them\n\n");
-	printf("usage:\n");
-	printf("  stat [path ...]\n\n");
-	printf("args:\n");
-	printf("  -h - prints this help message\n");
-}
+static const char HELP[] =
+	"stat - a pcrutils utility\n\n"
+	"stat describes nodes in the registry without opening them\n\n"
+	"usage:\n"
+	"  stat [path ...]\n\n"
+	"args:\n"
+	"  -h - prints this help message\n";
 
 static int stat_path(const char* path) {
 	dirent_entry_t e;
@@ -42,6 +42,10 @@ static int stat_path(const char* path) {
 }
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
 	int first = argc;
 
 	for (int i = 1; i < argc; i++) {
@@ -53,13 +57,8 @@ int main(int argc, char** argv) {
 		}
 
 		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'h') {
-				print_help();
-				return 0;
-			} else {
-				printf("pcrutils: stat: invalid option '%c'\n", a[j]);
-				return -1;
-			}
+			printf("pcrutils: stat: invalid option '%c'\n", a[j]);
+			return -1;
 		}
 	}
 

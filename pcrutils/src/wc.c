@@ -6,6 +6,7 @@
 #include <panuti/errno.h>
 #include <panuti/handle.h>
 #include <panuti/stream.h>
+#include <pcrutils/pcrutils.h>
 
 #define WC_BUFSZ 128
 #define WC_LABELSZ 16
@@ -23,26 +24,25 @@ typedef struct {
 	char last;
 } counter_t;
 
-static void print_help(void) {
-	printf("wc - a pcrutils utility\n\n");
-	printf("wc counts the lines, words and characters of its in streams and of\n");
-	printf("any files it is given. an in stream is called in0, in1 and so on,\n");
-	printf("a file is called by the path given\n\n");
-	printf("given a file, wc counts that file and leaves the in streams alone,\n");
-	printf("and -s asks it to count the in streams as well. without a file it\n");
-	printf("counts the in streams either way\n\n");
-	printf("the count goes to out0, the same place the errors go\n\n");
-	printf("usage:\n");
-	printf("  wc [-l] [-w] [-c] [-s] [path ...]\n\n");
-	printf("args:\n");
-	printf("  -l - count lines\n");
-	printf("  -w - count words\n");
-	printf("  -c - count characters\n");
-	printf("  -s - count the in streams as well as the files\n");
-	printf("  -h - prints this help message\n\n");
-	printf("with no counts given, all three are printed\n");
-	printf("with -s and nothing piped in, wc waits on in0 the way cat does\n");
-}
+static const char HELP[] =
+	"wc - a pcrutils utility\n\n"
+	"wc counts the lines, words and characters of its in streams and of\n"
+	"any files it is given. an in stream is called in0, in1 and so on,\n"
+	"a file is called by the path given\n\n"
+	"given a file, wc counts that file and leaves the in streams alone,\n"
+	"and -s asks it to count the in streams as well. without a file it\n"
+	"counts the in streams either way\n\n"
+	"the count goes to out0, the same place the errors go\n\n"
+	"usage:\n"
+	"  wc [-l] [-w] [-c] [-s] [path ...]\n\n"
+	"args:\n"
+	"  -l - count lines\n"
+	"  -w - count words\n"
+	"  -c - count characters\n"
+	"  -s - count the in streams as well as the files\n"
+	"  -h - prints this help message\n\n"
+	"with no counts given, all three are printed\n"
+	"with -s and nothing piped in, wc waits on in0 the way cat does\n";
 
 static void count_chunk(counter_t* c, const char* buf, size_t len) {
 	c->chars += len;
@@ -183,6 +183,10 @@ static void report(const counter_t* c, const char* label) {
 }
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
 	int first = argc;
 
 	for (int i = 1; i < argc; i++) {
@@ -202,9 +206,6 @@ int main(int argc, char** argv) {
 				want_chars = true;
 			} else if (a[j] == 's') {
 				want_streams = true;
-			} else if (a[j] == 'h') {
-				print_help();
-				return 1;
 			} else {
 				printf("pcrutils: wc: invalid option '%c'\n", a[j]);
 				return -1;

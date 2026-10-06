@@ -9,17 +9,16 @@
 
 static bool broadcast = true;
 
-static void print_help(void) {
-	printf("in - a pcrutils utility\n\n");
-	printf("in reads a file's contents and outputs them to all out streams\n");
-	printf("in differs from cat in that it doesn't concatenate, it takes one file\n\n");
-	printf("usage:\n");
-	printf("  in [path] [args]\n\n");
-	printf("args go after the path\n\n");
-	printf("args:\n");
-	printf("  -h - prints this help message\n");
-	printf("  -o - only output to out0\n");
-}
+static const char HELP[] =
+	"in - a pcrutils utility\n\n"
+	"in reads a file's contents and outputs them to all out streams\n"
+	"in differs from cat in that it doesn't concatenate, it takes one file\n\n"
+	"usage:\n"
+	"  in [path] [args]\n\n"
+	"args go after the path\n\n"
+	"args:\n"
+	"  -h - prints this help message\n"
+	"  -o - only output to out0\n";
 
 static int out_file(int no_streams, const char* path) {
 	int fd = handle_open(path);
@@ -60,6 +59,10 @@ static int out_file(int no_streams, const char* path) {
 }
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
 	if (argc < 2) {
 		printf("pcrutils: in: no file given\n");
 		return -1;
@@ -71,9 +74,6 @@ int main(int argc, char** argv) {
 		for (int j = 1; a[j]; j++) {
 			if (a[j] == 'o') {
 				broadcast = false;
-			} else if (a[j] == 'h') {
-				print_help();
-				return 1;
 			} else {
 				printf("pcrutils: in: invalid option '%c'\n", a[j]);
 				return -1;

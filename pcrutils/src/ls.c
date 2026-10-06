@@ -6,6 +6,16 @@
 #include <panuti/stat.h>
 #include <panuti/dirent.h>
 #include <panuti/inode_type.h>
+#include <pcrutils/pcrutils.h>
+
+static const char HELP[] =
+	"ls - a pcrutils utility\n\n"
+	"ls lists the contents of directories\n\n"
+	"args:\n"
+	"  -h - prints this help message\n"
+	"  -a - do not ignore entries starting with '.'\n"
+	"  -p - do not print the type column\n"
+	"  <path> - directory to list (defaults to the current directory)\n";
 
 static int show_hidden = 0;
 static int no_type = 0;
@@ -86,20 +96,14 @@ static int list_dir(const char* path, size_t maxw) {
 }
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
 	int i = 1;
 	for (; i < argc && argv[i][0] == '-'; i++) {
 		const char* a = argv[i];
-		if (strcmp(a, "-h") == 0) {
-			printf("ls - a pcrutils utility\n\n");
-			printf("ls lists the contents of directories\n\n");
-			printf("args:\n");
-			printf("  -h - prints this help message\n");
-			printf("  -a - do not ignore entries starting with '.'\n");
-			printf("  -p - do not print the type column\n");
-			printf("  <path> - directory to list (defaults to the current directory)\n");
 
-			return 1;
-		}
 		for (int j = 1; a[j]; j++) {
 			if (a[j] == 'a') {
 				show_hidden = 1;

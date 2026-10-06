@@ -6,6 +6,7 @@
 #include <panuti/stat.h>
 #include <panuti/inode_type.h>
 #include <panuti/errno.h>
+#include <pcrutils/pcrutils.h>
 
 #define MKDIR_PATH_MAX 128
 
@@ -27,21 +28,21 @@ static const char* reason(int32_t rc) {
 	}
 }
 
-static void print_help(void) {
-	printf("mkdir - a pcrutils utility\n\n");
-	printf("mkdir creates a directory\n\n");
-	printf("usage:\n");
-	printf("  mkdir [-p] <path>\n\n");
-	printf("args:\n");
-	printf("  -p - create parent directories as needed, and do not complain\n");
-	printf("       if the directory already exists\n\n");
-	printf("with -p, every component but the last may already exist\n\n");
-	printf("a directory inside a mounted filesystem cannot be created:\n");
-	printf("ext2 is read-only and no filesystem implements directory creation\n\n");
-	printf("examples:\n");
-	printf("  mkdir /tmp\n");
-	printf("  mkdir -p /a/b/c\n");
-}
+static const char HELP[] =
+	"mkdir - a pcrutils utility\n\n"
+	"mkdir creates a directory\n\n"
+	"usage:\n"
+	"  mkdir [-p] <path>\n\n"
+	"args:\n"
+	"  -p - create parent directories as needed, and do not complain\n"
+	"       if the directory already exists\n"
+	"  -h - prints this help message\n\n"
+	"with -p, every component but the last may already exist\n\n"
+	"a directory inside a mounted filesystem cannot be created:\n"
+	"ext2 is read-only and no filesystem implements directory creation\n\n"
+	"examples:\n"
+	"  mkdir /tmp\n"
+	"  mkdir -p /a/b/c\n";
 
 // -p tolerates a component that already exists, but only if it is a directory.
 // nexist cannot tell a file from a directory, so stat has to be asked.
@@ -166,6 +167,10 @@ static int make_path(const char* path) {
 }
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
 	int first = argc;
 
 	for (int i = 1; i < argc; i++) {
@@ -177,10 +182,7 @@ int main(int argc, char** argv) {
 		}
 
 		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'h') {
-				print_help();
-				return 0;
-			} else if (a[j] == 'p') {
+			if (a[j] == 'p') {
 				make_parents = 1;
 			} else {
 				printf("pcrutils: mkdir: invalid option '%c'\n", a[j]);
@@ -191,7 +193,7 @@ int main(int argc, char** argv) {
 
 	if (first == argc) {
 		printf("pcrutils: mkdir: no path given\n");
-		print_help();
+		printf("%s", HELP);
 		return -1;
 	}
 

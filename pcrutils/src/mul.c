@@ -8,26 +8,32 @@
 
 #define MUL_BUFSZ 128
 
-static void print_help(void) {
-	printf("mul - a pcrutils utility\n\n");
-	printf("mul copies in0 to every out stream until in0 ends\n");
-	printf("it is the way to fan a keyboard line out to several commands\n\n");
-	printf("usage:\n");
-	printf("  mul\n\n");
-	printf("args:\n");
-	printf("  -h - prints this help message\n");
-}
+static const char HELP[] =
+	"mul - a pcrutils utility\n\n"
+	"mul copies in0 to every out stream until in0 ends\n"
+	"it is the way to fan a keyboard line out to several commands\n\n"
+	"usage:\n"
+	"  mul\n\n"
+	"args:\n"
+	"  -h - prints this help message\n";
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
+	// mul takes no arguments at all, so anything here is wrong. the leading
+	// '-' is not part of what went wrong, so start past it when it is there
+	// a bare '-' is wrong too, there is nothing for mul to read from it
 	for (int i = 1; i < argc; i++) {
 		const char* a = argv[i];
 
-		for (int j = 0; a[j]; j++) {
-			if (a[j] == 'h') {
-				print_help();
-				return 1;
-			}
+		if (a[0] == '-' && a[1] == '\0') {
+			printf("pcrutils: mul: invalid option '-'\n");
+			return -1;
+		}
 
+		for (int j = (a[0] == '-') ? 1 : 0; a[j]; j++) {
 			printf("pcrutils: mul: invalid option '%c'\n", a[j]);
 			return -1;
 		}

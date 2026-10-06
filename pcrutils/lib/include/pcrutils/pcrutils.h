@@ -9,5 +9,6 @@ int pcr_write_all(int stream, const char* buf, size_t len);
 
 int pcr_output(int no_streams, const char* buf, size_t len, int only_out0);
 
+bool pcr_help_wanted(int argc, char** argv, const char* help);
 
 #endif

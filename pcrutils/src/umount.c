@@ -4,6 +4,7 @@
 #include <string.h>
 #include <panuti/mount.h>
 #include <panuti/errno.h>
+#include <pcrutils/pcrutils.h>
 
 // unmount only ever distinguishes three outcomes. the mount utility carries a
 // wider table because mounting can fail in more ways; this one cannot.
@@ -16,18 +17,21 @@ static const char* reason(int32_t rc) {
 	}
 }
 
-static void print_help(void) {
-	printf("umount - a pcrutils utility\n\n");
-	printf("umount detaches the filesystem attached to a directory\n\n");
-	printf("usage:\n");
-	printf("  umount <mountpoint>\n\n");
-	printf("args:\n");
-	printf("  -h - prints this help message\n\n");
-	printf("example:\n");
-	printf("  umount /mnt\n");
-}
+static const char HELP[] =
+	"umount - a pcrutils utility\n\n"
+	"umount detaches the filesystem attached to a directory\n\n"
+	"usage:\n"
+	"  umount <mountpoint>\n\n"
+	"args:\n"
+	"  -h - prints this help message\n\n"
+	"example:\n"
+	"  umount /mnt\n";
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
 	int first = argc;
 
 	for (int i = 1; i < argc; i++) {
@@ -39,19 +43,14 @@ int main(int argc, char** argv) {
 		}
 
 		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'h') {
-				print_help();
-				return 0;
-			} else {
-				printf("pcrutils: umount: invalid option '%c'\n", a[j]);
-				return -1;
-			}
+			printf("pcrutils: umount: invalid option '%c'\n", a[j]);
+			return -1;
 		}
 	}
 
 	if (first == argc) {
 		printf("pcrutils: umount: no mountpoint given\n");
-		print_help();
+		printf("%s", HELP);
 		return -1;
 	}
 

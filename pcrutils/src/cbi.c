@@ -7,13 +7,12 @@
 
 #define CBI_BUFSZ 128
 
-static void print_help(void) {
-	printf("cbi - a pcrutils utility\n\n");
-	printf("cbi takes in any amount of input streams and combines them in order.\n");
-	printf("it outputs the result to out0\n\n");
-	printf("args (only the first argument is considered):\n");
-	printf("  -h - prints this help message\n");
-}
+static const char HELP[] =
+	"cbi - a pcrutils utility\n\n"
+	"cbi takes in any amount of input streams and combines them in order.\n"
+	"it outputs the result to out0\n\n"
+	"args (only the first argument is considered):\n"
+	"  -h - prints this help message\n";
 
 // copy one in stream to out0 until it ends. reading a stream to the end
 // before starting the next is what puts the inputs in order
@@ -39,9 +38,8 @@ static int copy_in(int in) {
 }
 
 int main(int argc, char** argv) {
-	if (argc > 1 && strcmp(argv[1], "-h") == 0) {
-		print_help();
-		return 1;
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
 	}
 
 	int counts[2] = {0, 0};

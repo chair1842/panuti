@@ -1,17 +1,18 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include <stdio.h>
-#include <string.h>
 #include <panuti/stat.h>
+#include <pcrutils/pcrutils.h>
+
+static const char HELP[] =
+	"nexist - a pcrutils utility\n\n"
+	"nexist checks if a node in the registry exists\n"
+	"it prints \"true\" if it exists, \"false\" otherwise\n\n"
+	"args (only the first argument is considered):\n"
+	"  -h - prints this help message\n";
 
 int main(int argc, char** argv) {
-	if (argc > 1 && strcmp(argv[1], "-h") == 0) {
-		printf("nexist - a pcrutils utility\n\n");
-		printf("nexist checks if a node in the registry exists\n");
-		printf("it prints \"true\" if it exists, \"false\" otherwise\n\n");
-		printf("args (only the first argument is considered):\n");
-		printf("  -h - prints this help message\n");
-
+	if (pcr_help_wanted(argc, argv, HELP)) {
 		return 0;
 	}
 

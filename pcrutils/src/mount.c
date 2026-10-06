@@ -4,6 +4,7 @@
 #include <string.h>
 #include <panuti/mount.h>
 #include <panuti/errno.h>
+#include <pcrutils/pcrutils.h>
 
 static const char* reason(int32_t rc) {
 	switch (rc) {
@@ -19,21 +20,24 @@ static const char* reason(int32_t rc) {
 	}
 }
 
-static void print_help(void) {
-	printf("mount - a pcrutils utility\n\n");
-	printf("mount attaches a filesystem from a block device onto a directory\n\n");
-	printf("usage:\n");
-	printf("  mount <mountpoint> <fstype> <blkdev>\n\n");
-	printf("fstype is one of: isofs, ext2\n\n");
-	printf("blkdev is a registry path such as /dvc/cdrom0 or /dvc/pata0p1\n\n");
-	printf("args:\n");
-	printf("  -h - prints this help message\n\n");
-	printf("examples:\n");
-	printf("  mount /mnt ext2 /dvc/pata0p1\n");
-	printf("  mount /mnt isofs /dvc/cdrom0\n");
-}
+static const char HELP[] =
+	"mount - a pcrutils utility\n\n"
+	"mount attaches a filesystem from a block device onto a directory\n\n"
+	"usage:\n"
+	"  mount <mountpoint> <fstype> <blkdev>\n\n"
+	"fstype is one of: isofs, ext2\n\n"
+	"blkdev is a registry path such as /dvc/cdrom0 or /dvc/pata0p1\n\n"
+	"args:\n"
+	"  -h - prints this help message\n\n"
+	"examples:\n"
+	"  mount /mnt ext2 /dvc/pata0p1\n"
+	"  mount /mnt isofs /dvc/cdrom0\n";
 
 int main(int argc, char** argv) {
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
+
 	int first = argc;
 
 	for (int i = 1; i < argc; i++) {
@@ -45,19 +49,14 @@ int main(int argc, char** argv) {
 		}
 
 		for (int j = 1; a[j]; j++) {
-			if (a[j] == 'h') {
-				print_help();
-				return 0;
-			} else {
-				printf("pcrutils: mount: invalid option '%c'\n", a[j]);
-				return -1;
-			}
+			printf("pcrutils: mount: invalid option '%c'\n", a[j]);
+			return -1;
 		}
 	}
 
 	if (first == argc) {
 		printf("pcrutils: mount: no arguments given\n");
-		print_help();
+		printf("%s", HELP);
 		return -1;
 	}
 

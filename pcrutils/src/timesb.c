@@ -3,20 +3,24 @@
 #include <stdio.h>
 #include <string.h>
 #include <panuti/syscall/syscallsf.h>
+#include <pcrutils/pcrutils.h>
+
+static const char HELP[] =
+	"timesb - a pcrutils utility\n\n"
+	"timesb prints the time since boot in centiseconds by default\n\n"
+	"args (only the first arg is considered):\n"
+	"  -h - prints this help message\n"
+	"  -s - converts the time since boot to seconds\n"
+	"  -l - converts the time since boot to milliseconds\n"
+	"  -m - converts the time since boot to minutes\n";
 
 int main(int argc, char** argv) {
-	if (argc > 1) {
-		if (strcmp(argv[1], "-h") == 0) {
-			printf("timesb - a pcrutils utility\n\n");
-			printf("timesb prints the time since boot in centiseconds by default\n\n");
-			printf("args (only the first arg is considered):\n");
-			printf("  -h - prints this help message\n");
-			printf("  -s - converts the time since boot to seconds\n");
-			printf("  -l - converts the time since boot to milliseconds\n");
-			printf("  -m - converts the time since boot to minutes\n");
+	if (pcr_help_wanted(argc, argv, HELP)) {
+		return 0;
+	}
 
-			return 0;
-		} else if (strcmp(argv[1], "-s") == 0) {
+	if (argc > 1) {
+		if (strcmp(argv[1], "-s") == 0) {
 			printf("%d\n", panutisysf_timesb() / 100);
 			return 0;
 		} else if (strcmp(argv[1], "-l") == 0) {
