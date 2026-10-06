@@ -14,26 +14,59 @@ PREFIX?=/usr/local
 EXEC_PREFIX?=$(PREFIX)
 BINDIR?=$(EXEC_PREFIX)/bin
 INCLUDEDIR?=$(PREFIX)/include
+LIBDIR?=$(EXEC_PREFIX)/lib
 
 CFLAGS:=$(CFLAGS) -Wall -Wextra -Wa,--noexecstack
 
 BUILDDIR=build
+LIBBUILDDIR=$(BUILDDIR)/lib
+LIBINCDIR=lib/include
+
+CPPFLAGS:=$(CPPFLAGS) -I$(LIBINCDIR)
+
+NAME=pcrutils
+LIB=$(LIBBUILDDIR)/lib$(NAME).a
+
+LIBSRCS:=$(wildcard lib/*.c)
+LIBOBJS=$(LIBSRCS:.c=.o)
+LIBDEPS=$(LIBOBJS:.o=.d)
+
 UTILS:=$(patsubst src/%.c,%,$(wildcard src/*.c))
 BINARIES=$(UTILS:%=$(BUILDDIR)/%)
 
-.PHONY: all clean install install-pcrutils
+.PHONY: all clean install install-pcrutils install-libs install-headers
 
-all: $(BINARIES)
+all: $(LIB) $(BINARIES)
 
-$(BUILDDIR)/%: src/%.c
+lib/%.o: lib/%.c
+	$(CC) -MD -std=gnu23 $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+$(LIB): $(LIBOBJS)
+	@mkdir -p $(LIBBUILDDIR)
+	$(AR) rcs $@ $(LIBOBJS)
+
+# the lib goes after the util so its symbols resolve, static archives are
+# only searched for what is still undefined at that point
+$(BUILDDIR)/%: src/%.c $(LIB)
 	@mkdir -p $(BUILDDIR)
-	$(CC) -std=gnu23 $(CFLAGS) $(CPPFLAGS) -o $@ $< $(LDFLAGS)
+	$(CC) -std=gnu23 $(CFLAGS) $(CPPFLAGS) -o $@ $< $(LIB) $(LDFLAGS)
 
 clean:
 	rm -rf $(BUILDDIR)
+	rm -f $(LIBOBJS) $(LIBDEPS)
 
-install: install-pcrutils
+install: install-pcrutils install-libs install-headers
 
 install-pcrutils: all
 	mkdir -p $(DESTDIR)$(BINDIR)
-	cp $(BUILDDIR)/* $(DESTDIR)$(BINDIR)/
+	cp $(BINARIES) $(DESTDIR)$(BINDIR)/
+
+install-libs: $(LIB)
+	mkdir -p $(DESTDIR)$(LIBDIR)
+	cp $(LIB) $(DESTDIR)$(LIBDIR)/
+
+install-headers:
+	mkdir -p $(DESTDIR)$(INCLUDEDIR)
+	cp -R --preserve=timestamps $(LIBINCDIR)/. $(DESTDIR)$(INCLUDEDIR)/
+
+-include $(LIBDEPS)

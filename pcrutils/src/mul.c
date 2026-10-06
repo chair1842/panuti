@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include <panuti/stream.h>
+#include <pcrutils/pcrutils.h>
 
 #define MUL_BUFSZ 128
 
@@ -15,21 +16,6 @@ static void print_help(void) {
 	printf("  mul\n\n");
 	printf("args:\n");
 	printf("  -h - prints this help message\n");
-}
-
-static int write_all(int stream, const char* buf, size_t len) {
-	size_t off = 0;
-
-	while (off < len) {
-		int w = stream_write(stream, buf + off, len - off);
-		if (w <= 0) {
-			return -1;
-		}
-
-		off += (size_t)w;
-	}
-
-	return 0;
 }
 
 int main(int argc, char** argv) {
@@ -77,7 +63,7 @@ int main(int argc, char** argv) {
 		}
 
 		for (int s = 0; s < no_streams; s++) {
-			if (write_all(s, buf, (size_t)n) != 0) {
+			if (pcr_write_all(s, buf, (size_t)n) != 0) {
 				failed = 1;
 			}
 		}

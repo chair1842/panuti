@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include <panuti/stream.h>
+#include <pcrutils/pcrutils.h>
 
 #define GREP_LINESZ 256
 #define GREP_READSZ 128
@@ -48,36 +49,6 @@ static void print_help(void) {
 	printf("args:\n");
 	printf("  -h - prints this help message\n");
 	printf("  -o - only output to out0\n");
-}
-
-// streams can accept less than we give them (pipes do), so keep writing
-// the rest until everything is out or the stream stops making progress
-static int write_all(int stream, const char* buf, size_t len) {
-	size_t off = 0;
-
-	while (off < len) {
-		int w = stream_write(stream, buf + off, len - off);
-		if (w <= 0) {
-			return -1;
-		}
-
-		off += (size_t)w;
-	}
-
-	return 0;
-}
-
-static int output(int no_streams, const char* buf, size_t len) {
-	int streams = only_out0 ? 1 : no_streams;
-	int failed = 0;
-
-	for (int s = 0; s < streams; s++) {
-		if (write_all(s, buf, len) != 0) {
-			failed = 1;
-		}
-	}
-
-	return failed ? -1 : 0;
 }
 
 // this libc has no strstr, so slide the needle over the haystack
@@ -189,7 +160,7 @@ int main(int argc, char** argv) {
 
 			if (line[have - 1] == '\n') {
 				if (contains(line, have, needle, nlen) &&
-				    output(no_streams, line, have) != 0) {
+				    pcr_output(no_streams, line, have, only_out0) != 0) {
 					printf("pcrutils: grep: could not write to the out streams\n");
 					failed = 1;
 				}
@@ -209,7 +180,7 @@ int main(int argc, char** argv) {
 
 	// a last line with no newline of its own is still a line
 	if (!failed && have > 0 && contains(line, have, needle, nlen)) {
-		if (output(no_streams, line, have) != 0) {
+		if (pcr_output(no_streams, line, have, only_out0) != 0) {
 			printf("pcrutils: grep: could not write to the out streams\n");
 			failed = 1;
 		}

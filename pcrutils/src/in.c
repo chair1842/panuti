@@ -5,6 +5,7 @@
 #include <panuti/handle.h>
 #include <panuti/stream.h>
 #include <panuti/errno.h>
+#include <pcrutils/pcrutils.h>
 
 static bool broadcast = true;
 
@@ -18,36 +19,6 @@ static void print_help(void) {
 	printf("args:\n");
 	printf("  -h - prints this help message\n");
 	printf("  -o - only output to out0\n");
-}
-
-// streams can accept less than we give them (pipes do), so keep writing
-// the rest until everything is out or the stream stops making progress
-static int write_all(int stream, const char* buf, size_t len) {
-	size_t off = 0;
-
-	while (off < len) {
-		int w = stream_write(stream, buf + off, len - off);
-		if (w <= 0) {
-			return -1;
-		}
-
-		off += (size_t)w;
-	}
-
-	return 0;
-}
-
-static int output(int no_streams, const char* buf, size_t len) {
-	int streams = broadcast ? no_streams : 1;
-	int failed = 0;
-
-	for (int s = 0; s < streams; s++) {
-		if (write_all(s, buf, len) != 0) {
-			failed = 1;
-		}
-	}
-
-	return failed ? -1 : 0;
 }
 
 static int out_file(int no_streams, const char* path) {
@@ -77,7 +48,7 @@ static int out_file(int no_streams, const char* path) {
 			break;
 		}
 
-		if (output(no_streams, buf, (size_t)n) != 0) {
+		if (pcr_output(no_streams, buf, (size_t)n, !broadcast) != 0) {
 			printf("pcrutils: in: %s: could not write to the out streams\n", path);
 			failed = 1;
 			break;

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <panuti/stream.h>
+#include <pcrutils/pcrutils.h>
 
 #define CBI_BUFSZ 128
 
@@ -12,23 +13,6 @@ static void print_help(void) {
 	printf("it outputs the result to out0\n\n");
 	printf("args (only the first argument is considered):\n");
 	printf("  -h - prints this help message\n");
-}
-
-// streams can accept less than we give them (pipes do), so keep writing
-// the rest until everything is out or the stream stops making progress
-static int write_all(int stream, const char* buf, size_t len) {
-	size_t off = 0;
-
-	while (off < len) {
-		int w = stream_write(stream, buf + off, len - off);
-		if (w <= 0) {
-			return -1;
-		}
-
-		off += (size_t)w;
-	}
-
-	return 0;
 }
 
 // copy one in stream to out0 until it ends. reading a stream to the end
@@ -47,7 +31,7 @@ static int copy_in(int in) {
 			return 0;
 		}
 
-		if (write_all(0, buf, (size_t)n) != 0) {
+		if (pcr_write_all(0, buf, (size_t)n) != 0) {
 			printf("pcrutils: cbi: could not write to out0\n");
 			return -1;
 		}
