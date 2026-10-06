@@ -53,11 +53,12 @@ The syscalls that can return an out-of-table value, and what they return:
 | 0 | `WRITE` | `-1` | writing to a directory, a pipe's read end, or any IsoFS file |
 | 3 | `READ` | `-1` | reading a directory, a pipe's write end, or on IsoFS I/O failure |
 | 4 | `ACTIVATE` | `-1` | all handle types except console and kbd |
-| 6 | `MKDIR` | `-1` | every failure mode (see below) |
+| 6 | `MKDIR` | `-1` | every registry-side failure mode (see below) |
 | 15 | `MOUNT` | `-1`, `-2` | IsoFS volume scan hits an invalid block or an I/O error |
 | 19 | `STREAM_READ` | `-1` | the bound stream is a directory, pipe, or IsoFS file |
 | 20 | `STREAM_WRITE` | `-1` | likewise |
 | 23 | `READDIR` | `-1` | an IsoFS directory record could not be read |
+| 29 | `MKFILE` | `-1` | registry-side failure, same modes as `MKDIR`; a parent inside a mounted filesystem delegates to the filesystem instead, which may return a `PANUTIERRNO_*` code |
 
 `MOUNT` is the one syscall that can return a value other than `-1`: the
 IsoFS mount path returns the block layer's `BLOCK_ERR_IO` (`-2`) on an I/O
@@ -76,7 +77,7 @@ Return values are not uniform across the API. Check the shape before comparing:
 | Shape | Syscalls | Test |
 |---|---|---|
 | Byte count | `WRITE` (0), `READ` (3), `STREAM_READ` (19), `STREAM_WRITE` (20) | `> 0` is a count; `<= 0` is an error or EOF -- see below |
-| Status `0` | `CLOSE` (5), `MKDIR` (6), `GETCWD` (11), `PIPE_CREATE` (17) | `== 0` is success |
+| Status `0` | `CLOSE` (5), `MKDIR` (6), `GETCWD` (11), `PIPE_CREATE` (17), `RESIZE` (28), `MKFILE` (29) | `== 0` is success |
 | Opaque value | `GETPID` (9), `TIMESB` (10) | cannot fail; no error case |
 | PID | `PROCREATE` (21) | `>= 0` is a PID; `< 0` is an error |
 | Multi-valued | `READDIR` (23) | `0` = entry, `1` = end of directory, negative = error |
@@ -269,9 +270,11 @@ Create a new directory in the in-memory VFS registry.
   - the name already exists in the parent (name collision)
   - the name is 256 bytes or longer
   - the inode table is full (1024 inodes)
-  - the directory entry table is full (8192 entries)
-  - the parent is inside a mounted filesystem (no filesystem implements
-    directory creation, so this always fails)
+  - the directory entry table is full (2048 entries)
+  - the parent is inside a mounted filesystem and the filesystem does not
+    implement directory creation there. Only ext2 can create today (for both
+    directories and files). On an ext2 mount creation succeeds; on isofs and
+    fatfs mounts this path always fails and returns `-1`.
 
 **Note:** one failure is not reported. If the directory entry table fills up
 after the new entry itself has been linked, the `"."` and `".."` links fail
@@ -884,15 +887,103 @@ miscomputed range fails loudly instead of unmapping the wrong page.
 
 ---
 
+### 28 -- RESIZE
+
+```c
+int32_t panutisysf_resize(int fd, uint64_t* new_size);
+```
+
+Resize the object behind an open file descriptor, truncating or extending it.
+
+**Parameters:**
+- `fd` -- file descriptor index
+- `new_size` -- userspace pointer to a `uint64_t` holding the desired size in bytes
+
+**Returns:** 0 on success, or error code.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `new_size` is not a valid userspace pointer
+- `PANUTIERRNO_INVALIDARG` -- the size read from `*new_size` exceeds `INT64_MAX`
+- `PANUTIERRNO_BADFD` -- `fd` is out of range or empty
+- `PANUTIERRNO_UNSUPPORTEDOP` -- the handle has no resize op. This is the answer
+  for pipes, directories, the console/kbd devices, block devices, the registry
+  device files, and any mounted filesystem that does not implement resize.
+
+**Note:** the size is passed *by pointer*, unlike every other scalar argument:
+the wrapper takes `uint64_t*` and the kernel dereferences it in user space, so
+a caller must keep it valid for the duration of the call.
+
+**Note:** the result is produced by whichever handle type's resize op the kernel
+dispatches to, so it is only as good as that op. Today only **ext2** implements
+a working resize. On an ext2 file, shrinking to `N` frees the blocks past the
+new end and updates the recorded size; extending grows the recorded size but
+allocates **no new blocks**, so the newly exposed range reads as zeros until
+written. The op is ext2-specific, so it adds its own failure codes on top of the
+list above: `PANUTIERRNO_NOTSUPPORTED` on a read-only volume,
+`PANUTIERRNO_INVALIDARG` for a size past the end of the volume,
+`PANUTIERRNO_UNSUPPORTEDOP` if the file is not a regular file, and
+`PANUTIERRNO_NOTFOUND`/`PANUTIERRNO_PLAINERR` if the inode cannot be read or the
+block freeing fails.
+
+---
+
+### 29 -- MKFILE
+
+```c
+int32_t panutisysf_mkfile(const char* path);
+```
+
+Create a new, empty regular file. The native counterpart of `MKDIR`.
+
+**Parameters:**
+- `path` -- path for the new file
+
+**Returns:** 0 on success, or error code.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `path` is not a valid userspace pointer
+- `-1` -- the file could not be created; this is a **raw** `-1`, not a
+  `PANUTIERRNO_*` code, and covers the same registry-side failure modes as
+  `MKDIR`:
+  - `path` is empty
+  - `path` names the root directory or resolves to an empty name
+  - the parent directory does not exist or is not a directory
+  - the parent path prefix is 128 bytes or longer
+  - the name already exists in the parent (name collision)
+  - the name is 256 bytes or longer
+  - the inode table is full (1024 inodes)
+  - the directory entry table is full (2048 entries)
+  - the parent is inside a mounted filesystem that cannot create (see below)
+
+**Note:** like `MKDIR`, a parent on an ext2 mount delegates creation to the
+filesystem's `create` op, which for a file succeeds and returns `0`; on isofs
+and fatfs mounts there is no `create` op and this always fails with `-1`.
+
+**Note:** where `MKDIR` adds `"."` and `".."` links, `MKFILE` adds nothing, so
+the half-initialised-directory failure described under `MKDIR` cannot happen
+here: the entry is either fully linked or nothing changes.
+
+**Note:** a file created in the registry tree has **no driver attached**: its
+inode's op table is null until something adopts it (a driver or device that
+finds the path and calls `registry_add` on it). Opening such a file succeeds
+because `OPEN` (2) just copies the inode's null op table onto the handle, but
+the handle's `READ`/`WRITE` ops are null, so calling either currently
+dereferences a null table and panics. `MKFILE` is therefore only useful today
+for creating real, writable files on an ext2 mount (whose handles get the
+filesystem's ops instead) or for planting empty placeholder nodes that a driver
+later owns.
+
+---
+
 ## Quick Reference
 
-All 28 syscalls listed here are registered in the kernel dispatch table and
+All 30 syscalls listed here are registered in the kernel dispatch table and
 documented in detail above. Numbers are defined in
 `libc/include/panuti/syscall/syscallno.h`.
 
 The dispatch table has 256 slots. Any number at or above `256` returns
 `PANUTIERRNO_INVALIDSYSCALL`, as does any number below `256` that is not
-registered -- today that is `28` through `255`, so they are reserved rather
+registered -- today that is `30` through `255`, so they are reserved rather
 than permanently invalid.
 
 | # | Name | # | Name |
@@ -911,6 +1002,7 @@ than permanently invalid.
 | 11 | `GETCWD` | 25 | `NEXIST` |
 | 12 | `YIELD` | 26 | `MMAPAN` |
 | 13 | `RENAME` | 27 | `MUNMAP` |
+| 28 | `RESIZE` | 29 | `MKFILE` |
 
 ## Limits
 
