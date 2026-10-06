@@ -93,4 +93,7 @@ int32_t syshandler_munmap(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // resize a handle
 int32_t syshandler_resize(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// create a new empty file
+int32_t syshandler_mkfile(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

@@ -87,7 +87,8 @@ kernel/syscall/handlers/mmapan.o \
 kernel/syscall/handlers/munmap.o \
 kernel/fs/ext2/ext2.o \
 kernel/fs/ext2/helpers.o \
-kernel/syscall/handlers/resize.o
+kernel/syscall/handlers/resize.o \
+kernel/syscall/handlers/mkfile.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

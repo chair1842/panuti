@@ -153,6 +153,10 @@ static inline int32_t panutisysf_resize(int fd, uint64_t* new_size) {
 	return panuti_syscall(SYSHANDLER_RESIZE, (uint32_t)fd, (uint32_t)new_size, 0, 0);
 }
 
+static inline int32_t panutisysf_mkfile(const char* path) {
+	return panuti_syscall(SYSHANDLER_MKFILE, (uint32_t)path, 0, 0, 0);
+}
+
 #if defined(__cplusplus)
 }
 #endif
