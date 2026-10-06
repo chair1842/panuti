@@ -1137,6 +1137,84 @@ done:
 	return rc;
 }
 
+int ext2_dirent_set_parent(ext2_t* fs, ext2_inode_hdr_t* dir, uint32_t parent_inum) {
+	uint32_t hdr_len;
+	uint32_t nblocks;
+	uint32_t i_block[15];
+	uint8_t* buf;
+	int rc = -1;
+
+	if (!fs || !dir) {
+		return -1;
+	}
+
+	if ((dir->mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+		return -1;
+	}
+
+	if (parent_inum == 0) {
+		return -1;
+	}
+
+	if ((uint64_t)dir->size > (uint64_t)fs->superblock->blocks_count * fs->block_size) {
+		return -1;
+	}
+
+	hdr_len = ext2_dirent_hdr_len(fs);
+	nblocks = div_ceil_u32(dir->size, fs->block_size);
+	memcpy(i_block, dir->block, sizeof(i_block));
+
+	buf = kmalloc(fs->block_size, fs->block_size);
+
+	if (!buf) {
+		return -1;
+	}
+
+	for (uint32_t bi = 0; bi < nblocks; bi++) {
+		uint32_t phys = 0;
+		uint32_t off = 0;
+
+		if (ext2_map_block(fs, i_block, bi, &phys) != 0 || phys == 0) {
+			continue;
+		}
+
+		if (ext2_read_block(fs, phys, buf) != BLOCK_OK) {
+			continue;
+		}
+
+		for (;;) {
+			ext2_dirent_hdr_t d;
+			int st = ext2_dirent_at(fs, buf, off, &d);
+
+			if (st <= 0) {
+				break;
+			}
+
+			if (d.inode != 0 &&
+				(d.name_len == 0 || d.name_len > d.rec_len - hdr_len)) {
+				break;
+			}
+
+			if (d.inode != 0 && d.name_len == 2 &&
+				buf[off + hdr_len] == '.' && buf[off + hdr_len + 1] == '.') {
+
+				d.inode = parent_inum;
+				memcpy(buf + off, &d, hdr_len);
+
+				rc = (ext2_write_block(fs, phys, buf) == BLOCK_OK) ? 0 : -1;
+				goto done;
+			}
+
+			off += d.rec_len;
+		}
+	}
+
+done:
+	kfree(buf);
+
+	return rc;
+}
+
 int ext2_dirent_name_ok(const char* name, size_t name_len) {
 	if (!name || name_len == 0 || name_len > EXT2_NAME_LEN) {
 		return 0;

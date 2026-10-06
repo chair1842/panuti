@@ -499,11 +499,178 @@ static int ext2_unlink(void* fs_impl, struct inode* dir, const char* name, size_
 	return PANUTIERRNO_PLAINERR;
 }
 
+static bool ext2_in_subtree(ext2_t* fs, uint32_t root_inum, uint32_t start_inum) {
+	if (root_inum == start_inum) {
+		return true;
+	}
+
+	uint32_t cur = start_inum;
+
+	for (uint32_t hops = 0; hops <= fs->superblock->inodes_count; hops++) {
+		if (cur == EXT2_ROOT_INO || cur == 0) {
+			return false;
+		}
+
+		ext2_inode_hdr_t h;
+
+		if (ext2_read_inode(fs, cur, &h) != 0 || (h.mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+			return false;
+		}
+
+		uint32_t up = 0;
+
+		if (ext2_dirent_find(fs, &h, "..", 2, &up) != 0 || up == cur) {
+			return false;
+		}
+
+		cur = up;
+
+		if (cur == root_inum) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static int ext2_rename(void* fs_impl, struct inode* old_dir, const char* old_name, size_t old_len,
                        struct inode* new_dir, const char* new_name, size_t new_len) {
-	(void)fs_impl; (void)old_dir; (void)old_name; (void)old_len;
-	(void)new_dir; (void)new_name; (void)new_len;
-	return PANUTIERRNO_UNSUPPORTEDOP;
+	ext2_t* fs = fs_impl;
+	ext2_inode_hdr_t odih;
+	ext2_inode_hdr_t ndih;
+	ext2_inode_hdr_t tgt;
+	uint32_t inum = 0;
+	uint32_t existing = 0;
+
+	if (!fs || !old_dir || !new_dir || !old_name || !new_name) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (fs->read_only) {
+		return PANUTIERRNO_NOTSUPPORTED;
+	}
+
+	if (!ext2_dirent_name_ok(old_name, old_len) || !ext2_dirent_name_ok(new_name, new_len)) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if ((old_len == 1 && old_name[0] == '.') ||
+		(old_len == 2 && old_name[0] == '.' && old_name[1] == '.') ||
+		(new_len == 1 && new_name[0] == '.') ||
+		(new_len == 2 && new_name[0] == '.' && new_name[1] == '.')) {
+		return PANUTIERRNO_UNSUPPORTEDOP;
+	}
+
+	ext2_inode_t* odi = old_dir->impl;
+	ext2_inode_t* ndi = new_dir->impl;
+
+	if (!odi || odi->fs != fs || !ndi || ndi->fs != fs) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (ext2_read_inode(fs, odi->inum, &odih) != 0 || ext2_read_inode(fs, ndi->inum, &ndih) != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if ((odih.mode & EXT2_S_IFMT) != EXT2_S_IFDIR ||
+		(ndih.mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if (odi->inum == ndi->inum && old_len == new_len &&
+		memcmp(old_name, new_name, old_len) == 0) {
+		return 0;
+	}
+
+	if (ext2_dirent_find(fs, &odih, old_name, old_len, &inum) != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if (ext2_dirent_find(fs, &ndih, new_name, new_len, &existing) == 0) {
+		return PANUTIERRNO_EXISTS;
+	}
+
+	if (ext2_read_inode(fs, inum, &tgt) != 0 || tgt.dtime != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	bool is_dir = (tgt.mode & EXT2_S_IFMT) == EXT2_S_IFDIR;
+	bool crosses = odi->inum != ndi->inum;
+
+	if (is_dir && crosses && ext2_in_subtree(fs, inum, ndi->inum)) {
+		return PANUTIERRNO_BUSY;
+	}
+
+	uint8_t file_type = is_dir ? EXT2_FT_DIR : EXT2_FT_REG;
+
+	int added = ext2_dirent_add(fs, &ndih, ndi->inum, inum, new_name, new_len, file_type);
+
+	if (added == EXT2_DIRENT_NO_SPACE) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	if (added != 0) {
+		return PANUTIERRNO_EXISTS;
+	}
+
+	if (is_dir && crosses) {
+		if (ext2_dirent_set_parent(fs, &tgt, ndi->inum) != 0) {
+			ext2_dirent_remove(fs, &ndih, new_name, new_len);
+
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		if (odih.links_count > 1) {
+			odih.links_count--;
+		}
+
+		ndih.links_count++;
+	}
+
+	bool wrote_parents = false;
+
+	if (is_dir && crosses) {
+		bool old_ok = ext2_write_inode(fs, odi->inum, &odih) == BLOCK_OK;
+		bool new_ok = ext2_write_inode(fs, ndi->inum, &ndih) == BLOCK_OK;
+
+		wrote_parents = old_ok && new_ok;
+
+		if (!wrote_parents) {
+			if (old_ok) {
+				odih.links_count++;
+				ext2_write_inode(fs, odi->inum, &odih);
+			}
+
+			if (new_ok) {
+				ndih.links_count--;
+				ext2_write_inode(fs, ndi->inum, &ndih);
+			}
+
+			ext2_dirent_set_parent(fs, &tgt, odi->inum);
+			ext2_dirent_remove(fs, &ndih, new_name, new_len);
+
+			return PANUTIERRNO_PLAINERR;
+		}
+	}
+
+	if (ext2_dirent_remove(fs, &odih, old_name, old_len) != 0) {
+		ext2_dirent_remove(fs, &ndih, new_name, new_len);
+
+		if (is_dir && crosses) {
+			if (wrote_parents) {
+				odih.links_count++;
+				ndih.links_count--;
+				ext2_write_inode(fs, odi->inum, &odih);
+				ext2_write_inode(fs, ndi->inum, &ndih);
+			}
+
+			ext2_dirent_set_parent(fs, &tgt, odi->inum);
+		}
+
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	return 0;
 }
 
 static int ext2_link(void* fs_impl, struct inode* target, struct inode* dir,
