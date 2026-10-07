@@ -1,6 +1,6 @@
 # Licenses
 
-There are 5 projects/components inside panuti.
+There are 6 projects/components inside panuti.
 - kernel
 - ksts
 - libc

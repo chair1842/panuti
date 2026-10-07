@@ -58,7 +58,7 @@ The syscalls that can return an out-of-table value, and what they return:
 | 19 | `STREAM_READ` | `-1` | the bound stream is a directory, pipe, or IsoFS file |
 | 20 | `STREAM_WRITE` | `-1` | likewise |
 | 23 | `READDIR` | `-1` | an IsoFS directory record could not be read |
-| 29 | `MKFILE` | `-1` | registry-side failure, same modes as `MKDIR`; a parent inside a mounted filesystem delegates to the filesystem instead, which may return a `PANUTIERRNO_*` code |
+| 29 | `MKFILE` | `-1` | the parent is not on a create-capable mount (any registry-tree path, or an isofs/fatfs mount); a create-capable mount returns its own result instead |
 
 `MOUNT` is the one syscall that can return a value other than `-1`: the
 IsoFS mount path returns the block layer's `BLOCK_ERR_IO` (`-2`) on an I/O
@@ -933,7 +933,7 @@ block freeing fails.
 int32_t panutisysf_mkfile(const char* path);
 ```
 
-Create a new, empty regular file. The native counterpart of `MKDIR`.
+Create a new, empty regular file inside a mounted filesystem.
 
 **Parameters:**
 - `path` -- path for the new file
@@ -943,35 +943,28 @@ Create a new, empty regular file. The native counterpart of `MKDIR`.
 **Errors:**
 - `PANUTIERRNO_INVALIDADDR` -- `path` is not a valid userspace pointer
 - `-1` -- the file could not be created; this is a **raw** `-1`, not a
-  `PANUTIERRNO_*` code, and covers the same registry-side failure modes as
-  `MKDIR`:
+  `PANUTIERRNO_*` code, and covers every failure before any filesystem is
+  asked to act:
   - `path` is empty
   - `path` names the root directory or resolves to an empty name
   - the parent directory does not exist or is not a directory
   - the parent path prefix is 128 bytes or longer
-  - the name already exists in the parent (name collision)
-  - the name is 256 bytes or longer
-  - the inode table is full (1024 inodes)
-  - the directory entry table is full (2048 entries)
-  - the parent is inside a mounted filesystem that cannot create (see below)
+  - the parent is **not on a mounted filesystem that implements creation**.
+    The registry tree deliberately has no file backing, so any path whose
+    parent lives in it fails here -- including an isofs or fatfs mount
+    (neither implements `create`)
+- the filesystem's own result is returned unchanged for a mount that does
+  implement creation. ext2 contributes `PANUTIERRNO_EXISTS` (name already
+  in the directory), `PANUTIERRNO_PLAINERR` (no free inode or the block I/O
+  failed), `PANUTIERRNO_NOTSUPPORTED` (read-only volume),
+  `PANUTIERRNO_INVALIDARG` / `PANUTIERRNO_UNSUPPORTEDOP` (malformed request
+  or a name of `"."` / `".."`), and `PANUTIERRNO_PLAINERR` if the entry has
+  no room in its directory block.
 
-**Note:** like `MKDIR`, a parent on an ext2 mount delegates creation to the
-filesystem's `create` op, which for a file succeeds and returns `0`; on isofs
-and fatfs mounts there is no `create` op and this always fails with `-1`.
-
-**Note:** where `MKDIR` adds `"."` and `".."` links, `MKFILE` adds nothing, so
-the half-initialised-directory failure described under `MKDIR` cannot happen
-here: the entry is either fully linked or nothing changes.
-
-**Note:** a file created in the registry tree has **no driver attached**: its
-inode's op table is null until something adopts it (a driver or device that
-finds the path and calls `registry_add` on it). Opening such a file succeeds
-because `OPEN` (2) just copies the inode's null op table onto the handle, but
-the handle's `READ`/`WRITE` ops are null, so calling either currently
-dereferences a null table and panics. `MKFILE` is therefore only useful today
-for creating real, writable files on an ext2 mount (whose handles get the
-filesystem's ops instead) or for planting empty placeholder nodes that a driver
-later owns.
+**Note:** unlike `MKDIR`, creation is a purely on-disk operation: no registry
+node is allocated, no `"."`/`".."` links are added, and nothing is left
+behind on a `-1`. A created file is a plain filesystem file and opens with the
+filesystem's read/write ops, so `READ`/`WRITE` on it work as usual.
 
 ---
 

@@ -357,15 +357,11 @@ int registry_mkfile_at(inode_t* start, const char* path) {
 	}
 
 	mount_t* pmnt = parent->mnt;
-	if (pmnt && pmnt->fs_ops->create) {
-		int ret = pmnt->fs_ops->create(pmnt->fs_impl, parent, last, namelen, INODE_FILE);
-		if (ret < 0) {
-			return ret;
-		}
+	if (!pmnt || !pmnt->fs_ops->create) {
+		return -1;
 	}
 
-	inode_t* n = walk((inode_t*)base, path, true, INODE_FILE);
-	return n ? 0 : -1;
+	return pmnt->fs_ops->create(pmnt->fs_impl, parent, last, namelen, INODE_FILE);
 }
 
 int registry_mkfile(const char* path) {
