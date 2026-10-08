@@ -16,7 +16,6 @@ syscall_handler_t syscall_handlers[256] = {
 	[SYSHANDLER_CHDIR] = syshandler_chdir,
 	[SYSHANDLER_UNLINK] = syshandler_unlink,
 	[SYSHANDLER_GETPID] = syshandler_getpid,
-	[SYSHANDLER_TIMESB] = syshandler_timesb,
 	[SYSHANDLER_GETCWD] = syshandler_getcwd,
 	[SYSHANDLER_YIELD] = syshandler_yield,
 	[SYSHANDLER_RENAME] = syshandler_rename,

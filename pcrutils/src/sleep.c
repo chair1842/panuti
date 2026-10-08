@@ -30,14 +30,24 @@ int main(int argc, char** argv) {
 		seconds = seconds * 10 + (*p - '0');
 	}
 
-	int32_t start = panutisysf_timesb();
-	if (start < 0) {
-		printf("sleep: cannot read the clock\n");
+	long start;
+	if (pcr_uptime_centis(&start) != 0) {
+		printf("sleep: cannot read /dvc/uptime\n");
 		return -1;
 	}
 
-	long target = (long)start + seconds * 100;
-	while ((long)panutisysf_timesb() < target) {
+	long target = start + seconds * 100;
+	for (;;) {
+		long now;
+		if (pcr_uptime_centis(&now) != 0) {
+			printf("sleep: cannot read /dvc/uptime\n");
+			return -1;
+		}
+		
+		if (now >= target) {
+			break;
+		}
+		
 		panutisysf_yield();
 	}
 

@@ -11,6 +11,32 @@
 
 #include <pcrutils/pcrutils.h>
 
+// read the kernel clock. 0 on success, -1 on failure; sets centis
+int pcr_uptime_centis(long* out) {
+	int32_t fd = handle_open("/dvc/uptime");
+	if (fd < 0) {
+		return -1;
+	}
+
+	char buf[32];
+	int32_t n = handle_read(fd, buf, sizeof(buf) - 1);
+	handle_close(fd);
+	if (n < 0) {
+		return -1;
+	}
+
+	long centis = 0;
+	for (int i = 0; i < n && buf[i] >= '0' && buf[i] <= '9'; i++) {
+		if (centis > (LONG_MAX - (long)(buf[i] - '0')) / 10) {
+			return -1;
+		}
+		centis = centis * 10 + (long)(buf[i] - '0');
+	}
+
+	*out = centis;
+	return 0;
+}
+
 int pcr_write_all(int stream, const char* buf, size_t len) {
 	size_t off = 0;
 

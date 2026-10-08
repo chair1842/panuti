@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include <stdio.h>
-#include <string.h>
 #include <panuti/mount.h>
 #include <panuti/errno.h>
 #include <pcrutils/pcrutils.h>

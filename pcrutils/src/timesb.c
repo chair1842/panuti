@@ -1,7 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include <stdio.h>
-#include <panuti/syscall/syscallsf.h>
 #include <pcrutils/pcrutils.h>
 
 static const char HELP[] =
@@ -18,14 +17,20 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
+	long centis;
+	if (pcr_uptime_centis(&centis) != 0) {
+		printf("timesb: cannot read /dvc/uptime\n");
+		return -1;
+	}
+
 	if (pcr_option_provided(argc, argv, "-s")) {
-		printf("%d\n", panutisysf_timesb() / 100);
+		printf("%ld\n", centis / 100);
 	} else if (pcr_option_provided(argc, argv, "-l")) {
-		printf("%d\n", panutisysf_timesb() * 10);
+		printf("%ld\n", centis * 10);
 	} else if (pcr_option_provided(argc, argv, "-m")) {
-		printf("%d\n", panutisysf_timesb() / (100 * 60));
+		printf("%ld\n", centis / (100 * 60));
 	} else {
-		printf("%d\n", panutisysf_timesb());
+		printf("%ld\n", centis);
 	}
 
 	return 0;

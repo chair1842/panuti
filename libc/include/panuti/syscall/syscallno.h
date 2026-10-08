@@ -17,7 +17,7 @@ extern "C" {
 #define SYSHANDLER_CHDIR 7
 #define SYSHANDLER_UNLINK 8
 #define SYSHANDLER_GETPID 9
-#define SYSHANDLER_TIMESB 10
+/* 10 is unassigned after TIMESB was retired */
 #define SYSHANDLER_GETCWD 11
 #define SYSHANDLER_YIELD 12
 #define SYSHANDLER_RENAME 13

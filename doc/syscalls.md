@@ -78,7 +78,7 @@ Return values are not uniform across the API. Check the shape before comparing:
 |---|---|---|
 | Byte count | `WRITE` (0), `READ` (3), `STREAM_READ` (19), `STREAM_WRITE` (20) | `> 0` is a count; `<= 0` is an error or EOF -- see below |
 | Status `0` | `CLOSE` (5), `MKDIR` (6), `GETCWD` (11), `PIPE_CREATE` (17), `RESIZE` (28), `MKFILE` (29) | `== 0` is success |
-| Opaque value | `GETPID` (9), `TIMESB` (10) | cannot fail; no error case |
+| Opaque value | `GETPID` (9) | cannot fail; no error case |
 | PID | `PROCREATE` (21) | `>= 0` is a PID; `< 0` is an error |
 | Multi-valued | `READDIR` (23) | `0` = entry, `1` = end of directory, negative = error |
 | Unobservable | `NSTREAM` (18) | the wrapper is `void`; see its entry |
@@ -345,17 +345,16 @@ Get the process ID of the calling process.
 
 ---
 
-### 10 -- TIMESB
+### 10 -- (retired: TIMESB)
 
-```c
-int32_t panutisysf_timesb(void);
-```
+Syscall `10` was a "time since boot in ticks (centiseconds)" readout. It has
+been removed; the kernel clock is now exposed as a device instead:
 
-Get the time in ticks (centiseconds) since system boot.
+- `/dvc/uptime` -- reading it returns the time since boot in centiseconds as a
+  newline-terminated decimal string (the PIT runs at 100 Hz, so each tick is
+  10 ms).
 
-**Parameters:** none.
-
-**Returns:** number of PIT ticks since boot (always succeeds). The PIT runs at 100 Hz, so each tick is 10 ms.
+Number `10` is left unassigned to keep the other numbers stable.
 
 ---
 
@@ -999,7 +998,7 @@ than permanently invalid.
 | 7 | `CHDIR` | 21 | `PROCREATE` |
 | 8 | `UNLINK` | 22 | `WAIT` |
 | 9 | `GETPID` | 23 | `READDIR` |
-| 10 | `TIMESB` | 24 | `STAT` |
+| 10 | _(retired)_ | 24 | `STAT` |
 | 11 | `GETCWD` | 25 | `NEXIST` |
 | 12 | `YIELD` | 26 | `MMAPAN` |
 | 13 | `RENAME` | 27 | `MUNMAP` |

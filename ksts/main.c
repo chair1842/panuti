@@ -674,26 +674,8 @@ int main(int argc, char** argv) {
 		check(console, "getpid stable across calls", p1 == p2 ? 1 : 0, 1);
 	}
 
-	/* ---- 33. timesb (time since boot) ---- */
-	section(console, "33. timesb (time since boot)");
-
-	{
-		int32_t t0 = panutisysf_timesb();
-		for (volatile uint32_t i = 0; i < 50000000; i++) {}
-		int32_t t1 = panutisysf_timesb();
-		write_str(console, "  t0=");
-		write_int(console, (int)t0);
-		write_str(console, " t1=");
-		write_int(console, (int)t1);
-		write_str(console, "\n");
-		check(console, "timesb is non-negative", t0 < 0 ? 0 : 1, 1);
-		check(console, "timesb monotonic", t1 >= t0 ? 1 : 0, 1);
-		/* 100Hz timer: >5 ticks means the busy loop really elapsed time */
-		check(console, "timesb advanced over busy loop", (t1 - t0) > 5 ? 1 : 0, 1);
-	}
-
-	/* ---- 34. getcwd ---- */
-	section(console, "34. getcwd");
+	/* ---- 33. getcwd ---- */
+	section(console, "33. getcwd");
 
 	{
 		char buf[256];
@@ -731,7 +713,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 35. yield ---- */
-	section(console, "35. yield");
+	section(console, "34. yield");
 
 	{
 		panutisysf_yield();
@@ -743,7 +725,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 36. rename ---- */
-	section(console, "36. rename");
+	section(console, "35. rename");
 
 	{
 		int32_t r;
@@ -797,7 +779,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 37. link ---- */
-	section(console, "37. link");
+	section(console, "36. link");
 
 	{
 		/* /dvc/console is a FILE inode, linkable */
@@ -838,7 +820,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 38. block device i/o on /dvc/ram0 ---- */
-	section(console, "38. block device i/o on /dvc/ram0");
+	section(console, "37. block device i/o on /dvc/ram0");
 
 	{
 		/* 700 bytes crosses the 512-byte sector boundary, so the write
@@ -921,7 +903,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 39. files: rename + link interplay ---- */
-	section(console, "39. files: rename + link interplay");
+	section(console, "38. files: rename + link interplay");
 
 	{
 		/* rename a file (not just a dir), old name must die */
@@ -994,7 +976,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 40. deep paths and .. traversal ---- */
-	section(console, "40. deep paths and .. traversal");
+	section(console, "39. deep paths and .. traversal");
 
 	{
 		/* deepest chain created back in section 19 */
@@ -1050,7 +1032,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 41. mount / unmount ---- */
-	section(console, "41. mount / unmount");
+	section(console, "40. mount / unmount");
 
 	{
 		int32_t r = panutisysf_mkdir("/kststmp");
@@ -1122,7 +1104,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 42. pipe_create ---- */
-	section(console, "42. pipe_create");
+	section(console, "41. pipe_create");
 	{
 		int rfd, wfd;
 		int32_t r = panutisysf_pipe_create(&rfd, &wfd);
@@ -1207,7 +1189,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 43. nstream ---- */
-	section(console, "43. nstream");
+	section(console, "42. nstream");
 	{
 		int counts[2] = { -1, -1 };
 		panutisysf_nstream(counts);
@@ -1231,7 +1213,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 44. stream_read ---- */
-	section(console, "44. stream_read");
+	section(console, "43. stream_read");
 	{
 		char buf[64];
 
@@ -1260,7 +1242,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 45. stream_write ---- */
-	section(console, "45. stream_write");
+	section(console, "44. stream_write");
 	{
 		const char msg[] = "stream write ok!\n";
 
@@ -1294,7 +1276,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 46. procreate + wait ---- */
-	section(console, "46. procreate + wait (mount ISO, spawn child, reap)");
+	section(console, "45. procreate + wait (mount ISO, spawn child, reap)");
 
 	{
 		/* mount the boot ISO so we can read ksts from it */
@@ -1345,7 +1327,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 47. procreate / wait edge cases ---- */
-	section(console, "47. procreate / wait edge cases");
+	section(console, "46. procreate / wait edge cases");
 
 	{
 		/* procreate with a bogus path */
@@ -1414,7 +1396,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 48. pipe stress tests ---- */
-	section(console, "48. pipe stress tests");
+	section(console, "47. pipe stress tests");
 
 	/* large data: fill pipe close to buffer capacity (4096) */
 	{
@@ -1547,7 +1529,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 49. stream stress tests ---- */
-	section(console, "49. stream stress tests");
+	section(console, "48. stream stress tests");
 
 	/* stream 0 round-trip via console */
 	{
@@ -1620,7 +1602,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 50. procreate: child writes to parent via pipe ---- */
-	section(console, "50. procreate + pipe: child writes to parent");
+	section(console, "49. procreate + pipe: child writes to parent");
 	{
 		int rfd, wfd;
 		int32_t r = panutisysf_pipe_create(&rfd, &wfd);
@@ -1671,7 +1653,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 51. procreate: parent writes to child via pipe ---- */
-	section(console, "51. procreate + pipe: parent writes to child");
+	section(console, "50. procreate + pipe: parent writes to child");
 	{
 		int rfd, wfd;
 		int32_t r = panutisysf_pipe_create(&rfd, &wfd);
@@ -1721,7 +1703,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 52. procreate: inherited stream isolation ---- */
-	section(console, "52. procreate: inherited stream isolation");
+	section(console, "51. procreate: inherited stream isolation");
 	{
 		/* child with no streams gets its own default console */
 		int32_t r2 = panutisysf_mkdir("/kststmp");
@@ -1803,7 +1785,7 @@ int main(int argc, char** argv) {
 	}
 
 	/* ---- 53. pur 0.2 statement wiring ---- */
-	section(console, "53. pur 0.2 statement wiring (pur -n)");
+	section(console, "52. pur 0.2 statement wiring (pur -n)");
 
 	/* Runs `pur -n <stmt>` with its stdout on a pipe, collects the plan and
 	 * the exit code. Returns 1 if pur could not be started. */
@@ -2047,7 +2029,7 @@ int main(int argc, char** argv) {
 
 
 	/* ---- 54. pur 0.2 statement execution (pur -c) ---- */
-	section(console, "54. pur 0.2 statement execution (pur -c)");
+	section(console, "53. pur 0.2 statement execution (pur -c)");
 
 	/* -c must run the statement and hand the pipeline's status back to the
 	 * caller, which is the whole point of it over -n and the repl */

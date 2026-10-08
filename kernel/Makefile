@@ -50,6 +50,7 @@ kernel/drivers/ramblock/ramblock.o \
 kernel/drivers/kdev/null.o \
 kernel/drivers/kdev/zero.o \
 kernel/drivers/kdev/random.o \
+kernel/drivers/kdev/uptime.o \
 kernel/handle/fs.o \
 kernel/block/block.o \
 kernel/syscall/syscall.o \
@@ -66,7 +67,6 @@ kernel/fs/fatfs/fatfs.o \
 kernel/fs/isofs/isofs.o \
 kernel/block/utils.o \
 kernel/syscall/handlers/getpid.o \
-kernel/syscall/handlers/timesb.o \
 kernel/syscall/handlers/getcwd.o \
 kernel/syscall/handlers/yield.o \
 kernel/syscall/handlers/rename.o \

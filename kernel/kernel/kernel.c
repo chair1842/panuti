@@ -37,6 +37,7 @@ void kernel_main(void) {
 	kdev_null_register();
 	kdev_zero_register();
 	kdev_random_register();
+	kdev_uptime_register();
 
 	// ide_init probes both buses and hangs the irq handlers, then each
 	// protocol driver claims whichever slots turned out to speak it

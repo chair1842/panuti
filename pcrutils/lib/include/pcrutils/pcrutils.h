@@ -19,6 +19,9 @@ typedef struct {
 
 int pcr_write_all(int stream, const char* buf, size_t len);
 
+// read the kernel clock (/dvc/uptime), in centiseconds. 0 on success
+int pcr_uptime_centis(long* out);
+
 // write to a file handle, retrying until every byte is out
 int pcr_handle_write_all(int fd, const char* buf, size_t len);
 
