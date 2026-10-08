@@ -31,6 +31,7 @@ void kernel_main(void) {
 	console_register();
 	
 	kbd_line_init();
+	kbd_raw_init();
 	
 	ramblock_init("/dvc/ram0", 512, 1024);
 
