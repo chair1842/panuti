@@ -176,6 +176,10 @@ int main(int argc, char** argv) {
 
 		int status = 0;
 		rc = pur_exec(&status);
+		
+		putchar(0x1B);
+		putchar('R');
+		
 		if (rc != PUR_EXEC_OK) {
 			printf("pur: %s\n", pur_exec_strerror(rc));
 		}
