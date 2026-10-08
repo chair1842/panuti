@@ -71,7 +71,8 @@ panuti/stream/stream_read.o \
 panuti/stream/nstream.o \
 panuti/mmap/mmapan.o \
 panuti/mmap/munmap.o \
-panuti/registry/mkfile.o 
+panuti/registry/mkfile.o \
+panuti/kbd/kpktasc.o 
 
 HOSTEDOBJS=\
 $(ARCH_HOSTEDOBJS) \

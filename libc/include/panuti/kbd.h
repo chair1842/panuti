@@ -87,6 +87,8 @@ typedef struct keypacket {
 	bool num_lock;
 } keypacket_t;
 
+char keypacket_to_ascii(const keypacket_t keypacket);
+
 #if defined(__cplusplus)
 }
 #endif

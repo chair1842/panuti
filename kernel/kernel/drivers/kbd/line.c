@@ -27,50 +27,7 @@ static kbd_line_state_t line_state;
 static handle_t console_handle;
 static bool console_ready;
 
-static char keycode_to_char(keycode_t kc, bool shift, bool caps) {
-	if (kc >= KEYCODE_A && kc <= KEYCODE_Z) {
-		bool upper = caps ^ shift;
-		char base = 'a' + (kc - KEYCODE_A);
-		return upper ? (char)(base - 'a' + 'A') : base;
-	}
 
-	static const char digit_unshifted[] = "0123456789";
-	static const char digit_shifted[]   = ")!@#$%^&*(";
-	
-	if (kc >= KEYCODE_0 && kc <= KEYCODE_9) {
-		int idx = kc - KEYCODE_0;
-		return shift ? digit_shifted[idx] : digit_unshifted[idx];
-	}
-
-	switch (kc) {
-		case KEYCODE_SPACE:
-			return ' ';
-		case KEYCODE_PERIOD:
-			return shift ? '>' : '.';
-		case KEYCODE_COMMA:
-			return shift ? '<' : ',';
-		case KEYCODE_SEMICOLON:
-			return shift ? ':' : ';';
-		case KEYCODE_APOSTROPHE:
-			return shift ? '"' : '\'';
-		case KEYCODE_MINUS:
-			return shift ? '_' : '-';
-		case KEYCODE_EQUALS:
-			return shift ? '+' : '=';
-		case KEYCODE_SLASH:
-			return shift ? '?' : '/';
-		case KEYCODE_BACKSLASH:
-			return shift ? '|' : '\\';
-		case KEYCODE_LBRACKET:
-			return shift ? '{' : '[';
-		case KEYCODE_RBRACKET:
-			return shift ? '}' : ']';
-		case KEYCODE_BACKTICK:
-			return shift ? '~' : '`';
-		default:
-			return 0; 
-	}
-}
 
 static void console_putchar(char c) {
 	if (!console_ready) {
@@ -234,7 +191,7 @@ static int kbd_line_read(void* impl, void* buf, size_t len) {
 			continue;
 		}
 
-		char c = keycode_to_char(pkt.keycode, pkt.shift, pkt.caps_lock);
+		char c = keypacket_to_ascii(pkt);
 		if (c == 0) {
 			continue;
 		}
