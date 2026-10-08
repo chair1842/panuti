@@ -335,6 +335,12 @@ static int ext2_create(void* fs_impl, struct inode* dir, const char* name, size_
 
 		kfree(buf);
 
+		// a recycled inode number may still be the readdir cache's key from
+		// the directory that used to live here; this block is its content now
+		if (fs->cached_dir_inode == inum) {
+			fs->cached_dir_inode = 0;
+		}
+
 		tgt.block[0] = phys;
 		tgt.size = fs->block_size;
 		tgt.blocks = ext2_sectors_per_block(fs);

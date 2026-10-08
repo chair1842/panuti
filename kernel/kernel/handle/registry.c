@@ -301,11 +301,16 @@ int registry_mkdir_at(inode_t* start, const char* path) {
 	}
 
 	mount_t* pmnt = parent->mnt;
-	if (pmnt && pmnt->fs_ops->create) {
-		int ret = pmnt->fs_ops->create(pmnt->fs_impl, parent, last, namelen, INODE_DIR);
-		if (ret < 0) {
-			return ret;
+	if (pmnt) {
+		// inside a mounted filesystem creation is the fs's job, and walk()
+		// only ever creates in the registry tree. falling through to it after
+		// the fs succeeded would re-resolve the name we just created and
+		// report it as a collision, so return the fs result as-is
+		if (!pmnt->fs_ops->create) {
+			return -1;
 		}
+
+		return pmnt->fs_ops->create(pmnt->fs_impl, parent, last, namelen, INODE_DIR);
 	}
 
 	inode_t* n = walk((inode_t*)base, path, true, INODE_DIR);

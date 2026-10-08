@@ -947,6 +947,13 @@ int ext2_dirent_add(ext2_t* fs, ext2_inode_hdr_t* dir, uint32_t dir_inum,
 		return -1;
 	}
 
+	// ext2_readdir caches this directory's size, block array and one of its
+	// dirent blocks under cached_dir_inode; anything written below can make
+	// that snapshot miss entries, so drop it before mutating
+	if (fs->cached_dir_inode == dir_inum) {
+		fs->cached_dir_inode = 0;
+	}
+
 	uint32_t need = ext2_dirent_rec_len(fs, name_len);
 
 	if (need > fs->block_size) {
@@ -1058,6 +1065,10 @@ int ext2_dirent_remove(ext2_t* fs, ext2_inode_hdr_t* dir, const char* name, size
 	if (!ext2_dirent_name_ok(name, name_len)) {
 		return -1;
 	}
+
+	// same snapshot as above; this variant does not know which directory it
+	// is editing, so drop whatever is cached and let the next readdir reload
+	fs->cached_dir_inode = 0;
 
 	hdr_len = ext2_dirent_hdr_len(fs);
 	dsize = dir->size;

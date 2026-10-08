@@ -53,7 +53,7 @@ The syscalls that can return an out-of-table value, and what they return:
 | 0 | `WRITE` | `-1` | writing to a directory, a pipe's read end, or any IsoFS file |
 | 3 | `READ` | `-1` | reading a directory, a pipe's write end, or on IsoFS I/O failure |
 | 4 | `ACTIVATE` | `-1` | all handle types except console and kbd |
-| 6 | `MKDIR` | `-1` | every registry-side failure mode (see below) |
+| 6 | `MKDIR` | `-1` | every registry-side failure mode (see below); a create-capable mount returns its own result instead |
 | 15 | `MOUNT` | `-1`, `-2` | IsoFS volume scan hits an invalid block or an I/O error |
 | 19 | `STREAM_READ` | `-1` | the bound stream is a directory, pipe, or IsoFS file |
 | 20 | `STREAM_WRITE` | `-1` | likewise |
@@ -252,7 +252,8 @@ Close an open file descriptor.
 int32_t panutisysf_mkdir(const char* path);
 ```
 
-Create a new directory in the in-memory VFS registry.
+Create a new directory -- either a registry node, or a directory on the
+mounted filesystem the parent lives in.
 
 **Parameters:**
 - `path` -- path for the new directory
@@ -262,7 +263,8 @@ Create a new directory in the in-memory VFS registry.
 **Errors:**
 - `PANUTIERRNO_INVALIDADDR` -- `path` is not a valid userspace pointer
 - `-1` -- the directory could not be created; this is a **raw** `-1`, not a
-  `PANUTIERRNO_*` code, and covers every failure below:
+  `PANUTIERRNO_*` code, and covers every failure before any filesystem is
+  asked to act:
   - `path` is empty
   - `path` names the root directory or resolves to an empty name
   - the parent directory does not exist or is not a directory
@@ -273,8 +275,14 @@ Create a new directory in the in-memory VFS registry.
   - the directory entry table is full (2048 entries)
   - the parent is inside a mounted filesystem and the filesystem does not
     implement directory creation there. Only ext2 can create today (for both
-    directories and files). On an ext2 mount creation succeeds; on isofs and
-    fatfs mounts this path always fails and returns `-1`.
+    directories and files); on isofs and fatfs mounts this path always fails
+    and returns `-1`.
+- the filesystem's own result is returned unchanged for a mount that does
+  implement creation. ext2 contributes `PANUTIERRNO_EXISTS` (name already
+  in the directory), `PANUTIERRNO_PLAINERR` (no free inode or the block I/O
+  failed), `PANUTIERRNO_NOTSUPPORTED` (read-only volume), and
+  `PANUTIERRNO_INVALIDARG` / `PANUTIERRNO_UNSUPPORTEDOP` (malformed request
+  or a name of `"."` / `".."`).
 
 **Note:** one failure is not reported. If the directory entry table fills up
 after the new entry itself has been linked, the `"."` and `".."` links fail
