@@ -68,18 +68,9 @@ int pcr_handle_write_all(int fd, const char* buf, size_t len) {
 	return 0;
 }
 
-// move a handle's write position to the end of the file, the only way to
-// append without a seek. reading pulls the offset along, and a device that
-// cannot be read is left alone
 int pcr_handle_to_end(int fd) {
-	char buf[128];
-
-	for (;;) {
-		int n = handle_read(fd, buf, sizeof(buf));
-		if (n <= 0) {
-			return n;
-		}
-	}
+	int64_t o = 0;
+	return panutisysf_seek(fd, &o, SEEK_END);
 }
 
 // open a path, creating the file first if it is not there yet. mkfile is

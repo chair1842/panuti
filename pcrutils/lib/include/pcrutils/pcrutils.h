@@ -25,7 +25,6 @@ int pcr_uptime_centis(long* out);
 // write to a file handle, retrying until every byte is out
 int pcr_handle_write_all(int fd, const char* buf, size_t len);
 
-// pull a handle's write position to the end of the file by reading through
 int pcr_handle_to_end(int fd);
 
 // open a path, creating the file first if it is not there yet

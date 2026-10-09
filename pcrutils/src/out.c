@@ -42,20 +42,6 @@ static int write_all(int fd, const char* data, size_t len) {
 	return 0;
 }
 
-// move the handle's write position to the end of the file. reading through
-// is the only way without a seek, and a device that cannot be read is left
-// alone, its offset meaning nothing to it anyway
-static void advance_to_end(int fd) {
-	char buf[OUT_BUFSZ];
-
-	for (;;) {
-		int n = handle_read(fd, buf, sizeof(buf));
-		if (n <= 0) {
-			return;
-		}
-	}
-}
-
 static int out_stream(int fd, int stream) {
 	char buf[OUT_BUFSZ];
 
@@ -125,7 +111,7 @@ int main(int argc, char** argv) {
 	int failed = 0;
 
 	if (append_mode) {
-		advance_to_end(fd);
+		pcr_handle_to_end(fd);
 	} else {
 		// truncate the file to nothing before writing over it. resizing only
 		// works on regular files, so a failure here just means a device that
