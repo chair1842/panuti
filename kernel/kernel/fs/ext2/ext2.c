@@ -20,6 +20,7 @@
 #define EXT2_RO_COMPAT_LARGE_FILE 0x0002
 #define EXT2_RO_COMPAT_SUPPORTED (EXT2_RO_COMPAT_SPARSE_SUPER | EXT2_RO_COMPAT_LARGE_FILE)
 
+#define EXT2_STATE_MOUNTED 0
 #define EXT2_STATE_CLEAN 1
 
 #define EXT2_WRITES_IMPLEMENTED 1
@@ -1346,7 +1347,12 @@ static void ext2_finish(void* fs_impl) {
 	}
 
 	if (!fs->read_only) {
-		ext2_sync_metadata(fs);
+		ext2_pending_free_flush(fs);
+
+		if (ext2_sync_metadata(fs) == BLOCK_OK) {
+			fs->superblock->state = EXT2_STATE_CLEAN;
+			block_write_bytes(fs->block_device, 1024, sizeof(ext2_superblock_t), fs->superblock);
+		}
 	}
 
 	while (fs->inode_list) {
@@ -1381,6 +1387,10 @@ static void ext2_finish(void* fs_impl) {
 
 	if (fs->inode_bitmap.buf) {
 		kfree(fs->inode_bitmap.buf);
+	}
+
+	if (fs->pending_free) {
+		kfree(fs->pending_free);
 	}
 
 	kfree(fs);
@@ -1431,6 +1441,9 @@ int ext2_mount(const char* mountp, const char* blkdev) {
 	fs->superblock = sb;
 	fs->block_device = dev;
 	fs->inode_list = nullptr;
+	fs->pending_free = nullptr;
+	fs->pending_free_count = 0;
+	fs->pending_free_cap = 0;
 
 	if (sb->magic != EXT2_MAGIC) {
 		goto fail;
@@ -1635,6 +1648,16 @@ int ext2_mount(const char* mountp, const char* blkdev) {
 	// mount_detach will drop it through inode_unref
 	inode_unref(root_node);
 
+	if (!fs->read_only) {
+		sb->state = EXT2_STATE_MOUNTED;
+
+		if (block_write_bytes(fs->block_device, 1024,
+			sizeof(ext2_superblock_t), sb) != BLOCK_OK) {
+			sb->state = EXT2_STATE_CLEAN;
+			fs->read_only = true;
+		}
+	}
+
 	return PANUTIERRNO_PLAINSUCCESS;
 
 fail:
@@ -1656,6 +1679,10 @@ fail:
 
 	if (fs->inode_bitmap.buf) {
 		kfree(fs->inode_bitmap.buf);
+	}
+
+	if (fs->pending_free) {
+		kfree(fs->pending_free);
 	}
 
 	kfree(sb);

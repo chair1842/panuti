@@ -175,6 +175,10 @@ typedef struct ext2 {
 	// looked-up inode that is later unlinked has its dirent detached and is no
 	// longer reachable from the cached tree, so the tree alone is not enough
 	struct ext2_inode* inode_list;
+
+	uint32_t* pending_free;
+	uint32_t pending_free_count;
+	uint32_t pending_free_cap;
 } ext2_t;
 
 typedef struct ext2_inode {

@@ -156,6 +156,7 @@ int ext2_write_inode(ext2_t* fs, uint32_t inum, const ext2_inode_hdr_t* hdr) {
 
 	if (rc == BLOCK_OK) {
 		ext2_inode_cache_store(fs, inum, hdr);
+		ext2_pending_free_flush(fs);
 	}
 
 	return rc;
@@ -1615,6 +1616,12 @@ int ext2_alloc_block(ext2_t* fs, uint32_t* out) {
 			bm[i >> 3] = byte | (1u << (i & 7));
 			fs->block_bitmap.dirty = true;
 
+			if (ext2_bitmap_sync(fs, &fs->block_bitmap) != BLOCK_OK) {
+				bm[i >> 3] = byte;
+				fs->block_bitmap.dirty = true;
+				return -1;
+			}
+
 			if (ext2_zero_block(fs, block) != 0) {
 				bm[i >> 3] = byte;
 				fs->block_bitmap.dirty = true;
@@ -1643,7 +1650,7 @@ int ext2_alloc_block(ext2_t* fs, uint32_t* out) {
 	return -1;
 }
 
-int ext2_free_block(ext2_t* fs, uint32_t block) {
+static int ext2_block_freeable(ext2_t* fs, uint32_t block, uint32_t* group_out, uint32_t* index_out) {
 	uint32_t bpg = fs->superblock->blocks_per_group;
 
 	if (block < fs->first_data_block) {
@@ -1654,13 +1661,32 @@ int ext2_free_block(ext2_t* fs, uint32_t block) {
 	uint32_t group = rel / bpg;
 	uint32_t i = rel % bpg;
 	uint32_t bit_cap = fs->block_size * 8;
-	uint8_t* bm = nullptr;
 
 	if (group >= fs->group_count || i >= bit_cap || i >= ext2_group_blocks(fs, group)) {
 		return -1;
 	}
 
 	if (group == 0 && block < ext2_first_allocatable(fs)) {
+		return -1;
+	}
+
+	if (group_out) {
+		*group_out = group;
+	}
+
+	if (index_out) {
+		*index_out = i;
+	}
+
+	return 0;
+}
+
+static int ext2_free_block_now(ext2_t* fs, uint32_t block) {
+	uint32_t group = 0;
+	uint32_t i = 0;
+	uint8_t* bm = nullptr;
+
+	if (ext2_block_freeable(fs, block, &group, &i) != 0) {
 		return -1;
 	}
 
@@ -1675,12 +1701,78 @@ int ext2_free_block(ext2_t* fs, uint32_t block) {
 	bm[i >> 3] &= (uint8_t)~(1u << (i & 7));
 	fs->block_bitmap.dirty = true;
 
-	fs->superblock->free_blocks_count++;
+	if (fs->superblock->free_blocks_count < UINT32_MAX) {
+		fs->superblock->free_blocks_count++;
+	}
+
 	fs->superblock_dirty = true;
-	fs->gdt[group].free_blocks_count++;
+
+	if (fs->gdt[group].free_blocks_count < UINT16_MAX) {
+		fs->gdt[group].free_blocks_count++;
+	}
+
 	fs->gdt_dirty = true;
 
 	return 0;
+}
+
+int ext2_free_block(ext2_t* fs, uint32_t block) {
+	if (ext2_block_freeable(fs, block, nullptr, nullptr) != 0) {
+		return -1;
+	}
+
+	for (uint32_t n = 0; n < fs->pending_free_count; n++) {
+		if (fs->pending_free[n] == block) {
+			return -1;
+		}
+	}
+
+	if (fs->pending_free_count == fs->pending_free_cap) {
+		uint32_t new_cap = fs->pending_free_cap ? fs->pending_free_cap * 2 : 64;
+
+		if (new_cap < fs->pending_free_cap) {
+			return -1;
+		}
+
+		if (new_cap > UINT32_MAX / sizeof(uint32_t)) {
+			return -1;
+		}
+
+		uint32_t* grown = kmalloc(new_cap * sizeof(uint32_t), alignof(uint32_t));
+
+		if (!grown) {
+			return -1;
+		}
+
+		if (fs->pending_free_count) {
+			memcpy(grown, fs->pending_free, fs->pending_free_count * sizeof(uint32_t));
+		}
+
+		if (fs->pending_free) {
+			kfree(fs->pending_free);
+		}
+
+		fs->pending_free = grown;
+		fs->pending_free_cap = new_cap;
+	}
+
+	fs->pending_free[fs->pending_free_count++] = block;
+
+	return 0;
+}
+
+int ext2_pending_free_flush(ext2_t* fs) {
+	if (!fs || fs->pending_free_count == 0) {
+		return BLOCK_OK;
+	}
+
+	for (uint32_t n = 0; n < fs->pending_free_count; n++) {
+		ext2_free_block_now(fs, fs->pending_free[n]);
+	}
+
+	fs->pending_free_count = 0;
+
+	return ext2_bitmap_sync(fs, &fs->block_bitmap);
 }
 
 int ext2_alloc_inode(ext2_t* fs, uint32_t* out) {
@@ -1725,6 +1817,12 @@ int ext2_alloc_inode(ext2_t* fs, uint32_t* out) {
 
 			bm[i >> 3] = byte | (1u << (i & 7));
 			fs->inode_bitmap.dirty = true;
+
+			if (ext2_bitmap_sync(fs, &fs->inode_bitmap) != BLOCK_OK) {
+				bm[i >> 3] = byte;
+				fs->inode_bitmap.dirty = true;
+				return -1;
+			}
 
 			if (fs->superblock->free_inodes_count > 0) {
 				fs->superblock->free_inodes_count--;

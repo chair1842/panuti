@@ -60,6 +60,7 @@ uint32_t ext2_group_blocks(ext2_t* fs, uint32_t group);
 uint32_t ext2_first_allocatable(ext2_t* fs);
 int ext2_alloc_block(ext2_t* fs, uint32_t* out);
 int ext2_free_block(ext2_t* fs, uint32_t block);
+int ext2_pending_free_flush(ext2_t* fs);
 int ext2_alloc_inode(ext2_t* fs, uint32_t* out);
 int ext2_free_inode(ext2_t* fs, uint32_t inum);
 
