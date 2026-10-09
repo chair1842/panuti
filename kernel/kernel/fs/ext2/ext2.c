@@ -50,21 +50,6 @@ static int ext2_validate_gdt(ext2_t* fs) {
     return 0;
 }
 
-static void ext2_free_inode_tree(inode_t* n) {
-	for (dirent_t* d = n->children; d; d = d->next) {
-		if (d->inode == n) {
-			continue;
-		}
-
-		ext2_free_inode_tree(d->inode);
-
-		if (d->inode->impl) {
-			kfree(d->inode->impl);
-			d->inode->impl = nullptr;
-		}
-	}
-}
-
 static struct inode* ext2_lookup(void* fs_impl, struct inode* dir, const char* name, size_t len) {
 	ext2_t* fs = fs_impl;
 
@@ -221,6 +206,9 @@ static struct inode* ext2_lookup(void* fs_impl, struct inode* dir, const char* n
 		return nullptr;
 	}
 
+	impl->next = fs->inode_list;
+	fs->inode_list = impl;
+
 	// hand back the reference registry_inode_alloc started with. the dirent
 	// holds the only remaining one, and drops it on unlink or at unmount
 	inode_unref(n);
@@ -368,18 +356,18 @@ static int ext2_create(void* fs_impl, struct inode* dir, const char* name, size_
 		}
 	}
 
-	if (added == EXT2_DIRENT_NO_SPACE) {
+	if (added == EXT2_DIRENT_EXISTS) {
 		ext2_inode_retire(fs, inum);
 		ext2_free_inode(fs, inum);
 
-		return PANUTIERRNO_PLAINERR;
+		return PANUTIERRNO_EXISTS;
 	}
 
 	if (added != 0) {
 		ext2_inode_retire(fs, inum);
 		ext2_free_inode(fs, inum);
 
-		return PANUTIERRNO_EXISTS;
+		return PANUTIERRNO_PLAINERR;
 	}
 
 	return 0;
@@ -611,12 +599,12 @@ static int ext2_rename(void* fs_impl, struct inode* old_dir, const char* old_nam
 
 	int added = ext2_dirent_add(fs, &ndih, ndi->inum, inum, new_name, new_len, file_type);
 
-	if (added == EXT2_DIRENT_NO_SPACE) {
-		return PANUTIERRNO_PLAINERR;
+	if (added == EXT2_DIRENT_EXISTS) {
+		return PANUTIERRNO_EXISTS;
 	}
 
 	if (added != 0) {
-		return PANUTIERRNO_EXISTS;
+		return PANUTIERRNO_PLAINERR;
 	}
 
 	if (is_dir && crosses) {
@@ -736,12 +724,12 @@ static int ext2_link(void* fs_impl, struct inode* target, struct inode* dir,
 	}
 
 	int added = ext2_dirent_add(fs, &dih, di->inum, inum, name, len, EXT2_FT_REG);
-	if (added == EXT2_DIRENT_NO_SPACE) {
-		return PANUTIERRNO_PLAINERR;
+	if (added == EXT2_DIRENT_EXISTS) {
+		return PANUTIERRNO_EXISTS;
 	}
 
 	if (added != 0) {
-		return PANUTIERRNO_EXISTS;
+		return PANUTIERRNO_PLAINERR;
 	}
 
 	if (tgt.links_count == UINT16_MAX) {
@@ -1169,6 +1157,10 @@ static int ext2_resize(void* file_impl, uint64_t new_size) {
 		return PANUTIERRNO_INVALIDARG; // past the end of the volume
 	}
 
+	if (!fs->large_files && new_size > 0xFFFFFFFFu) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
 	ext2_inode_hdr_t hdr;
 
 	if (ext2_read_inode(fs, f->inum, &hdr) != 0) {
@@ -1357,16 +1349,14 @@ static void ext2_finish(void* fs_impl) {
 		ext2_sync_metadata(fs);
 	}
 
-	// mount_detach runs this before it drops the root's last reference, and
-	// registry_destroy only walks references afterwards without telling the
-	// filesystem, so the whole cached tree has to go while it is still whole
-	if (fs->root_node) {
-		if (fs->root_node->impl) {
-			kfree(fs->root_node->impl);
-			fs->root_node->impl = nullptr;
-		}
+	while (fs->inode_list) {
+		ext2_inode_t* next = fs->inode_list->next;
+		kfree(fs->inode_list);
+		fs->inode_list = next;
+	}
 
-		ext2_free_inode_tree(fs->root_node);
+	if (fs->root_node) {
+		fs->root_node->impl = nullptr;
 	}
 
 	if (fs->gdt) {
@@ -1440,6 +1430,7 @@ int ext2_mount(const char* mountp, const char* blkdev) {
 
 	fs->superblock = sb;
 	fs->block_device = dev;
+	fs->inode_list = nullptr;
 
 	if (sb->magic != EXT2_MAGIC) {
 		goto fail;
@@ -1636,6 +1627,9 @@ int ext2_mount(const char* mountp, const char* blkdev) {
 		goto fail;
 	}
 
+	root_inode->next = fs->inode_list;
+	fs->inode_list = root_inode;
+
 	// mount_attach took its own reference, so hand back the one
 	// registry_inode_alloc started with. the mount now holds the only one, and
 	// mount_detach will drop it through inode_unref
@@ -1650,6 +1644,18 @@ fail:
 
 	if (fs->cached_indirect_buf) {
 		kfree(fs->cached_indirect_buf);
+	}
+
+	if (fs->dir_buf) {
+		kfree(fs->dir_buf);
+	}
+
+	if (fs->block_bitmap.buf) {
+		kfree(fs->block_bitmap.buf);
+	}
+
+	if (fs->inode_bitmap.buf) {
+		kfree(fs->inode_bitmap.buf);
 	}
 
 	kfree(sb);

@@ -995,7 +995,11 @@ int ext2_dirent_add(ext2_t* fs, ext2_inode_hdr_t* dir, uint32_t dir_inum,
 
 		st = ext2_dirent_place(fs, buf, need, name, name_len, inum, file_type);
 
-		if (st == EXT2_DIRENT_EXISTS || st == EXT2_DIRENT_CORRUPT) {
+		if (st == EXT2_DIRENT_EXISTS) {
+			rc = EXT2_DIRENT_EXISTS;
+			verdict = 1;
+			stop = 1;
+		} else if (st == EXT2_DIRENT_CORRUPT) {
 			rc = -1;
 			verdict = 1;
 			stop = 1;
@@ -1480,10 +1484,8 @@ int ext2_inode_retire(ext2_t* fs, uint32_t inum) {
 		return -1;
 	}
 
-	// the group tally only moves once the inode is actually gone from the disk,
-	// so a failure above leaves it counting something that still exists
-	if (was_dir && ext2_dirs_count_adjust(fs, inum, -1) != 0) {
-		return -1;
+	if (was_dir) {
+		ext2_dirs_count_adjust(fs, inum, -1);
 	}
 
 	return ext2_free_inode(fs, inum);

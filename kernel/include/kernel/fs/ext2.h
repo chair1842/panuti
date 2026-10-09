@@ -170,11 +170,17 @@ typedef struct ext2 {
 	// the inode handed to mount_attach as the mounted namespace root. kept so
 	// finish() can release the ext2_inode_t hanging off it
 	struct inode* root_node;
+
+	// every ext2_inode_t ever handed out, so finish() can free them all. a
+	// looked-up inode that is later unlinked has its dirent detached and is no
+	// longer reachable from the cached tree, so the tree alone is not enough
+	struct ext2_inode* inode_list;
 } ext2_t;
 
 typedef struct ext2_inode {
 	ext2_t* fs;
 	uint32_t inum;
+	struct ext2_inode* next;
 } ext2_inode_t;
 
 typedef struct ext2_file {
