@@ -8,7 +8,7 @@
 #include <panuti/stream.h>
 #include <panuti/syscall/syscallsf.h>
 #include <pcrutils/pcrutils.h>
-#include <pcrutils/seek.h>
+#include <panuti/seek.h>
 
 #define OUT_BUFSZ 128
 

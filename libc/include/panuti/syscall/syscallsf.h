@@ -4,7 +4,6 @@
 #define _PANUTI_SYSCALLSF_H
 
 #include "panuti/dirent.h"
-#include "seek.h"
 #include "syscall.h"
 #include "syscallno.h"
 #include <stddef.h>

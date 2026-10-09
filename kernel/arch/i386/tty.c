@@ -123,8 +123,6 @@ static void terminal_escape(uint8_t byte) {
 		case 'R':
 			terminal_color = vga_entry_color(VGA_COLOR_LIGHT_GREY, VGA_COLOR_BLACK);
 			terminal_scroll_wrap = 1;
-			terminal_row = 0;
-			terminal_column = 0;
 			terminal_cursor_setvisible(1);
 			esc_state = ESC_IDLE;
 			break;
@@ -201,7 +199,7 @@ void terminal_putchar(char c) {
 		terminal_advance_row();
 	} else if (c == '\f') {
 		terminal_clear();
-		terminal_row = 0;
+	} else if (c == '\r') {
 		terminal_column = 0;
 	} else if (c == '\t') {
 		size_t spaces = 4 - (terminal_column % 4);
@@ -218,6 +216,7 @@ void terminal_putchar(char c) {
 			terminal_row--;
 			terminal_column = VGA_WIDTH - 1;
 		}
+	} else if (uc < 0x20 || uc == 0x7F) {
 	} else {
 		terminal_putentryat(uc, terminal_color, terminal_column, terminal_row);
 		if (++terminal_column == VGA_WIDTH) {
@@ -263,4 +262,8 @@ void terminal_clear(void) {
 			terminal_buffer[index] = vga_entry(' ', terminal_color);
 		}
 	}
+
+	terminal_row = 0;
+	terminal_column = 0;
+	terminal_update_cursor();
 }

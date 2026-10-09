@@ -214,6 +214,10 @@ static int parse_group(int depth, int *out) {
 	}
 	pos++;
 
+	if (depth >= PUR_MAX_DEPTH) {
+		return PUR_PARSE_ERR_COMPLEX;
+	}
+
 	if (toks[pos].type == PUR_T_RPAREN) {
 		return PUR_PARSE_ERR_EMPTY_GROUP;
 	}
@@ -234,7 +238,7 @@ static int parse_group(int depth, int *out) {
 			break;
 		}
 
-		rc = parse_stmt(depth, &members[count]);
+		rc = parse_stmt(depth + 1, &members[count]);
 		if (rc != PUR_PARSE_OK) {
 			break;
 		}

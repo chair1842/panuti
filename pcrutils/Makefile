@@ -55,18 +55,10 @@ clean:
 	rm -rf $(BUILDDIR)
 	rm -f $(LIBOBJS) $(LIBDEPS)
 
-install: install-pcrutils install-libs install-headers
+install: install-pcrutils
 
 install-pcrutils: all
 	mkdir -p $(DESTDIR)$(BINDIR)
 	cp $(BINARIES) $(DESTDIR)$(BINDIR)/
-
-install-libs: $(LIB)
-	mkdir -p $(DESTDIR)$(LIBDIR)
-	cp $(LIB) $(DESTDIR)$(LIBDIR)/
-
-install-headers:
-	mkdir -p $(DESTDIR)$(INCLUDEDIR)
-	cp -R --preserve=timestamps $(LIBINCDIR)/. $(DESTDIR)$(INCLUDEDIR)/
 
 -include $(LIBDEPS)

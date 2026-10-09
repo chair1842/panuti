@@ -307,7 +307,8 @@ static int builtin_cd(int argc, char** argv) {
 			printf("pur: what the chicken is this.\n");
 			return -1;
 		default:
-			return 0;
+			printf("pur: could not change the directory\n");
+			return -1;
 	}
 }
 
@@ -532,7 +533,11 @@ int pur_exec(int* status_out) {
 		char* av[PUR_MAX_ARGV];
 
 		if (pur_leaf_argv(0, av) > 0 && is_builtin(av[0])) {
-			return run_builtin(0);
+			int brc = run_builtin(0);
+			if (brc != 0 && status_out) {
+				*status_out = 1;
+			}
+			return PUR_EXEC_OK;
 		}
 	}
 
