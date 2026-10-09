@@ -8,6 +8,7 @@
 #include <panuti/stream.h>
 #include <panuti/syscall/syscallsf.h>
 #include <pcrutils/pcrutils.h>
+#include <pcrutils/seek.h>
 
 #define OUT_BUFSZ 128
 
@@ -111,7 +112,7 @@ int main(int argc, char** argv) {
 	int failed = 0;
 
 	if (append_mode) {
-		pcr_handle_to_end(fd);
+		handle_seek(fd, 0, SEEK_END);
 	} else {
 		// truncate the file to nothing before writing over it. resizing only
 		// works on regular files, so a failure here just means a device that

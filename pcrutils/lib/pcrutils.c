@@ -68,11 +68,6 @@ int pcr_handle_write_all(int fd, const char* buf, size_t len) {
 	return 0;
 }
 
-int pcr_handle_to_end(int fd) {
-	int64_t o = 0;
-	return panutisysf_seek(fd, &o, SEEK_END);
-}
-
 // open a path, creating the file first if it is not there yet. mkfile is
 // a "create if absent" by nature, and when it fails the open decides whether
 // the path really exists. returns an fd or a negative error

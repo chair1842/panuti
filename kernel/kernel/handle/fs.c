@@ -4,7 +4,7 @@
 #include <kernel/handle/registry.h>
 #include <kernel/memman/slab.h>
 #include <panuti/errno.h>
-#include <panuti/syscall/seek.h>
+#include <panuti/seek.h>
 
 typedef struct fs_file {
 	void* file_impl;

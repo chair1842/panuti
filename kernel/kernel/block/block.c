@@ -5,7 +5,7 @@
 #include <kernel/handle/handle.h>
 #include <kernel/memman/slab.h>
 #include <panuti/errno.h>
-#include <panuti/syscall/seek.h>
+#include <panuti/seek.h>
 #include <string.h>
 
 typedef struct block_handle {

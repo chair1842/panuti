@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include <panuti/syscall/syscallsf.h>
-#include <panuti/syscall/seek.h>
+#include <panuti/seek.h>
 #include <panuti/syscall/syscall.h>
 #include <panuti/syscall/syscallno.h>
 #include <panuti/errno.h>

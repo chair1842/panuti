@@ -4,7 +4,7 @@
 #include <kernel/syscall/handlers.h>
 #include <kernel/mem/usr.h>
 #include <panuti/errno.h>
-#include <panuti/syscall/seek.h>
+#include <panuti/seek.h>
 #include <stdint.h>
 
 int32_t syshandler_seek(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {

@@ -993,7 +993,7 @@ passed by pointer:
 | `SEEK_END` | the end of the file/device |
 
 The three `whence` values are defined in
-`libc/include/panuti/syscall/seek.h` (`SEEK_SET 0`, `SEEK_CUR 1`,
+`libc/include/panuti/seek.h` (`SEEK_SET 0`, `SEEK_CUR 1`,
 `SEEK_END 2`), which `<panuti/syscall/syscallsf.h>` pulls in for you.
 
 **Parameters:**

@@ -4,6 +4,7 @@
 #define _PANUTI_HANDLE_H
 
 #include <stddef.h>
+#include <sys/types.h>
 
 #if defined(__cplusplus)
 extern "C" {
@@ -20,6 +21,9 @@ int handle_open(const char* path);
 
 // close an fd
 int handle_close(int fd);
+
+// change the current pos of the handle
+int handle_seek(int fd, off_t offset, int whence);
 
 #if defined(__cplusplus)
 }

@@ -8,6 +8,7 @@
 #include <panuti/stream.h>
 #include <panuti/syscall/syscallsf.h>
 #include <pcrutils/pcrutils.h>
+#include <panuti/seek.h>
 
 #define TEE_BUFSZ 128
 #define TEE_MAXFILES 8
@@ -86,7 +87,7 @@ int main(int argc, char** argv) {
 		}
 
 		if (append_mode) {
-			pcr_handle_to_end(fd);
+			handle_seek(fd, 0, SEEK_END);
 		} else {
 			uint64_t zero = 0;
 			panutisysf_resize(fd, &zero);
