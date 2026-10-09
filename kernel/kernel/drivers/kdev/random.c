@@ -60,6 +60,7 @@ static const handle_ops_t random_ops = {
 	.read = random_read,
 	.write = random_write,
 	.activate = op_not_supported_act,
+	.seek = op_seek_ignore,
 	.ready = op_not_supported_rdy,
 	.close = op_not_supported_close,
 };

@@ -4,6 +4,8 @@
 #include <kernel/handle/registry.h>
 #include <kernel/handle/handle.h>
 #include <kernel/memman/slab.h>
+#include <panuti/errno.h>
+#include <panuti/syscall/seek.h>
 #include <string.h>
 
 typedef struct block_handle {
@@ -82,6 +84,46 @@ static int block_write_op(void* impl, const void* buf, size_t len) {
 	return (int)len;
 }
 
+static int block_seek_op(void* impl, int whence, int64_t offset) {
+	block_handle_t* bh = (block_handle_t*)impl;
+	block_dev_t* dev = bh->dev;
+
+	uint64_t dev_size = dev->block_count * dev->block_size;
+
+	int64_t base;
+	switch (whence) {
+	case SEEK_SET:
+		base = 0;
+		break;
+	case SEEK_CUR:
+		base = (int64_t)bh->offset;
+		break;
+	case SEEK_END:
+		base = (dev_size > INT64_MAX) ? INT64_MAX : (int64_t)dev_size;
+		break;
+	default:
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	int64_t pos;
+	if (offset > 0 && base > INT64_MAX - offset) {
+		pos = INT64_MAX;
+	} else {
+		pos = base + offset;
+	}
+	if (pos < 0) {
+		pos = 0;
+	}
+
+	uint64_t np = (uint64_t)pos;
+	if (np > dev_size) {
+		np = dev_size;
+	}
+
+	bh->offset = (size_t)np;
+	return 0;
+}
+
 static int block_activate_op(void* impl) {
 	(void)impl;
 	return -1;
@@ -101,6 +143,7 @@ static int block_close_op(void* impl, struct task* self) {
 const handle_ops_t block_handle_ops = {
 	.read = block_read_op,
 	.write = block_write_op,
+	.seek = block_seek_op,
 	.activate = block_activate_op,
 	.ready = block_rdy_op,
 	.close = block_close_op,

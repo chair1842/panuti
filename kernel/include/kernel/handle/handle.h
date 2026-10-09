@@ -17,6 +17,7 @@ typedef struct {
 	int (*ready)(void* impl);
 	int (*close)(void* impl, struct task* self);
 	int (*resize)(void* impl, uint64_t new_size);
+	int (*seek)(void* impl, int whence, int64_t offset);
 } handle_ops_t;
 
 typedef struct {
@@ -34,6 +35,8 @@ int op_not_supported_act(void* impl);
 int op_not_supported_rdy(void* impl);
 int op_not_supported_close(void* impl, struct task* self);
 int op_not_supported_resize(void* impl, uint64_t new_size);
+int op_not_supported_seek(void* impl, int whence, int64_t offset);
+int op_seek_ignore(void* impl, int whence, int64_t offset);
 
 int handle_alloc(struct task* t, inode_type_t type);
 void handle_free(struct task* t, int fd);

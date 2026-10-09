@@ -19,6 +19,7 @@ static const handle_ops_t null_ops = {
 	.read = null_read,
 	.write = null_write,
 	.activate = op_not_supported_act,
+	.seek = op_seek_ignore,
 	.ready = op_not_supported_rdy,
 	.close = op_not_supported_close,
 };

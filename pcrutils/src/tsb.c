@@ -4,8 +4,8 @@
 #include <pcrutils/pcrutils.h>
 
 static const char HELP[] =
-	"timesb - a pcrutils utility\n\n"
-	"timesb prints the time since boot in centiseconds by default\n\n"
+	"tsb - a pcrutils utility\n\n"
+	"tsb prints the time since boot in centiseconds by default\n\n"
 	"args:\n"
 	"  -h - prints this help message\n"
 	"  -s - converts the time since boot to seconds\n"
@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
 
 	long centis;
 	if (pcr_uptime_centis(&centis) != 0) {
-		printf("timesb: cannot read /dvc/uptime\n");
+		printf("tsb: cannot read /dvc/uptime\n");
 		return -1;
 	}
 

@@ -1,8 +1,6 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include <stdio.h>
-#include <string.h>
-
 #include <panuti/errno.h>
 #include <panuti/syscall/syscallsf.h>
 #include <pcrutils/pcrutils.h>

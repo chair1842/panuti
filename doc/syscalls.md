@@ -975,15 +975,64 @@ filesystem's read/write ops, so `READ`/`WRITE` on it work as usual.
 
 ---
 
+### 30 -- SEEK
+
+```c
+int32_t panutisysf_seek(int fd, int64_t* offset, int whence);
+```
+
+Set the byte position of an open handle, so the next `READ`/`WRITE` on it
+starts from there instead of continuing where the last one left off. The
+position is computed from a *base* chosen by `whence` plus the signed `offset`
+passed by pointer:
+
+| `whence` | Base |
+|---|---|
+| `SEEK_SET` | the start of the file/device (offset 0) |
+| `SEEK_CUR` | the handle's current position |
+| `SEEK_END` | the end of the file/device |
+
+The three `whence` values are defined in
+`libc/include/panuti/syscall/seek.h` (`SEEK_SET 0`, `SEEK_CUR 1`,
+`SEEK_END 2`), which `<panuti/syscall/syscallsf.h>` pulls in for you.
+
+**Parameters:**
+- `fd` -- file descriptor index
+- `offset` -- userspace pointer to an `int64_t` holding the signed distance in bytes from the base
+- `whence` -- `SEEK_SET`, `SEEK_CUR`, or `SEEK_END`
+
+**Returns:** 0 on success, or error code.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `offset` is not a valid userspace pointer
+- `PANUTIERRNO_INVALIDARG` -- `whence` is not one of `SEEK_SET`/`SEEK_CUR`/`SEEK_END`
+- `PANUTIERRNO_BADFD` -- `fd` is out of range or empty
+- `PANUTIERRNO_UNSUPPORTEDOP` -- the handle has no seek op. This is the answer
+  for pipes, directories, the console/kbd devices, `/dvc/uptime`, and the
+  registry device files that are not listed below.
+
+**Note:** like `RESIZE`, the position is passed *by pointer*.
+
+**Note:** the result is produced by whichever handle type's seek op the kernel
+dispatches to. Today the real positional implementations are **files** on a
+mounted filesystem and **block devices**. The computed position is clamped to
+the file/device size, never going negative or past the end; a position at the
+end makes the next `READ` return 0, and `SEEK_END` on a filesystem without a
+size op fails with `PANUTIERRNO_UNSUPPORTEDOP`. The stateless
+`/dvc/null`, `/dvc/zero`, and `/dvc/random` accept any seek as a no-op. Every
+other handle type has no seek op and returns `PANUTIERRNO_UNSUPPORTEDOP`.
+
+---
+
 ## Quick Reference
 
-All 30 syscalls listed here are registered in the kernel dispatch table and
+All 31 syscalls listed here are registered in the kernel dispatch table and
 documented in detail above. Numbers are defined in
 `libc/include/panuti/syscall/syscallno.h`.
 
 The dispatch table has 256 slots. Any number at or above `256` returns
 `PANUTIERRNO_INVALIDSYSCALL`, as does any number below `256` that is not
-registered -- today that is `30` through `255`, so they are reserved rather
+registered -- today that is `31` through `255`, so they are reserved rather
 than permanently invalid.
 
 | # | Name | # | Name |
@@ -1003,6 +1052,7 @@ than permanently invalid.
 | 12 | `YIELD` | 26 | `MMAPAN` |
 | 13 | `RENAME` | 27 | `MUNMAP` |
 | 28 | `RESIZE` | 29 | `MKFILE` |
+| 30 | `SEEK` |  |  |
 
 ## Limits
 

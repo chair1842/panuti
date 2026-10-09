@@ -4,6 +4,7 @@
 #define _PANUTI_SYSCALLSF_H
 
 #include "panuti/dirent.h"
+#include "seek.h"
 #include "syscall.h"
 #include "syscallno.h"
 #include <stddef.h>
@@ -151,6 +152,10 @@ static inline int32_t panutisysf_resize(int fd, uint64_t* new_size) {
 
 static inline int32_t panutisysf_mkfile(const char* path) {
 	return panuti_syscall(SYSHANDLER_MKFILE, (uint32_t)path, 0, 0, 0);
+}
+
+static inline int32_t panutisysf_seek(int fd, int64_t* offset, int whence) {
+	return panuti_syscall(SYSHANDLER_SEEK, (uint32_t)fd, (uint32_t)offset, (uint32_t)whence, 0);
 }
 
 #if defined(__cplusplus)

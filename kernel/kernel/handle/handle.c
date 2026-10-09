@@ -36,6 +36,16 @@ int op_not_supported_resize(void* impl, uint64_t new_size) {
 	return PANUTIERRNO_UNSUPPORTEDOP;
 }
 
+int op_not_supported_seek(void* impl, int whence, int64_t offset) {
+	(void)impl; (void)whence; (void)offset;
+	return PANUTIERRNO_UNSUPPORTEDOP;
+}
+
+int op_seek_ignore(void* impl, int whence, int64_t offset) {
+	(void)impl; (void)whence; (void)offset;
+	return 0;
+}
+
 int handle_alloc(task_t* t, inode_type_t type) {
 	for (int i = 0; i < MAX_HANDLES; i++) {
 		if (t->handles[i].type == INODE_NONE) {

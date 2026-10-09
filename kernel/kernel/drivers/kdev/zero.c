@@ -21,6 +21,7 @@ static const handle_ops_t zero_ops = {
 	.read = zero_read,
 	.write = zero_write,
 	.activate = op_not_supported_act,
+	.seek = op_seek_ignore,
 	.ready = op_not_supported_rdy,
 	.close = op_not_supported_close,
 };

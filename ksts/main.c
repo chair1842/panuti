@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: BSD-3-Clause */
 
 #include <panuti/syscall/syscallsf.h>
+#include <panuti/syscall/seek.h>
 #include <panuti/syscall/syscall.h>
 #include <panuti/syscall/syscallno.h>
 #include <panuti/errno.h>
@@ -2112,6 +2113,96 @@ int main(int argc, char** argv) {
 				check(console, "procreate pur -n too many pipes", 0, 1);
 			}
 		}
+	}
+
+
+	/* ---- 54. seek ---- */
+	section(console, "54. seek");
+
+	{
+		/* block devices are positional: ram0 is 512 KiB */
+		int fd = panutisysf_open("/dvc/ram0");
+		check(console, "open /dvc/ram0", fd >= 0 ? PANUTIERRNO_PLAINSUCCESS : -1, PANUTIERRNO_PLAINSUCCESS);
+
+		const char data[4] = { 'A', 'B', 'C', 'D' };
+		int32_t w = panutisysf_write(fd, data, 4);
+		check(console, "write 4 bytes at offset 0", w, 4);
+
+		int64_t off = 0;
+		int32_t s = panutisysf_seek(fd, &off, SEEK_SET);
+		check(console, "SEEK_SET 0", s, PANUTIERRNO_PLAINSUCCESS);
+
+		char buf[4];
+		int32_t n = panutisysf_read(fd, buf, 4);
+		check(console, "read 4 after seek 0", n, 4);
+		check(console, "read-back matches write", memcmp(buf, data, 4), 0);
+
+		off = 2;
+		s = panutisysf_seek(fd, &off, SEEK_SET);
+		check(console, "SEEK_SET 2", s, PANUTIERRNO_PLAINSUCCESS);
+		n = panutisysf_read(fd, buf, 2);
+		check(console, "read 2 after seek 2", n, 2);
+		check(console, "read-back at offset 2", memcmp(buf, data + 2, 2), 0);
+
+		/* SEEK_CUR: we are at offset 4, step back 2 -> 2 */
+		off = -2;
+		s = panutisysf_seek(fd, &off, SEEK_CUR);
+		check(console, "SEEK_CUR -2", s, PANUTIERRNO_PLAINSUCCESS);
+		n = panutisysf_read(fd, buf, 1);
+		check(console, "read 1 at offset 2 via CUR", n, 1);
+		check(console, "CUR lands on 'C'", buf[0], 'C');
+
+		/* SEEK_END 0 pins to the device size, read hits EOF */
+		off = 0;
+		s = panutisysf_seek(fd, &off, SEEK_END);
+		check(console, "SEEK_END 0", s, PANUTIERRNO_PLAINSUCCESS);
+		n = panutisysf_read(fd, buf, 4);
+		check(console, "read at end returns 0", n, 0);
+
+		/* SEEK_END -1 reads the last byte */
+		off = -1;
+		s = panutisysf_seek(fd, &off, SEEK_END);
+		check(console, "SEEK_END -1", s, PANUTIERRNO_PLAINSUCCESS);
+		n = panutisysf_read(fd, buf, 1);
+		check(console, "read last byte", n, 1);
+
+		/* seeking past the end clamps to the device size */
+		off = (int64_t)1 << 40;
+		s = panutisysf_seek(fd, &off, SEEK_SET);
+		check(console, "SEEK_SET past end clamps", s, PANUTIERRNO_PLAINSUCCESS);
+		n = panutisysf_read(fd, buf, 4);
+		check(console, "read at clamped EOF returns 0", n, 0);
+
+		/* negative positions clamp to 0 */
+		off = -100;
+		s = panutisysf_seek(fd, &off, SEEK_SET);
+		check(console, "SEEK_SET negative clamps to 0", s, PANUTIERRNO_PLAINSUCCESS);
+		n = panutisysf_read(fd, buf, 1);
+		check(console, "read first byte after clamp", n, 1);
+		check(console, "clamped to 'A'", buf[0], 'A');
+
+		/* invalid whence */
+		off = 0;
+		s = panutisysf_seek(fd, &off, 99);
+		check(console, "seek invalid whence -> INVALIDARG", s, PANUTIERRNO_INVALIDARG);
+
+		panutisysf_close(fd);
+
+		/* non-positional handle: console has no seek op */
+		int con = panutisysf_open("/dvc/console");
+		off = 0;
+		s = panutisysf_seek(con, &off, SEEK_SET);
+		check(console, "seek console -> UNSUPPORTEDOP", s, PANUTIERRNO_UNSUPPORTEDOP);
+		panutisysf_close(con);
+
+		/* bad fd */
+		off = 0;
+		s = panutisysf_seek(99, &off, SEEK_SET);
+		check(console, "seek bad fd -> BADFD", s, PANUTIERRNO_BADFD);
+
+		/* garbage pointer */
+		s = panutisysf_seek(0, (int64_t*)0x4, SEEK_SET);
+		check(console, "seek bad arg -> INVALIDADDR", s, PANUTIERRNO_INVALIDADDR);
 	}
 
 
