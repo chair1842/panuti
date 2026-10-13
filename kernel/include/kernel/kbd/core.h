@@ -11,4 +11,6 @@ void kbd_core_push(keypacket_t packet);
 int kbd_core_read_line_queue(keypacket_t* out);
 int kbd_core_read_raw_queue(keypacket_t* out);
 
+void kbd_core_drain_raw_queue(void);
+
 #endif

@@ -11,6 +11,7 @@ struct task;
 struct inode;
 
 typedef struct {
+	int (*open)(void* impl);
 	int (*read)(void* impl, void* buf, size_t len);
 	int (*write)(void* impl, const void* buf, size_t len);
 	int (*activate)(void* impl);

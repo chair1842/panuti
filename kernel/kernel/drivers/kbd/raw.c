@@ -7,6 +7,12 @@
 #include <panuti/kbd.h>
 #include <string.h>
 
+static int kbd_raw_open(void* impl) {
+	(void)impl;
+	kbd_core_drain_raw_queue();
+	return 0;
+}
+
 static int kbd_raw_read(void* impl, void* buf, size_t len) {
 	(void)impl;
 
@@ -29,6 +35,7 @@ static int kbd_raw_read(void* impl, void* buf, size_t len) {
 }
 
 static const handle_ops_t kbd_raw_ops = {
+	.open = kbd_raw_open,
 	.read = kbd_raw_read,
 	.write = op_not_supported_w,
 	.activate = op_not_supported_act,

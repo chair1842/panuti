@@ -3,6 +3,7 @@
 #include <kernel/kbd/core.h>
 #include <kernel/sched/task.h>
 #include <kernel/sched/sched.h>
+#include <kernel/irq.h>
 
 #define KBD_QUEUE_SIZE 64
 #define KBD_MAX_WAITERS 8
@@ -67,4 +68,14 @@ int kbd_core_read_line_queue(keypacket_t* out) {
 
 int kbd_core_read_raw_queue(keypacket_t* out) {
 	return queue_read(&raw_queue, out);
+}
+
+void kbd_core_drain_raw_queue(void) {
+	uint32_t flags = irq_save_disable();
+
+	raw_queue.head = 0;
+	raw_queue.tail = 0;
+	raw_queue.count = 0;
+
+	irq_restore(flags);
 }

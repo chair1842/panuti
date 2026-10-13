@@ -83,6 +83,14 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	t->handles[des].ops = n->ops;
 	t->handles[des].inode = n;
 
+	if (n->ops && n->ops->open) {
+		int orc = n->ops->open(n->impl);
+		if (orc < 0) {
+			handle_free(t, des);
+			return orc;
+		}
+	}
+
 	n->refcount++;
 	return des;
 }
