@@ -6,6 +6,7 @@
 #include <panuti/handle.h>
 #include <panuti/stat.h>
 #include <panuti/kbd.h>
+#include <panuti/stream.h>
 
 #define ROWS 24
 #define COLS 80
@@ -149,14 +150,20 @@ static void draw(void) {
 		n += COLS;
 	}
 	
-	buf[n] = '\0';
-	printf("%s", buf);
+	stream_write(0, buf, n);
 }
 
 int main(int argc, char** argv) {
 	if (argc < 2) {
 		printf("nib: usage: nib <file>\n");
 		return -1;
+	}
+	
+	if (argv[1] == "-h") {
+		printf("nib 0.1\n");
+		printf("usage: nib <file>\n");
+
+		return 0;
 	}
 
 	if (!load(argv[1])) {
@@ -171,7 +178,7 @@ int main(int argc, char** argv) {
 	}
 
 	printf("\f");
-	printf("%s", (char[]){ 0x1B, 'W', 0 });
+	stream_write(0, (char[]){ 0x1B, 'W', 0 }, 3);
 	draw();
 
 	while (1) {
@@ -195,7 +202,7 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	printf("%s", (char[]){ 0x1B, 'R', 0 });
+	stream_write(0, (char[]){ 0x1B, 'R' }, 2);
 	printf("\f");
 	handle_close(kbd);
 	
