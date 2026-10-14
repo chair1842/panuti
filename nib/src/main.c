@@ -132,8 +132,12 @@ bool load(const char* path) {
 // all it must do is take in the current ui state
 // it shouldnt write anything, just display
 static void draw(void) {
-	char buf[ROWS * (4 + COLS) + 8];
+	char buf[ROWS * (4 + COLS) + 16];
 	size_t n = 0;
+
+	buf[n++] = 0x1B;
+	buf[n++] = 'V';
+	buf[n++] = 0;
 
 	for (int r = 0; r < ROWS; r++) {
 		buf[n++] = 0x1B;
@@ -167,6 +171,10 @@ static void draw(void) {
 	buf[n++] = (char)(EGG.cur_x - EGG.vup_x);
 	buf[n++] = (char)(EGG.cur_y - EGG.vup_y);
 
+	buf[n++] = 0x1B;
+	buf[n++] = 'V';
+	buf[n++] = 1;
+
 	stream_write(0, buf, n);
 }
 
@@ -199,7 +207,6 @@ int main(int argc, char** argv) {
 
 	// main loop
 	while (1) {
-		printf("\f");
 		draw();
 		
 		keypacket_t kp;
