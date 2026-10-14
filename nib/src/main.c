@@ -22,8 +22,11 @@ typedef struct editor_global {
 	int nlines;
 	int capl;
 
-	int vup_y;
 	int vup_x;
+	int vup_y;
+	
+	int cur_x;
+	int cur_y;
 } editor_global_t;
 
 // why is this called egg?
@@ -125,8 +128,11 @@ bool load(const char* path) {
 	return true;
 }
 
+// draw's job is to draw to the screen
+// all it must do is take in the current ui state
+// it shouldnt write anything, just display
 static void draw(void) {
-	char buf[ROWS * (4 + COLS) + 1];
+	char buf[ROWS * (4 + COLS) + 8];
 	size_t n = 0;
 
 	for (int r = 0; r < ROWS; r++) {
@@ -139,9 +145,15 @@ static void draw(void) {
 		int len = 0;
 		
 		if (row < EGG.nlines) {
-			len = EGG.lines[row].len < COLS ? EGG.lines[row].len : COLS;
+			int start = EGG.vup_x;
+			int avail = EGG.lines[row].len - start;
+			if (avail < 0) {
+				avail = 0;
+			}
+
+			len = avail < COLS ? avail : COLS;
 			for (int i = 0; i < len; i++) {
-				unsigned char c = (unsigned char)EGG.lines[row].string[i];
+				unsigned char c = (unsigned char)EGG.lines[row].string[start + i];
 				buf[n + i] = (c < 0x20 || c == 0x7F) ? '?' : (char)c;
 			}
 		}
@@ -150,6 +162,11 @@ static void draw(void) {
 		n += COLS;
 	}
 	
+	buf[n++] = 0x1B;
+	buf[n++] = 'M';
+	buf[n++] = (char)(EGG.cur_x - EGG.vup_x);
+	buf[n++] = (char)(EGG.cur_y - EGG.vup_y);
+
 	stream_write(0, buf, n);
 }
 
@@ -179,9 +196,12 @@ int main(int argc, char** argv) {
 
 	printf("\f");
 	stream_write(0, (char[]){ 0x1B, 'W', 0 }, 3);
-	draw();
 
+	// main loop
 	while (1) {
+		printf("\f");
+		draw();
+		
 		keypacket_t kp;
 		int n = handle_read(kbd, &kp, sizeof(kp));
 
@@ -199,6 +219,55 @@ int main(int argc, char** argv) {
 
 		if (kp.keycode == KEYCODE_Q) {
 			break;
+		}
+
+		switch (kp.keycode) {
+			case KEYCODE_H:
+				if (EGG.cur_x > 0) {
+					EGG.cur_x--;
+				}
+				
+				break;
+			case KEYCODE_L:
+				if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
+					EGG.cur_x++;
+				}
+				
+				break;
+			case KEYCODE_J:
+				if (EGG.cur_y + 1 < EGG.nlines) {
+					EGG.cur_y++;
+				}
+				
+				break;
+			case KEYCODE_K:
+				if (EGG.cur_y > 0) {
+					EGG.cur_y--;
+				}
+				
+				break;
+			default:
+				continue;
+		}
+
+		if (EGG.cur_x > EGG.lines[EGG.cur_y].len) {
+			EGG.cur_x = EGG.lines[EGG.cur_y].len;
+		}
+
+		if (EGG.cur_y < EGG.vup_y) {
+			EGG.vup_y = EGG.cur_y;
+		}
+
+		if (EGG.cur_y >= EGG.vup_y + ROWS) {
+			EGG.vup_y = EGG.cur_y - ROWS + 1;
+		}
+
+		if (EGG.cur_x < EGG.vup_x) {
+			EGG.vup_x = EGG.cur_x;
+		}
+
+		if (EGG.cur_x >= EGG.vup_x + COLS) {
+			EGG.vup_x = EGG.cur_x - COLS + 1;
 		}
 	}
 
