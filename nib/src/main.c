@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 	
-	if (argv[1] == "-h") {
+	if (strcmp(argv[1], "-h") == 0) {
 		printf("nib 0.1\n");
 		printf("usage: nib <file>\n");
 
