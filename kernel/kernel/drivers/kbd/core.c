@@ -79,3 +79,13 @@ void kbd_core_drain_raw_queue(void) {
 
 	irq_restore(flags);
 }
+
+void kbd_core_drain_line_queue(void) {
+	uint32_t flags = irq_save_disable();
+
+	line_queue.head = 0;
+	line_queue.tail = 0;
+	line_queue.count = 0;
+
+	irq_restore(flags);
+}

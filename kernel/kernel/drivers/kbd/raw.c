@@ -13,6 +13,13 @@ static int kbd_raw_open(void* impl) {
 	return 0;
 }
 
+static int kbd_raw_close(void* impl, struct task* self) {
+	(void)impl;
+	(void)self;
+	kbd_core_drain_line_queue();
+	return 0;
+}
+
 static int kbd_raw_read(void* impl, void* buf, size_t len) {
 	(void)impl;
 
@@ -40,7 +47,7 @@ static const handle_ops_t kbd_raw_ops = {
 	.write = op_not_supported_w,
 	.activate = op_not_supported_act,
 	.ready = op_not_supported_rdy,
-	.close = op_not_supported_close,
+	.close = kbd_raw_close,
 };
 
 void kbd_raw_init(void) {
