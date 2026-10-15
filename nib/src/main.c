@@ -17,6 +17,16 @@ typedef struct line {
 	int cap;
 } line_t;
 
+typedef enum editor_mode {
+	EM_NORMAL,
+	EM_COMMAND,
+	EM_INSERT
+} editor_mode_t;
+
+typedef struct commandmode_state {
+	line_t command;
+} commandmode_state_t;
+
 typedef struct editor_global {
 	line_t* lines;
 	int nlines;
@@ -27,6 +37,13 @@ typedef struct editor_global {
 	
 	int cur_x;
 	int cur_y;
+	
+	editor_mode_t mode;
+	
+	line_t errormsg;
+	bool show_errmsg;
+	
+	commandmode_state_t cmstate;
 } editor_global_t;
 
 // why is this called egg?
@@ -35,6 +52,78 @@ typedef struct editor_global {
 // the name is very annoying to work with.
 // but its for the sake of it
 static editor_global_t EGG;
+
+static void line_init(line_t* l) {
+	l->string = NULL;
+	l->len = 0;
+	l->cap = 0;
+}
+
+static bool line_reserve(line_t* l, int cap) {
+	if (l->cap >= cap) {
+		return true;
+	}
+
+	char* ns = realloc(l->string, cap);
+	if (!ns) {
+		return false;
+	}
+
+	l->string = ns;
+	l->cap = cap;
+	return true;
+}
+
+static bool line_set(line_t* l, const char* str, int len) {
+	if (!line_reserve(l, len + 1)) {
+		return false;
+	}
+
+	memcpy(l->string, str, len);
+	l->string[len] = '\0';
+	l->len = len;
+	return true;
+}
+
+static bool line_append(line_t* l, char c) {
+	if (!line_reserve(l, l->len + 2)) {
+		return false;
+	}
+
+	l->string[l->len++] = c;
+	l->string[l->len] = '\0';
+	return true;
+}
+
+static bool line_insert(line_t* l, int pos, char c) {
+	if (pos < 0) {
+		pos = 0;
+	}
+	if (pos > l->len) {
+		pos = l->len;
+	}
+
+	if (!line_reserve(l, l->len + 2)) {
+		return false;
+	}
+
+	memmove(l->string + pos + 1, l->string + pos, l->len - pos);
+	l->string[pos] = c;
+	l->len++;
+	l->string[l->len] = '\0';
+	return true;
+}
+
+static void line_backspace(line_t* l) {
+	if (l->len > 0) {
+		l->string[--l->len] = '\0';
+	}
+}
+
+static void line_free(line_t* l) {
+	free(l->string);
+	line_init(l);
+}
 
 static bool add_line(const char* str, int len) {
 	if (EGG.nlines == EGG.capl) {
@@ -49,16 +138,12 @@ static bool add_line(const char* str, int len) {
 	}
 
 	line_t* l = &EGG.lines[EGG.nlines];
-	
-	l->cap = len + 1;
-	l->string = malloc(l->cap);
-	if (!l->string) {
+	line_init(l);
+
+	if (!line_set(l, str, len)) {
 		return false;
 	}
 
-	memcpy(l->string, str, len);
-	l->string[len] = '\0';
-	l->len = len;
 	EGG.nlines++;
 
 	return true;
@@ -128,11 +213,115 @@ bool load(const char* path) {
 	return true;
 }
 
+int handin_normal(keypacket_t kp) {
+	if (kp.keycode == KEYCODE_SEMICOLON && kp.shift == true) {
+		EGG.mode = EM_COMMAND;
+		return 0;
+	} else if (kp.keycode == KEYCODE_ESCAPE) {
+		EGG.show_errmsg = false;
+		return 0;
+	}
+
+	switch (kp.keycode) {
+		case KEYCODE_H:
+			if (EGG.cur_x > 0) {
+				EGG.cur_x--;
+			}
+			
+			break;
+		case KEYCODE_L:
+			if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
+				EGG.cur_x++;
+			}
+			
+			break;
+		case KEYCODE_J:
+			if (EGG.cur_y + 1 < EGG.nlines) {
+				EGG.cur_y++;
+			}
+			
+			break;
+		case KEYCODE_K:
+			if (EGG.cur_y > 0) {
+				EGG.cur_y--;
+			}
+			
+			break;
+		default:
+			break;
+	}
+
+	return 0;
+}
+
+static inline void hicommand_swnorm() {
+	line_free(&EGG.cmstate.command);
+	EGG.mode = EM_NORMAL;
+}
+
+static int hicommand_prcc(void) {
+	line_t* command = &EGG.cmstate.command;
+
+	if (command->len == 0) {
+		return 0;
+	}
+
+	if (strcmp(command->string, "q") == 0) {
+		return 1;
+	}
+
+	line_free(&EGG.errormsg);
+	line_set(&EGG.errormsg, "command \"", 9);
+
+	for (int i = 0; i < command->len; i++) {
+		line_append(&EGG.errormsg, command->string[i]);
+	}
+
+	const char* tail = "\" is not recognized";
+	for (const char* p = tail; *p != '\0'; p++) {
+		line_append(&EGG.errormsg, *p);
+	}
+
+	return 2;
+}
+
+int handin_command(keypacket_t kp) {
+	EGG.show_errmsg = false;
+	
+	if (kp.keycode == KEYCODE_ESCAPE) {
+		hicommand_swnorm();
+		
+		return 0;
+	} else if (kp.keycode == KEYCODE_ENTER) {
+		int prc = hicommand_prcc();
+		hicommand_swnorm();
+		
+		return prc;
+	} else if (kp.keycode == KEYCODE_BACKSPACE) {
+		if (EGG.cmstate.command.len == 0) {
+			hicommand_swnorm();
+			
+			return 0;
+		}
+
+		line_backspace(&EGG.cmstate.command);
+		
+		return 0;
+	}
+
+	char c = keypacket_to_ascii(kp);
+	if (c != 0) {
+		line_append(&EGG.cmstate.command, c);
+	}
+	
+	return 0;
+}
+
 // draw's job is to draw to the screen
 // all it must do is take in the current ui state
 // it shouldnt write anything, just display
 static void draw(void) {
-	char buf[ROWS * (4 + COLS) + 16];
+	char buf[(ROWS + 1) * (4 + COLS) + 24];
 	size_t n = 0;
 
 	buf[n++] = 0x1B;
@@ -165,11 +354,63 @@ static void draw(void) {
 		memset(buf + n + len, ' ', COLS - len);
 		n += COLS;
 	}
-	
+
 	buf[n++] = 0x1B;
 	buf[n++] = 'M';
-	buf[n++] = (char)(EGG.cur_x - EGG.vup_x);
-	buf[n++] = (char)(EGG.cur_y - EGG.vup_y);
+	buf[n++] = 0;
+	buf[n++] = (char)ROWS;
+
+	bool err = EGG.mode != EM_COMMAND && EGG.show_errmsg;
+
+	if (err) {
+		buf[n++] = 0x1B;
+		buf[n++] = 'A';
+		buf[n++] = 0x47;
+	}
+
+	int slen = 0;
+	if (EGG.mode == EM_COMMAND) {
+		buf[n++] = ':';
+		slen++;
+
+		for (int i = 0; i < EGG.cmstate.command.len && slen < COLS; i++) {
+			unsigned char c = (unsigned char)EGG.cmstate.command.string[i];
+			buf[n++] = (c < 0x20 || c == 0x7F) ? '?' : (char)c;
+			slen++;
+		}
+	} else if (EGG.show_errmsg) {
+		for (int i = 0; i < EGG.errormsg.len && slen < COLS; i++) {
+			unsigned char c = (unsigned char)EGG.errormsg.string[i];
+			buf[n++] = (c < 0x20 || c == 0x7F) ? '?' : (char)c;
+			slen++;
+		}
+	}
+
+	if (err) {
+		buf[n++] = 0x1B;
+		buf[n++] = 'A';
+		buf[n++] = 0x07;
+	}
+
+	memset(buf + n, ' ', COLS - slen);
+	n += COLS - slen;
+
+	int ccx = EGG.cur_x - EGG.vup_x;
+	int ccy = EGG.cur_y - EGG.vup_y;
+
+	if (EGG.mode == EM_COMMAND) {
+		ccx = 1 + EGG.cmstate.command.len;
+		ccy = ROWS;
+
+		if (ccx >= COLS) {
+			ccx = COLS - 1;
+		}
+	}
+
+	buf[n++] = 0x1B;
+	buf[n++] = 'M';
+	buf[n++] = (char)ccx;
+	buf[n++] = (char)ccy;
 
 	buf[n++] = 0x1B;
 	buf[n++] = 'V';
@@ -224,39 +465,30 @@ int main(int argc, char** argv) {
 			continue;
 		}
 
-		if (kp.keycode == KEYCODE_Q) {
-			break;
-		}
-
-		switch (kp.keycode) {
-			case KEYCODE_H:
-				if (EGG.cur_x > 0) {
-					EGG.cur_x--;
-				}
-				
+		// mode handling values
+		// 0 = continue
+		// 1 = quit
+		// 2 = error
+		int hc = 0;
+		
+		switch (EGG.mode) {
+			case EM_NORMAL:
+				hc = handin_normal(kp);
 				break;
-			case KEYCODE_L:
-				if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
-					EGG.cur_x++;
-				}
-				
-				break;
-			case KEYCODE_J:
-				if (EGG.cur_y + 1 < EGG.nlines) {
-					EGG.cur_y++;
-				}
-				
-				break;
-			case KEYCODE_K:
-				if (EGG.cur_y > 0) {
-					EGG.cur_y--;
-				}
-				
+			case EM_COMMAND:
+				hc = handin_command(kp);
 				break;
 			default:
-				continue;
+				hc = 1;
+				break;
 		}
 
+		if (hc == 1) {
+			break;
+		} else if (hc == 2) {
+			EGG.show_errmsg = true;
+		}
+		
 		if (EGG.cur_x > EGG.lines[EGG.cur_y].len) {
 			EGG.cur_x = EGG.lines[EGG.cur_y].len;
 		}
