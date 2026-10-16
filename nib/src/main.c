@@ -47,6 +47,8 @@ typedef struct editor_global {
 	bool show_errmsg;
 	
 	commandmode_state_t cmstate;
+	
+	bool dirty;
 } editor_global_t;
 
 // why is this called egg?
@@ -128,26 +130,56 @@ static void line_free(line_t* l) {
 	line_init(l);
 }
 
-static bool add_line(const char* str, int len) {
+static line_t* line_new_at(int at) {
 	if (EGG.nlines == EGG.capl) {
 		int ncap = EGG.capl ? EGG.capl * 2 : 64;
 		line_t* nl = realloc(EGG.lines, ncap * sizeof(line_t));
 		if (!nl) {
-			return false;
+			return NULL;
 		}
 
 		EGG.lines = nl;
 		EGG.capl = ncap;
 	}
 
-	line_t* l = &EGG.lines[EGG.nlines];
-	line_init(l);
+	if (at < 0) {
+		at = 0;
+	}
+	if (at > EGG.nlines) {
+		at = EGG.nlines;
+	}
 
-	if (!line_set(l, str, len)) {
+	memmove(&EGG.lines[at + 1], &EGG.lines[at], (size_t)(EGG.nlines - at) * sizeof(line_t));
+
+	line_init(&EGG.lines[at]);
+	EGG.nlines++;
+
+	return &EGG.lines[at];
+}
+
+static bool line_delete_at(int at) {
+	if (at < 0 || at >= EGG.nlines) {
 		return false;
 	}
 
-	EGG.nlines++;
+	line_free(&EGG.lines[at]);
+
+	memmove(&EGG.lines[at], &EGG.lines[at + 1], (size_t)(EGG.nlines - at - 1) * sizeof(line_t));
+
+	EGG.nlines--;
+	return true;
+}
+
+static bool add_line(const char* str, int len) {
+	line_t* l = line_new_at(EGG.nlines);
+	if (!l) {
+		return false;
+	}
+
+	if (!line_set(l, str, len)) {
+		line_delete_at(EGG.nlines - 1);
+		return false;
+	}
 
 	return true;
 }
@@ -233,6 +265,10 @@ static bool write_all(int fd, const void* data, size_t len) {
 }
 
 bool save(const char* path) {
+	if (!EGG.dirty) {
+		return true;
+	}
+
 	if (!nexist(path)) {
 		if (panutisysf_mkfile(path) < 0) {
 			return false;
@@ -261,6 +297,11 @@ bool save(const char* path) {
 	}
 
 	handle_close(fd);
+
+	if (ok) {
+		EGG.dirty = false;
+	}
+
 	return ok;
 }
 
@@ -270,6 +311,49 @@ int handin_normal(keypacket_t kp) {
 		return 0;
 	} else if (kp.keycode == KEYCODE_ESCAPE) {
 		EGG.show_errmsg = false;
+		return 0;
+	} else if (kp.keycode == KEYCODE_ENTER) {
+		EGG.dirty = true;
+		
+		line_t* l = line_new_at(EGG.cur_y + 1);
+		if (!l) {
+			line_free(&EGG.errormsg);
+			line_set(&EGG.errormsg, "out of memory", 13);
+			return 2;
+		}
+
+		EGG.cur_y++;
+		EGG.cur_x = 0;
+
+		return 0;
+	} else if (kp.keycode == KEYCODE_O && !kp.shift) {
+		EGG.dirty = true;
+		
+		line_t* l = line_new_at(EGG.cur_y + 1);
+		if (!l) {
+			line_free(&EGG.errormsg);
+			line_set(&EGG.errormsg, "out of memory", 13);
+			return 2;
+		}
+
+		EGG.cur_y++;
+		EGG.cur_x = 0;
+		EGG.mode = EM_INSERT;
+
+		return 0;
+	} else if (kp.keycode == KEYCODE_O) {
+		EGG.dirty = true;
+		
+		line_t* l = line_new_at(EGG.cur_y);
+		if (!l) {
+			line_free(&EGG.errormsg);
+			line_set(&EGG.errormsg, "out of memory", 13);
+			return 2;
+		}
+
+		EGG.cur_x = 0;
+		EGG.mode = EM_INSERT;
+
 		return 0;
 	}
 
@@ -374,6 +458,10 @@ int handin_command(keypacket_t kp) {
 	}
 	
 	return 0;
+}
+
+int handin_insert(keypacket_t kp) {
+	// todo
 }
 
 // draw's job is to draw to the screen
