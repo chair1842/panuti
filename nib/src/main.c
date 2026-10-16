@@ -652,6 +652,10 @@ static void draw(void) {
 	buf[n++] = 0;
 	buf[n++] = (char)ROWS;
 
+	buf[n++] = 0x1B;
+	buf[n++] = 'A';
+	buf[n++] = 0x70;
+
 	const char* mode_str;
 	switch (EGG.mode) {
 		case EM_COMMAND:
@@ -725,7 +729,7 @@ static void draw(void) {
 	if (err) {
 		buf[n++] = 0x1B;
 		buf[n++] = 'A';
-		buf[n++] = 0x07;
+		buf[n++] = 0x70;
 	}
 
 	memset(buf + n, ' ', COLS - slen);
@@ -739,6 +743,10 @@ static void draw(void) {
 	for (const char* p = mode_str; *p != '\0'; p++) {
 		buf[n++] = *p;
 	}
+
+	buf[n++] = 0x1B;
+	buf[n++] = 'A';
+	buf[n++] = 0x07;
 
 	int ccx;
 	int ccy = EGG.cur_y - EGG.vup_y;
