@@ -7,6 +7,7 @@
 #include <panuti/stat.h>
 #include <panuti/kbd.h>
 #include <panuti/stream.h>
+#include <panuti/syscall/syscallsf.h>
 
 #define ROWS 24
 #define COLS 80
@@ -31,6 +32,8 @@ typedef struct editor_global {
 	line_t* lines;
 	int nlines;
 	int capl;
+
+	const char* path;
 
 	int vup_x;
 	int vup_y;
@@ -213,6 +216,54 @@ bool load(const char* path) {
 	return true;
 }
 
+static bool write_all(int fd, const void* data, size_t len) {
+	const char* p = data;
+	size_t off = 0;
+
+	while (off < len) {
+		int w = handle_write(fd, p + off, len - off);
+		if (w <= 0) {
+			return false;
+		}
+
+		off += (size_t)w;
+	}
+
+	return true;
+}
+
+bool save(const char* path) {
+	if (!nexist(path)) {
+		if (panutisysf_mkfile(path) < 0) {
+			return false;
+		}
+	}
+
+	int fd = handle_open(path);
+	if (fd < 0) {
+		return false;
+	}
+
+	uint64_t zero = 0;
+	panutisysf_resize(fd, &zero);
+
+	bool ok = true;
+
+	for (int i = 0; i < EGG.nlines && ok; i++) {
+		if (EGG.lines[i].len > 0) {
+			ok = write_all(fd, EGG.lines[i].string, (size_t)EGG.lines[i].len);
+		}
+
+		if (ok) {
+			char nl = '\n';
+			ok = write_all(fd, &nl, 1);
+		}
+	}
+
+	handle_close(fd);
+	return ok;
+}
+
 int handin_normal(keypacket_t kp) {
 	if (kp.keycode == KEYCODE_SEMICOLON && kp.shift == true) {
 		EGG.mode = EM_COMMAND;
@@ -268,6 +319,14 @@ static int hicommand_prcc(void) {
 
 	if (strcmp(command->string, "q") == 0) {
 		return 1;
+	} else if (strcmp(command->string, "w") == 0) {
+		if (!save(EGG.path)) {
+			line_free(&EGG.errormsg);
+			line_set(&EGG.errormsg, "could not save the file", 24);
+			return 2;
+		}
+
+		return 0;
 	}
 
 	line_free(&EGG.errormsg);
@@ -461,7 +520,9 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
-	if (!load(argv[1])) {
+	EGG.path = argv[1];
+
+	if (!load(EGG.path)) {
 		printf("nib: could not open \"%s\"\n", argv[1]);
 		return -1;
 	}
