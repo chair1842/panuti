@@ -3,6 +3,7 @@
 #include "ast.h"
 #include "exec.h"
 #include "parse.h"
+#include "run.h"
 
 #include <panuti/errno.h>
 #include <panuti/stream.h>
@@ -110,7 +111,7 @@ int main(int argc, char** argv) {
 
 			pur_ast_reset();
 
-			int prc = pur_parse(stmt_buf);
+			int prc = pur_parse_command(stmt_buf);
 			if (prc != PUR_PARSE_OK) {
 				free(stmt_buf);
 				printf("pur: %s\n", pur_parse_strerror(prc));
@@ -118,10 +119,9 @@ int main(int argc, char** argv) {
 			}
 
 			int status = 0;
-			int xrc = dry_run ? pur_exec_plan() : pur_exec(&status);
+			int drc = pur_run_command(dry_run, &status);
 			free(stmt_buf);
-			if (xrc != PUR_EXEC_OK) {
-				printf("pur: %s\n", pur_exec_strerror(xrc));
+			if (drc != 0) {
 				return 1;
 			}
 
@@ -164,7 +164,7 @@ int main(int argc, char** argv) {
 
 		pur_ast_reset();
 
-		int rc = pur_parse(line);
+		int rc = pur_parse_command(line);
 		if (rc == PUR_PARSE_EMPTY) {
 			continue;
 		}
@@ -175,13 +175,9 @@ int main(int argc, char** argv) {
 		}
 
 		int status = 0;
-		rc = pur_exec(&status);
-		
+		pur_run_command(false, &status);
+
 		putchar(0x1B);
 		putchar('R');
-		
-		if (rc != PUR_EXEC_OK) {
-			printf("pur: %s\n", pur_exec_strerror(rc));
-		}
 	}
 }

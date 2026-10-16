@@ -6,6 +6,20 @@
 #include <stddef.h>
 #include <stdlib.h>
 
+// The grammar pur accepts:
+//
+//   command    := expression ( op expression )*
+//   op         := "&&" | "||" | "&"
+//   expression := operand ( ">" operand )*
+//   operand    := word+ | "(" expression ( ";" expression )* ")"
+//
+// '>' binds tighter than the command operators, which share one precedence
+// and are left associative. A command is validated in full before any of it
+// runs. The command operators are command level only: inside a group they are
+// a syntax error, because a group's members run together. A lone '|' is
+// rejected - pur pipes with '>' - and a trailing '&' is rejected too, so it
+// never quietly runs in the foreground while backgrounding waits to be built.
+
 #define PUR_GROUP_INIT 8
 
 typedef enum {
@@ -15,6 +29,10 @@ typedef enum {
 	PUR_T_RPAREN,
 	PUR_T_SEMI,
 	PUR_T_GT,
+	PUR_T_AND,
+	PUR_T_OR,
+	PUR_T_BG,
+	PUR_T_PIPE,
 } pur_tok_t;
 
 typedef struct {
@@ -29,6 +47,14 @@ static size_t toks_cap;
 static int ntoks;
 static int pos;
 static char *line;
+
+// one command is a run of expressions joined by command operators. only the
+// start token of each expression and the operator after it need keeping: the
+// token pool stays put, so an expression is relodaded by parsing it again from
+// its start token rather than holding the whole AST for the command at once.
+static int expr_start[PUR_MAX_EXPRS];
+static pur_op_t expr_op[PUR_MAX_EXPRS];
+static int nexprs;
 
 // make room for one more token
 static int toks_reserve(size_t need) {
@@ -60,7 +86,8 @@ static bool is_space(char c) {
 }
 
 static bool is_delim(char c) {
-	return is_space(c) || c == '(' || c == ')' || c == ';' || c == '>' || c == '"';
+	return is_space(c) || c == '(' || c == ')' || c == ';' || c == '>' ||
+	       c == '&' || c == '|' || c == '"';
 }
 
 static int tokenize(void) {
@@ -77,19 +104,42 @@ static int tokenize(void) {
 		int off;
 		int len;
 
-		if (*p == '(' || *p == ')' || *p == ';' || *p == '>') {
+		if (*p == '(' || *p == ')' || *p == ';' || *p == '>' || *p == '&' ||
+		    *p == '|') {
 			if (*p == '(') {
 				type = PUR_T_LPAREN;
+				len = 1;
 			} else if (*p == ')') {
 				type = PUR_T_RPAREN;
+				len = 1;
 			} else if (*p == ';') {
 				type = PUR_T_SEMI;
-			} else {
+				len = 1;
+			} else if (*p == '>') {
 				type = PUR_T_GT;
+				len = 1;
+			} else if (*p == '&') {
+				// '&&' is one token, a lone '&' the backgrounding
+				// operator that is not here yet
+				if (p[1] == '&') {
+					type = PUR_T_AND;
+					len = 2;
+				} else {
+					type = PUR_T_BG;
+					len = 1;
+				}
+			} else {
+				// '||' is one token, a lone '|' is reserved
+				if (p[1] == '|') {
+					type = PUR_T_OR;
+					len = 2;
+				} else {
+					type = PUR_T_PIPE;
+					len = 1;
+				}
 			}
 			off = (int)(p - line);
-			len = 1;
-			p++;
+			p += len;
 		} else if (*p == '"') {
 			type = PUR_T_WORD;
 			p++;
@@ -139,7 +189,7 @@ static void terminate_words(void) {
 	}
 }
 
-static int parse_stmt(int depth, int *out);
+static int parse_expr(int depth, int *out);
 static int parse_operand(int depth, int *out);
 static int parse_group(int depth, int *out);
 
@@ -238,7 +288,7 @@ static int parse_group(int depth, int *out) {
 			break;
 		}
 
-		rc = parse_stmt(depth + 1, &members[count]);
+		rc = parse_expr(depth + 1, &members[count]);
 		if (rc != PUR_PARSE_OK) {
 			break;
 		}
@@ -284,7 +334,7 @@ static int parse_group(int depth, int *out) {
 	return PUR_PARSE_OK;
 }
 
-static int parse_stmt(int depth, int *out) {
+static int parse_expr(int depth, int *out) {
 	int node;
 	int rc = parse_operand(depth, &node);
 	if (rc != PUR_PARSE_OK) {
@@ -327,7 +377,7 @@ static int parse_stmt(int depth, int *out) {
 	return PUR_PARSE_OK;
 }
 
-int pur_parse(char *text) {
+int pur_parse_command(char *text) {
 	line = text;
 
 	int rc = tokenize();
@@ -337,23 +387,129 @@ int pur_parse(char *text) {
 
 	terminate_words();
 
+	nexprs = 0;
 	pos = 0;
-	if (toks[0].type == PUR_T_END) {
+
+	if (toks[pos].type == PUR_T_END) {
 		return PUR_PARSE_EMPTY;
 	}
 
+	while (1) {
+		int t = toks[pos].type;
+
+		if (t == PUR_T_PIPE) {
+			return PUR_PARSE_ERR_RESERVED;
+		}
+
+		// a leading operator, or two in a row, has nothing on one side
+		if (t == PUR_T_AND || t == PUR_T_OR || t == PUR_T_BG) {
+			return PUR_PARSE_ERR_OPERATOR;
+		}
+
+		// a trailing operator: only reachable right after one was eaten,
+		// because the empty command was turned away above
+		if (t == PUR_T_END) {
+			return expr_op[nexprs - 1] == PUR_OP_BG
+				       ? PUR_PARSE_ERR_TRAILING_BG
+				       : PUR_PARSE_ERR_OPERATOR;
+		}
+
+		if (nexprs >= PUR_MAX_EXPRS) {
+			return PUR_PARSE_ERR_EXPRS;
+		}
+
+		expr_start[nexprs] = pos;
+
+		// validate the expression and throw its AST away again: every
+		// expression has to parse before any of them is allowed to run, and
+		// the pool only holds one at a time
+		pur_ast_reset();
+
+		int root;
+		rc = parse_expr(0, &root);
+		if (rc != PUR_PARSE_OK) {
+			return rc;
+		}
+		(void)root;
+
+		int after = toks[pos].type;
+
+		if (after == PUR_T_AND) {
+			expr_op[nexprs] = PUR_OP_AND;
+		} else if (after == PUR_T_OR) {
+			expr_op[nexprs] = PUR_OP_OR;
+		} else if (after == PUR_T_BG) {
+			expr_op[nexprs] = PUR_OP_BG;
+		} else if (after == PUR_T_END) {
+			expr_op[nexprs] = PUR_OP_NONE;
+			nexprs++;
+			break;
+		} else if (after == PUR_T_PIPE) {
+			return PUR_PARSE_ERR_RESERVED;
+		} else {
+			return PUR_PARSE_ERR_SYNTAX;
+		}
+
+		nexprs++;
+		pos++;
+	}
+
+	return PUR_PARSE_OK;
+}
+
+int pur_parse_nexprs(void) {
+	return nexprs;
+}
+
+int pur_parse_load(int index) {
+	if (index < 0 || index >= nexprs) {
+		return PUR_PARSE_ERR_SYNTAX;
+	}
+
+	pur_ast_reset();
+	pos = expr_start[index];
+
 	int root;
-	rc = parse_stmt(0, &root);
+	int rc = parse_expr(0, &root);
 	if (rc != PUR_PARSE_OK) {
 		return rc;
 	}
 
-	if (toks[pos].type != PUR_T_END) {
-		return PUR_PARSE_ERR_SYNTAX;
-	}
-
 	pur_root = root;
 	return PUR_PARSE_OK;
+}
+
+pur_op_t pur_parse_op(int index) {
+	if (index < 0 || index >= nexprs) {
+		return PUR_OP_NONE;
+	}
+
+	return expr_op[index];
+}
+
+const char *pur_parse_op_str(pur_op_t op) {
+	switch (op) {
+		case PUR_OP_AND:
+			return "&&";
+		case PUR_OP_OR:
+			return "||";
+		case PUR_OP_BG:
+			return "&";
+		default:
+			return "";
+	}
+}
+
+bool pur_op_should_run(pur_op_t op, int status) {
+	switch (op) {
+		case PUR_OP_AND:
+			return status == 0;
+		case PUR_OP_OR:
+			return status != 0;
+		default:
+			// '&' always runs, and PUR_OP_NONE never gates anything
+			return true;
+	}
 }
 
 int pur_leaf_argv(int leaf, char **argv) {
@@ -392,6 +548,14 @@ const char *pur_parse_strerror(int status) {
 			return "statement too complex";
 		case PUR_PARSE_ERR_MEMORY:
 			return "out of memory";
+		case PUR_PARSE_ERR_OPERATOR:
+			return "syntax error: an operator joins two expressions";
+		case PUR_PARSE_ERR_TRAILING_BG:
+			return "syntax error: '&' backgrounding is not supported";
+		case PUR_PARSE_ERR_RESERVED:
+			return "syntax error: pur pipes with '>', not '|'";
+		case PUR_PARSE_ERR_EXPRS:
+			return "too many expressions in one command";
 		default:
 			return "unknown parse error";
 	}
