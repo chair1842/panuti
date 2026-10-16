@@ -321,7 +321,7 @@ int handin_command(keypacket_t kp) {
 // all it must do is take in the current ui state
 // it shouldnt write anything, just display
 static void draw(void) {
-	char buf[(ROWS + 1) * (4 + COLS) + 24];
+	char buf[(ROWS + 1) * (4 + COLS) + 64];
 	size_t n = 0;
 
 	buf[n++] = 0x1B;
@@ -394,6 +394,35 @@ static void draw(void) {
 
 	memset(buf + n, ' ', COLS - slen);
 	n += COLS - slen;
+
+	const char* mode_str;
+	switch (EGG.mode) {
+		case EM_COMMAND:
+			mode_str = "COMMAND";
+			break;
+		case EM_INSERT:
+			mode_str = "INSERT";
+			break;
+		default:
+			mode_str = "NORMAL";
+			break;
+	}
+
+	int mode_len = (int)strlen(mode_str);
+	int mode_col = COLS - mode_len;
+
+	if (mode_col < 0) {
+		mode_col = 0;
+	}
+
+	buf[n++] = 0x1B;
+	buf[n++] = 'M';
+	buf[n++] = (char)mode_col;
+	buf[n++] = (char)ROWS;
+
+	for (const char* p = mode_str; *p != '\0'; p++) {
+		buf[n++] = *p;
+	}
 
 	int ccx = EGG.cur_x - EGG.vup_x;
 	int ccy = EGG.cur_y - EGG.vup_y;
