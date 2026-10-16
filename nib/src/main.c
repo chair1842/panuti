@@ -40,6 +40,7 @@ typedef struct editor_global {
 	
 	int cur_x;
 	int cur_y;
+	int insert_x;
 	
 	editor_mode_t mode;
 	
@@ -274,7 +275,7 @@ static bool write_all(int fd, const void* data, size_t len) {
 }
 
 bool save(const char* path) {
-	if (!EGG.dirty) {
+	if (!EGG.dirty && nexist(path)) {
 		return true;
 	}
 
@@ -290,7 +291,11 @@ bool save(const char* path) {
 	}
 
 	uint64_t zero = 0;
-	panutisysf_resize(fd, &zero);
+
+	if (panutisysf_resize(fd, &zero) < 0) {
+		handle_close(fd);
+		return false;
+	}
 
 	bool ok = true;
 
@@ -322,8 +327,6 @@ int handin_normal(keypacket_t kp) {
 		EGG.show_errmsg = false;
 		return 0;
 	} else if (kp.keycode == KEYCODE_ENTER) {
-		EGG.dirty = true;
-		
 		line_t* l = line_new_at(EGG.cur_y + 1);
 		if (!l) {
 			line_free(&EGG.errormsg);
@@ -331,13 +334,12 @@ int handin_normal(keypacket_t kp) {
 			return 2;
 		}
 
+		EGG.dirty = true;
 		EGG.cur_y++;
 		EGG.cur_x = 0;
 
 		return 0;
 	} else if (kp.keycode == KEYCODE_O && !kp.shift) {
-		EGG.dirty = true;
-		
 		line_t* l = line_new_at(EGG.cur_y + 1);
 		if (!l) {
 			line_free(&EGG.errormsg);
@@ -345,14 +347,14 @@ int handin_normal(keypacket_t kp) {
 			return 2;
 		}
 
+		EGG.dirty = true;
 		EGG.cur_y++;
 		EGG.cur_x = 0;
+		EGG.insert_x = 0;
 		EGG.mode = EM_INSERT;
 
 		return 0;
 	} else if (kp.keycode == KEYCODE_O) {
-		EGG.dirty = true;
-		
 		line_t* l = line_new_at(EGG.cur_y);
 		if (!l) {
 			line_free(&EGG.errormsg);
@@ -360,7 +362,9 @@ int handin_normal(keypacket_t kp) {
 			return 2;
 		}
 
+		EGG.dirty = true;
 		EGG.cur_x = 0;
+		EGG.insert_x = 0;
 		EGG.mode = EM_INSERT;
 
 		return 0;
@@ -393,6 +397,7 @@ int handin_normal(keypacket_t kp) {
 			break;
 		case KEYCODE_I:
 			if (!kp.shift) {
+				EGG.insert_x = EGG.cur_x;
 				EGG.mode = EM_INSERT;
 			}
 			
@@ -404,6 +409,7 @@ int handin_normal(keypacket_t kp) {
 				EGG.cur_x++;
 			}
 			
+			EGG.insert_x = EGG.cur_x;
 			EGG.mode = EM_INSERT;
 			
 			break;
@@ -429,7 +435,7 @@ static int hicommand_prcc(void) {
 	if (strcmp(command->string, "q") == 0) {
 		if (EGG.dirty) {
 			line_free(&EGG.errormsg);
-			line_set(&EGG.errormsg, "unsaved changes", 15);
+			line_set(&EGG.errormsg, "unsaved changes, use \":q!\" to override", 38);
 			return 2;
 		}
 
@@ -505,7 +511,7 @@ int handin_insert(keypacket_t kp) {
 	switch (kp.keycode) {
 		case KEYCODE_ESCAPE:
 			EGG.mode = EM_NORMAL;
-			if (EGG.cur_x > 0) {
+			if (EGG.cur_x > EGG.insert_x) {
 				EGG.cur_x--;
 			}
 
@@ -536,6 +542,7 @@ int handin_insert(keypacket_t kp) {
 		
 			EGG.cur_y++;
 			EGG.cur_x = 0;
+			EGG.insert_x = 0;
 			EGG.dirty = true;
 		
 			return 0;
@@ -554,10 +561,11 @@ int handin_insert(keypacket_t kp) {
 						line_append(prev, cur->string[i]);
 					}
 
-					line_delete_at(EGG.cur_y);
-					EGG.cur_y--;
-					EGG.cur_x = at;
-					EGG.dirty = true;
+				line_delete_at(EGG.cur_y);
+				EGG.cur_y--;
+				EGG.cur_x = at;
+				EGG.insert_x = at;
+				EGG.dirty = true;
 				}
 			}
 
@@ -584,6 +592,20 @@ int handin_insert(keypacket_t kp) {
 	return 0;
 }
 
+static int line_width(const line_t* l, int start, int x) {
+	int col = 0;
+
+	for (int i = start; i < x && i < l->len; i++) {
+		if (l->string[i] == '\t') {
+			col = (col / 8 + 1) * 8;
+		} else {
+			col++;
+		}
+	}
+
+	return col;
+}
+
 // draw's job is to draw to the screen
 // all it must do is take in the current ui state
 // it shouldnt write anything, just display
@@ -597,28 +619,31 @@ static void draw(void) {
 
 	for (int r = 0; r < ROWS; r++) {
 		buf[n++] = 0x1B;
-		buf[n++] = 'M'; 
+		buf[n++] = 'M';
 		buf[n++] = 0;
 		buf[n++] = (char)r;
 
 		int row = EGG.vup_y + r;
-		int len = 0;
-		
-		if (row < EGG.nlines) {
-			int start = EGG.vup_x;
-			int avail = EGG.lines[row].len - start;
-			if (avail < 0) {
-				avail = 0;
-			}
+		int col = 0;
 
-			len = avail < COLS ? avail : COLS;
-			for (int i = 0; i < len; i++) {
-				unsigned char c = (unsigned char)EGG.lines[row].string[start + i];
-				buf[n + i] = (c < 0x20 || c == 0x7F) ? '?' : (char)c;
+		if (row < EGG.nlines) {
+			line_t* l = &EGG.lines[row];
+
+			for (int i = EGG.vup_x; i < l->len && col < COLS; i++) {
+				unsigned char c = (unsigned char)l->string[i];
+
+				if (c == '\t') {
+					int next = (col / 8 + 1) * 8;
+					while (col < next && col < COLS) {
+						buf[n + col++] = ' ';
+					}
+				} else {
+					buf[n + col++] = (c < 0x20 || c == 0x7F) ? '?' : (char)c;
+				}
 			}
 		}
-		
-		memset(buf + n + len, ' ', COLS - len);
+
+		memset(buf + n + col, ' ', COLS - col);
 		n += COLS;
 	}
 
@@ -626,41 +651,6 @@ static void draw(void) {
 	buf[n++] = 'M';
 	buf[n++] = 0;
 	buf[n++] = (char)ROWS;
-
-	bool err = EGG.mode != EM_COMMAND && EGG.show_errmsg;
-
-	if (err) {
-		buf[n++] = 0x1B;
-		buf[n++] = 'A';
-		buf[n++] = 0x47;
-	}
-
-	int slen = 0;
-	if (EGG.mode == EM_COMMAND) {
-		buf[n++] = ':';
-		slen++;
-
-		for (int i = 0; i < EGG.cmstate.command.len && slen < COLS; i++) {
-			unsigned char c = (unsigned char)EGG.cmstate.command.string[i];
-			buf[n++] = (c < 0x20 || c == 0x7F) ? '?' : (char)c;
-			slen++;
-		}
-	} else if (EGG.show_errmsg) {
-		for (int i = 0; i < EGG.errormsg.len && slen < COLS; i++) {
-			unsigned char c = (unsigned char)EGG.errormsg.string[i];
-			buf[n++] = (c < 0x20 || c == 0x7F) ? '?' : (char)c;
-			slen++;
-		}
-	}
-
-	if (err) {
-		buf[n++] = 0x1B;
-		buf[n++] = 'A';
-		buf[n++] = 0x07;
-	}
-
-	memset(buf + n, ' ', COLS - slen);
-	n += COLS - slen;
 
 	const char* mode_str;
 	switch (EGG.mode) {
@@ -682,6 +672,65 @@ static void draw(void) {
 		mode_col = 0;
 	}
 
+	int lim = mode_col - 1;
+	if (lim < 0) {
+		lim = 0;
+	}
+
+	bool err = EGG.mode != EM_COMMAND && EGG.show_errmsg;
+
+	if (err) {
+		buf[n++] = 0x1B;
+		buf[n++] = 'A';
+		buf[n++] = 0x4F;
+	}
+
+	int slen = 0;
+	if (EGG.mode == EM_COMMAND) {
+		buf[n++] = ':';
+		slen++;
+
+		for (int i = 0; i < EGG.cmstate.command.len && slen < lim; i++) {
+			unsigned char c = (unsigned char)EGG.cmstate.command.string[i];
+			buf[n++] = (c < 0x20 || c == 0x7F) ? '?' : (char)c;
+			slen++;
+		}
+	} else if (EGG.show_errmsg) {
+		for (int i = 0; i < EGG.errormsg.len && slen < lim; i++) {
+			unsigned char c = (unsigned char)EGG.errormsg.string[i];
+			buf[n++] = (c < 0x20 || c == 0x7F) ? '?' : (char)c;
+			slen++;
+		}
+	} else {
+		const char* name = EGG.path;
+
+		for (const char* p = EGG.path; *p != '\0'; p++) {
+			if (*p == '/') {
+				name = p + 1;
+			}
+		}
+
+		for (const char* p = name; *p != '\0' && slen < lim; p++) {
+			unsigned char c = (unsigned char)*p;
+			buf[n++] = (c < 0x20 || c == 0x7F) ? '?' : (char)c;
+			slen++;
+		}
+
+		if (EGG.dirty && slen < lim) {
+			buf[n++] = '*';
+			slen++;
+		}
+	}
+
+	if (err) {
+		buf[n++] = 0x1B;
+		buf[n++] = 'A';
+		buf[n++] = 0x07;
+	}
+
+	memset(buf + n, ' ', COLS - slen);
+	n += COLS - slen;
+
 	buf[n++] = 0x1B;
 	buf[n++] = 'M';
 	buf[n++] = (char)mode_col;
@@ -691,16 +740,18 @@ static void draw(void) {
 		buf[n++] = *p;
 	}
 
-	int ccx = EGG.cur_x - EGG.vup_x;
+	int ccx;
 	int ccy = EGG.cur_y - EGG.vup_y;
 
 	if (EGG.mode == EM_COMMAND) {
 		ccx = 1 + EGG.cmstate.command.len;
 		ccy = ROWS;
+	} else {
+		ccx = line_width(&EGG.lines[EGG.cur_y], EGG.vup_x, EGG.cur_x);
+	}
 
-		if (ccx >= COLS) {
-			ccx = COLS - 1;
-		}
+	if (ccx >= COLS) {
+		ccx = COLS - 1;
 	}
 
 	buf[n++] = 0x1B;
