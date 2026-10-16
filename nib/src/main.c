@@ -119,10 +119,19 @@ static bool line_insert(line_t* l, int pos, char c) {
 	return true;
 }
 
-static void line_backspace(line_t* l) {
-	if (l->len > 0) {
-		l->string[--l->len] = '\0';
+static bool line_backspace_at(line_t* l, int pos) {
+	if (pos < 0 || pos >= l->len) {
+		return false;
 	}
+
+	memmove(l->string + pos, l->string + pos + 1, (size_t)(l->len - pos - 1));
+	l->len--;
+	l->string[l->len] = '\0';
+	return true;
+}
+
+static void line_backspace(line_t* l) {
+	line_backspace_at(l, l->len - 1);
 }
 
 static void line_free(line_t* l) {
@@ -382,6 +391,22 @@ int handin_normal(keypacket_t kp) {
 			}
 			
 			break;
+		case KEYCODE_I:
+			if (!kp.shift) {
+				EGG.mode = EM_INSERT;
+			}
+			
+			break;
+		case KEYCODE_A:
+			if (kp.shift) {
+				EGG.cur_x = EGG.lines[EGG.cur_y].len;
+			} else if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
+				EGG.cur_x++;
+			}
+			
+			EGG.mode = EM_INSERT;
+			
+			break;
 		default:
 			break;
 	}
@@ -402,6 +427,12 @@ static int hicommand_prcc(void) {
 	}
 
 	if (strcmp(command->string, "q") == 0) {
+		if (EGG.dirty) {
+			line_free(&EGG.errormsg);
+			line_set(&EGG.errormsg, "unsaved changes", 15);
+			return 2;
+		}
+
 		return 1;
 	} else if (strcmp(command->string, "w") == 0) {
 		if (!save(EGG.path)) {
@@ -411,6 +442,16 @@ static int hicommand_prcc(void) {
 		}
 
 		return 0;
+	} else if (strcmp(command->string, "wq") == 0) {
+		if (!save(EGG.path)) {
+			line_free(&EGG.errormsg);
+			line_set(&EGG.errormsg, "could not save the file", 24);
+			return 2;
+		}
+
+		return 1;
+	} else if (strcmp(command->string, "q!") == 0) {
+		return 1;
 	}
 
 	line_free(&EGG.errormsg);
@@ -461,7 +502,86 @@ int handin_command(keypacket_t kp) {
 }
 
 int handin_insert(keypacket_t kp) {
-	// todo
+	switch (kp.keycode) {
+		case KEYCODE_ESCAPE:
+			EGG.mode = EM_NORMAL;
+			if (EGG.cur_x > 0) {
+				EGG.cur_x--;
+			}
+
+			return 0;
+		case KEYCODE_ENTER:
+			int at = EGG.cur_x;
+			char* str = EGG.lines[EGG.cur_y].string;
+			int len = EGG.lines[EGG.cur_y].len;
+		
+			line_t* nl = line_new_at(EGG.cur_y + 1);
+			if (!nl) {
+				line_free(&EGG.errormsg);
+				line_set(&EGG.errormsg, "out of memory", 13);
+				EGG.show_errmsg = true;
+				return 0;
+			}
+		
+			if (!line_set(nl, str + at, len - at)) {
+				line_delete_at(EGG.cur_y + 1);
+				line_free(&EGG.errormsg);
+				line_set(&EGG.errormsg, "out of memory", 13);
+				EGG.show_errmsg = true;
+				return 0;
+			}
+		
+			EGG.lines[EGG.cur_y].len = at;
+			str[at] = '\0';
+		
+			EGG.cur_y++;
+			EGG.cur_x = 0;
+			EGG.dirty = true;
+		
+			return 0;
+		case KEYCODE_BACKSPACE:
+			if (EGG.cur_x > 0) {
+				line_backspace_at(&EGG.lines[EGG.cur_y], EGG.cur_x - 1);
+				EGG.cur_x--;
+				EGG.dirty = true;
+			} else if (EGG.cur_y > 0) {
+				line_t* prev = &EGG.lines[EGG.cur_y - 1];
+				line_t* cur = &EGG.lines[EGG.cur_y];
+				int at = prev->len;
+
+				if (line_reserve(prev, prev->len + cur->len + 1)) {
+					for (int i = 0; i < cur-> len; i++) {
+						line_append(prev, cur->string[i]);
+					}
+
+					line_delete_at(EGG.cur_y);
+					EGG.cur_y--;
+					EGG.cur_x = at;
+					EGG.dirty = true;
+				}
+			}
+
+			return 0;
+		case KEYCODE_TAB:
+			if (line_insert(&EGG.lines[EGG.cur_y], EGG.cur_x, '\t')) {
+				EGG.cur_x++;
+				EGG.dirty = true;
+			}
+
+			return 0;
+		default:
+			break;
+	}
+
+	char c = keypacket_to_ascii(kp);
+	if (c != 0) {
+		if (line_insert(&EGG.lines[EGG.cur_y], EGG.cur_x, c)) {
+			EGG.cur_x++;
+			EGG.dirty = true;
+		}
+	}
+	
+	return 0;
 }
 
 // draw's job is to draw to the screen
@@ -655,6 +775,9 @@ int main(int argc, char** argv) {
 				break;
 			case EM_COMMAND:
 				hc = handin_command(kp);
+				break;
+			case EM_INSERT:
+				hc = handin_insert(kp);
 				break;
 			default:
 				hc = 1;
