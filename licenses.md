@@ -8,6 +8,8 @@ There are 7 projects/components inside panuti.
 - pur
 - pcrutils
 - nib
+- calc
+- conway
 
 Each of these projects/components have their own individual licenses,
 and have a LICENSE.md at their top-level directory.
@@ -21,3 +23,5 @@ The licences for the following projects/components are stated here.
 - pur - GPLv2-or-later
 - pcrutils - BSD 3-Clause
 - nib - GPLv2-or-later
+- calc - BSD 3-Claude
+- conway - BSD 3-Clause

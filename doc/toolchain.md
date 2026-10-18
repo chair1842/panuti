@@ -2,7 +2,7 @@
 
 ## dependencies
 
-[https://osdev.wiki/wiki/GCC_Cross-Compiler#Installing_Dependencies]
+[https://osdev.wiki/wiki/GCC_Cross-Compiler#Installing_Dependencies](Dependencies)
 
 install these dependencies in your system. these are required by both gcc and binutils.
 
