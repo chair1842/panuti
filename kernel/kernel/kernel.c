@@ -28,12 +28,15 @@ void kernel_main(void) {
 	
 	registry_mkdir("/dvc");
 	registry_mkdir("/dvc/kbd");
+	registry_mkdir("/dvc/ram");
+	registry_mkdir("/dvc/pata");
+	registry_mkdir("/dvc/cdrom");
 	console_register();
 	
 	kbd_line_init();
 	kbd_raw_init();
 	
-	ramblock_init("/dvc/ram0", 512, 1024);
+	ramblock_init("/dvc/ram/0", 512, 1024);
 
 	kdev_null_register();
 	kdev_zero_register();

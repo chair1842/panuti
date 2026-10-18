@@ -384,8 +384,9 @@ static void ata_attach(ide_drive_t* drv) {
 	path[6] = 'a';
 	path[7] = 't';
 	path[8] = 'a';
-	path[9] = (char)('0' + num);
-	path[10] = '\0';
+	path[9] = '/';
+	path[10] = (char)('0' + num);
+	path[11] = '\0';
 
 	block_dev_t* disk = block_register(path, &ata_ops, drv, drv->sector_size, drv->block_count);
 	if (!disk) {

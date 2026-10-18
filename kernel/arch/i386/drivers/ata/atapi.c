@@ -161,10 +161,10 @@ static void atapi_attach(ide_drive_t* drv) {
 	drv->block_count = sectors;
 
 	char path[16];
-	const char* prefix = "/dvc/cdrom";
+	const char* prefix = "/dvc/cdrom/";
 	size_t plen = strlen(prefix);
 
-	// numbers never get reused; cdrom0 is simply whoever shows up first
+	// numbers never get reused; cdrom/0 is simply whoever shows up first
 	int num = next_cdrom_number++;
 	if (num > 9) {
 		klog(KLOG_WARN, "atapi: more than ten cdroms? really?\n");

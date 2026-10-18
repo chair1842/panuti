@@ -12,8 +12,8 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 	
-	if (mount("/cd", "isofs", "/dvc/cdrom0") != 0) {
-		printf("mounting /dvc/cdrom0 on /cd with fs \"isofs\" failed\n");
+	if (mount("/cd", "isofs", "/dvc/cdrom/0") != 0) {
+		printf("mounting /dvc/cdrom/0 on /cd with fs \"isofs\" failed\n");
 		return -1;
 	}
 	

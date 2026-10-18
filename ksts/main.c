@@ -796,8 +796,8 @@ int main(int argc, char** argv) {
 		r = panutisysf_link("/dvc/console", "/ln_console");
 		check(console, "link onto existing name -> EXISTS", r, PANUTIERRNO_EXISTS);
 		/* block devices are linkable too */
-		r = panutisysf_link("/dvc/ram0", "/ln_ram");
-		check_is_success(console, "link /dvc/ram0 /ln_ram", r);
+		r = panutisysf_link("/dvc/ram/0", "/ln_ram");
+		check_is_success(console, "link /dvc/ram/0 /ln_ram", r);
 		fd = panutisysf_open("/ln_ram");
 		check_is_success(console, "open linked /ln_ram", fd);
 		panutisysf_close(fd);
@@ -820,8 +820,8 @@ int main(int argc, char** argv) {
 		check(console, "link(badptr) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
 	}
 
-	/* ---- 38. block device i/o on /dvc/ram0 ---- */
-	section(console, "37. block device i/o on /dvc/ram0");
+	/* ---- 38. block device i/o on /dvc/ram/0 ---- */
+	section(console, "37. block device i/o on /dvc/ram/0");
 
 	{
 		/* 700 bytes crosses the 512-byte sector boundary, so the write
@@ -830,18 +830,18 @@ int main(int argc, char** argv) {
 		for (int i = 0; i < 700; i++) {
 			pattern[i] = (char)('0' + (i % 10));
 		}
-		int b = panutisysf_open("/dvc/ram0");
-		check_is_success(console, "open /dvc/ram0 (block)", b);
+		int b = panutisysf_open("/dvc/ram/0");
+		check_is_success(console, "open /dvc/ram/0 (block)", b);
 		int32_t r = panutisysf_write(b, pattern, 700);
-		check(console, "write 700 bytes to ram0", r, 700);
+		check(console, "write 700 bytes to ram/0", r, 700);
 
 		/* an independent handle sees the data from the start */
-		int c = panutisysf_open("/dvc/ram0");
-		check_is_success(console, "open /dvc/ram0 (2nd handle)", c);
+		int c = panutisysf_open("/dvc/ram/0");
+		check_is_success(console, "open /dvc/ram/0 (2nd handle)", c);
 		char buf[700];
 		r = panutisysf_read(c, buf, 700);
 		check(console, "read 700 bytes back", r, 700);
-		check(console, "ram0 round-trip content", memcmp(buf, pattern, 700) == 0 ? 1 : 0, 1);
+		check(console, "ram/0 round-trip content", memcmp(buf, pattern, 700) == 0 ? 1 : 0, 1);
 		panutisysf_close(c);
 
 		/* the write advanced the first handle's offset */
@@ -872,8 +872,8 @@ int main(int argc, char** argv) {
 		check(console, "read closed block fd -> BADFD", r, PANUTIERRNO_BADFD);
 
 		/* trailing slash on a non-directory path doesn't resolve */
-		int fd = panutisysf_open("/dvc/ram0/");
-		check(console, "open \"/dvc/ram0/\" -> NOTFOUND", fd, PANUTIERRNO_NOTFOUND);
+		int fd = panutisysf_open("/dvc/ram/0/");
+		check(console, "open \"/dvc/ram/0/\" -> NOTFOUND", fd, PANUTIERRNO_NOTFOUND);
 	}
 
 	{
@@ -885,15 +885,15 @@ int main(int argc, char** argv) {
 			head[i] = 'H';
 			body[i] = 'B';
 		}
-		int e = panutisysf_open("/dvc/ram0");
-		check_is_success(console, "open /dvc/ram0 (partial-write)", e);
+		int e = panutisysf_open("/dvc/ram/0");
+		check_is_success(console, "open /dvc/ram/0 (partial-write)", e);
 		int32_t r = panutisysf_write(e, head, 100);
 		check(console, "write 100 bytes (head)", r, 100);
 		r = panutisysf_write(e, body, 100);
 		check(console, "write 100 bytes (body, offset 100)", r, 100);
 
-		int f = panutisysf_open("/dvc/ram0");
-		check_is_success(console, "open /dvc/ram0 (verify)", f);
+		int f = panutisysf_open("/dvc/ram/0");
+		check_is_success(console, "open /dvc/ram/0 (verify)", f);
 		char mix[200];
 		r = panutisysf_read(f, mix, 200);
 		check(console, "read 200 bytes back", r, 200);
@@ -1042,19 +1042,19 @@ int main(int argc, char** argv) {
 
 	{
 		/* mount the boot ISO (isofs on the atapi cdrom) */
-		int32_t r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom0");
-		check_is_success(console, "mount /kststmp isofs /dvc/cdrom0", r);
+		int32_t r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom/0");
+		check_is_success(console, "mount /kststmp isofs /dvc/cdrom/0", r);
 	}
 
 	{
 		/* mounting over an already-mounted point fails */
-		int32_t r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom0");
+		int32_t r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom/0");
 		check_is_error(console, "mount over existing mountpoint -> error", r);
 	}
 
 	{
 		/* unknown filesystem type */
-		int32_t r = panutisysf_mount("/kststmp", "nonsensefs", "/dvc/cdrom0");
+		int32_t r = panutisysf_mount("/kststmp", "nonsensefs", "/dvc/cdrom/0");
 		check(console, "mount unknown fstype -> NOTSUPPORTED", r, PANUTIERRNO_NOTSUPPORTED);
 	}
 
@@ -1066,7 +1066,7 @@ int main(int argc, char** argv) {
 
 	{
 		/* mounting onto a non-directory mountpoint */
-		int32_t r = panutisysf_mount("/dvc/console", "isofs", "/dvc/cdrom0");
+		int32_t r = panutisysf_mount("/dvc/console", "isofs", "/dvc/cdrom/0");
 		check_is_error(console, "mount onto non-dir mountpoint -> error", r);
 	}
 
@@ -1086,7 +1086,7 @@ int main(int argc, char** argv) {
 
 	{
 		/* mount + unmount cycle works */
-		int32_t r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom0");
+		int32_t r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom/0");
 		check_is_success(console, "re-mount /kststmp", r);
 		r = panutisysf_unmount("/kststmp");
 		check(console, "unmount /kststmp (after re-mount) -> success", r, 0);
@@ -1094,9 +1094,9 @@ int main(int argc, char** argv) {
 
 	{
 		/* garbage pointers are rejected before touching anything */
-		int32_t r = panuti_syscall(SYSHANDLER_MOUNT, 0xDEAD0000, (uint32_t)"isofs", (uint32_t)"/dvc/cdrom0", 0);
+		int32_t r = panuti_syscall(SYSHANDLER_MOUNT, 0xDEAD0000, (uint32_t)"isofs", (uint32_t)"/dvc/cdrom/0", 0);
 		check(console, "mount(badptr mountp) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
-		r = panuti_syscall(SYSHANDLER_MOUNT, (uint32_t)"/kststmp", 0xDEAD0000, (uint32_t)"/dvc/cdrom0", 0);
+		r = panuti_syscall(SYSHANDLER_MOUNT, (uint32_t)"/kststmp", 0xDEAD0000, (uint32_t)"/dvc/cdrom/0", 0);
 		check(console, "mount(badptr fstype) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
 		r = panuti_syscall(SYSHANDLER_MOUNT, (uint32_t)"/kststmp", (uint32_t)"isofs", 0xDEAD0000, 0);
 		check(console, "mount(badptr blkdev) -> INVALIDADDR", r, PANUTIERRNO_INVALIDADDR);
@@ -1286,8 +1286,8 @@ int main(int argc, char** argv) {
 		write_int(console, r);
 		write_str(console, "\n");
 
-		r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom0");
-		check_is_success(console, "mount /kststmp isofs /dvc/cdrom0", r);
+		r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom/0");
+		check_is_success(console, "mount /kststmp isofs /dvc/cdrom/0", r);
 
 		/* procreate ksts with --child so it exits immediately */
 		char* child_argv[] = { "ksts", "--child" };
@@ -1611,7 +1611,7 @@ int main(int argc, char** argv) {
 
 		/* mount ISO to get ksts */
 		r = panutisysf_mkdir("/kststmp");
-		r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom0");
+		r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom/0");
 		check_is_success(console, "mount /kststmp", r);
 
 		/* pass wfd as child's out-stream 0 (which maps to parent's wfd)
@@ -1661,7 +1661,7 @@ int main(int argc, char** argv) {
 		check_is_success(console, "pipe for parent->child", r);
 
 		r = panutisysf_mkdir("/kststmp");
-		r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom0");
+		r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom/0");
 		check_is_success(console, "mount /kststmp", r);
 
 		/* pass rfd as child's in-stream 0 */
@@ -1708,7 +1708,7 @@ int main(int argc, char** argv) {
 	{
 		/* child with no streams gets its own default console */
 		int32_t r2 = panutisysf_mkdir("/kststmp");
-		r2 = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom0");
+		r2 = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom/0");
 		check_is_success(console, "mount /kststmp", r2);
 
 		char* child_argv[] = { "ksts", "--stream-write" };
@@ -1742,7 +1742,7 @@ int main(int argc, char** argv) {
 		panutisysf_pipe_create(&rfd, &wfd);
 
 		int32_t r = panutisysf_mkdir("/kststmp");
-		r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom0");
+		r = panutisysf_mount("/kststmp", "isofs", "/dvc/cdrom/0");
 		check_is_success(console, "mount /kststmp (isolation test)", r);
 
 		/* pass wfd to child as out-stream 0 */
@@ -2120,9 +2120,9 @@ int main(int argc, char** argv) {
 	section(console, "54. seek");
 
 	{
-		/* block devices are positional: ram0 is 512 KiB */
-		int fd = panutisysf_open("/dvc/ram0");
-		check(console, "open /dvc/ram0", fd >= 0 ? PANUTIERRNO_PLAINSUCCESS : -1, PANUTIERRNO_PLAINSUCCESS);
+		/* block devices are positional: ram/0 is 512 KiB */
+		int fd = panutisysf_open("/dvc/ram/0");
+		check(console, "open /dvc/ram/0", fd >= 0 ? PANUTIERRNO_PLAINSUCCESS : -1, PANUTIERRNO_PLAINSUCCESS);
 
 		const char data[4] = { 'A', 'B', 'C', 'D' };
 		int32_t w = panutisysf_write(fd, data, 4);
