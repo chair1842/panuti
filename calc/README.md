@@ -2,13 +2,13 @@
 
 Calc is a console calculator
 
-# Supported
+## Supported
 
 Integer arithmetic
 
-# Usage
+## Usage
 
-## Argument Mode
+### Argument Mode
 
 argument mode solves the problem provided and outputs the result
 
@@ -30,7 +30,7 @@ or
 calc "81 - 11"
 ```
 
-## Interactive mode
+### Interactive mode
 
 interactive mode give you a REPL interface for calculating
 
