@@ -5,6 +5,7 @@
 #include <kernel/sched/task.h>
 #include <stddef.h>
 #include <kernel/kpanic.h>
+#include <kernel/irq.h>
 
 static task_t* ready_queue = nullptr;
 static task_t* current = nullptr;
@@ -59,9 +60,12 @@ void sched_schedule(void) {
 		return;
 	}
 
+	uint32_t flags = irq_save_disable();
+
 	if (!current) {
 		current = ready_queue;
 		current->state = TASK_RUNNING;
+		irq_restore(flags);
 		return;
 	}
 
@@ -87,13 +91,17 @@ void sched_schedule(void) {
 		task_activate(current);
 		task_switch_to(prev, current);
 	}
+
+	irq_restore(flags);
 }
 
 void sched_init(void) {
     if (!ready_queue) {
         return;
     }
-    
+
+    uint32_t flags = irq_save_disable();
+
     current = ready_queue;
     current->state = TASK_RUNNING;
     task_activate(current);
@@ -101,6 +109,8 @@ void sched_init(void) {
     
     static task_t dummy; // to be thrown away
     task_switch_to(&dummy, current);
+
+    irq_restore(flags);
 }
 
 task_t* sched_current(void) {
