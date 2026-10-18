@@ -6,11 +6,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <panuti/stream.h>
+
+#define CALC_LINE_MAX 256
+
 static const char HELP[] =
 	"calc - a console calculator\n\n"
-	"calc solves an integer arithmetic problem and prints the result\n\n"
+	"calc solves a math problem\n"
+	"integer erithmetic is the only thing supported rn\n\n"
 	"usage:\n"
-	"  calc <problem>\n\n"
+	"  calc <problem>   solve one problem and print the result\n"
+	"  calc             start the interactive interface\n\n"
 	"example:\n"
 	"  calc \"5 + 5\"\n\n"
 	"the problem takes + - * / % and parentheses\n";
@@ -65,11 +71,55 @@ static int argument_mode(int argc, char** argv) {
 	return 0;
 }
 
+static void trim_trailing(char* s) {
+	size_t n = strlen(s);
+
+	while (n > 0 && (s[n - 1] == ' ' || s[n - 1] == '\t' || s[n - 1] == '\r' || s[n - 1] == '\n')) {
+		s[--n] = '\0';
+	}
+}
+
+static int interactive_mode(void) {
+	char line[CALC_LINE_MAX];
+
+	printf("calc - type a problem, or 'quit' to leave\n");
+
+	for (;;) {
+		printf("> ");
+
+		int n = stream_read(0, line, sizeof(line));
+		if (n < 0) {
+			printf("\ncalc: could not read the input stream\n");
+			return 1;
+		}
+
+		trim_trailing(line);
+
+		if (line[0] == '\0') {
+			continue;
+		}
+
+		if (strcmp(line, "quit") == 0) {
+			break;
+		}
+
+		long result = 0;
+		int rc = calc_eval(line, &result);
+
+		if (rc != CALC_OK) {
+			printf("calc: %s\n", calc_eval_strerror(rc));
+			continue;
+		}
+
+		printf("%ld\n", result);
+	}
+
+	return 0;
+}
+
 int main(int argc, char** argv) {
 	if (argc < 2) {
-		printf("calc: interactive mode is not here yet\n");
-		printf("usage: calc <problem>\n");
-		return 1;
+		return interactive_mode();
 	}
 
 	if (argc == 2 && strcmp(argv[1], "-h") == 0) {
