@@ -1,6 +1,6 @@
 # Panuti
 
-A unix-inspired hobbyist os
+a hobbyist os
 
 ## Projects
 
