@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include <string.h>
 #include <kernel/sched/sched.h>
+#include <kernel/irq.h>
 #include <kernel/elf.h>
 #include <panuti/errno.h>
 
@@ -130,34 +131,37 @@ static pid_t task_alloc_pid(void) {
 }
 
 static task_t* task_alloc_common(void) {
+	uint32_t flags = irq_save_disable();
+
 	task_t* t = task_find_free_slot();
 	if (!t) {
+		irq_restore(flags);
 		return nullptr;
 	}
 
+	t->pid = task_alloc_pid();
+	if (t->pid == 0) {
+		irq_restore(flags);
+		return nullptr;
+	}
+
+	t->state = TASK_READY;
+
+	irq_restore(flags);
+
 	t->kernel_stack = (uint32_t)vmalloc_pages(TASK_KERNEL_STACK_PAGES);
 	if (!t->kernel_stack) {
+		t->state = TASK_NONE;
 		return nullptr;
 	}
 
 	t->addr_space = memman_create_addr_space();
 	if (!t->addr_space) {
 		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
+		t->state = TASK_NONE;
 		return nullptr;
 	}
 
-	// assign the pid before publishing the slot, so task_alloc_pid's scan
-	// never sees this slot claiming a pid it is in the middle of picking
-	t->pid = task_alloc_pid();
-	if (t->pid == 0) {
-		// unreachable: a free slot means fewer than MAX_TASKS live tasks, so
-		// some pid in [1, MAX_TASKS] is always free
-		memman_destroy_addr_space(t->addr_space);
-		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
-		return nullptr;
-	}
-
-	t->state = TASK_READY;
 	t->cwd = registry_root();
 	task_init_default_streams(t);
 

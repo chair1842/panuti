@@ -12,6 +12,8 @@ static task_t* current = nullptr;
 static bool sched_initialized = false;
 
 void sched_add(task_t* task) {
+    uint32_t flags = irq_save_disable();
+
     if (!ready_queue) {
         ready_queue = task;
         task->next = task;
@@ -20,8 +22,10 @@ void sched_add(task_t* task) {
         ready_queue->next = task;
         klog(KLOG_INFO, "sched_add: ready_queue (%x) next updated to %x\n", ready_queue->pid, ready_queue->next->pid);
     }
-    
+
     klog(KLOG_INFO, "sched_add: next of task %x is %x\n", task->pid, task->next->pid);
+
+    irq_restore(flags);
 }
 
 void sched_remove(task_t* task) {
@@ -29,13 +33,17 @@ void sched_remove(task_t* task) {
         return;
     }
 
+    uint32_t flags = irq_save_disable();
+
     if (ready_queue == nullptr) {
+        irq_restore(flags);
         return;
     }
 
     if (ready_queue == task && task->next == task) {
         ready_queue = nullptr;
         task->next = nullptr;
+        irq_restore(flags);
         return;
     }
 
@@ -53,6 +61,8 @@ void sched_remove(task_t* task) {
     }
 
     task->next = nullptr;
+
+    irq_restore(flags);
 }
 
 void sched_schedule(void) {

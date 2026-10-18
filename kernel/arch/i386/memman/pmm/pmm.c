@@ -3,6 +3,7 @@
 #include "pmm.h"
 #include <kernel/kpanic.h>
 #include <kernel/klog.h>
+#include <kernel/irq.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -346,20 +347,30 @@ void pmm_init(multiboot_info_t* mbi) {
 // walks the cursor forward, wrapping once so a page freed below the cursor is
 // still found rather than becoming unallocatable for the rest of the boot.
 uint32_t pmm_allocp(void) {
-	for (uint32_t pass = 0; pass < 2; pass++) {
+	uint32_t flags = irq_save_disable();
+
+	uint32_t result = 0;
+
+	for (uint32_t pass = 0; pass < 2 && result == 0; pass++) {
 		for (uint32_t page = next_free_page; page < bitmap_frames; page++) {
 			if (bitmap[page / 8] & (1 << (page % 8))) {
 				next_free_page = page + 1;
 				pmm_setp(page);
-				return page * PMM_PAGE_SIZE;
+				result = page * PMM_PAGE_SIZE;
+				break;
 			}
 		}
-		next_free_page = 0;
+
+		if (result == 0) {
+			next_free_page = 0;
+		}
 	}
+
+	irq_restore(flags);
 
 	// no free pages found. return 0 to indicate failure. frame 0 is reserved at
 	// init and pmm_freep refuses it, so 0 is never a real answer.
-	return 0;
+	return result;
 }
 
 void pmm_freep(uint32_t address) {
@@ -378,10 +389,14 @@ void pmm_freep(uint32_t address) {
 		return;
 	}
 
+	uint32_t flags = irq_save_disable();
+
 	// the cursor may have walked past this frame already
 	if (page < next_free_page) {
 		next_free_page = page;
 	}
 
 	pmm_clrp(page);
+
+	irq_restore(flags);
 }

@@ -7,6 +7,7 @@
 #include <kernel/memman/vmalloc.h>
 #include <string.h>
 #include <kernel/kpanic.h>
+#include <kernel/irq.h>
 
 #define SLAB_MAGIC 0xBABEBAB1 // ha, babe baby eating dead beef
 
@@ -110,7 +111,7 @@ static kmallocCache_t* cache_for(uint32_t size, uint32_t align) {
 	return nullptr;
 }
 
-void* kmalloc(uint32_t size, uint32_t align) {
+static void* kmalloc_inner(uint32_t size, uint32_t align) {
 	if (size == 0) {
 		return nullptr;
 	}
@@ -209,7 +210,7 @@ void* kmalloc(uint32_t size, uint32_t align) {
 	return (void*)obj;
 }
 
-void kfree(void* ptr) {
+static void kfree_inner(void* ptr) {
 	if (!ptr) {
 		return;
 	}
@@ -264,4 +265,17 @@ void kfree(void* ptr) {
 	*obj = slab->free;
 	slab->free = index;
 	slab->used--;
+}
+
+void* kmalloc(uint32_t size, uint32_t align) {
+	uint32_t flags = irq_save_disable();
+	void* result = kmalloc_inner(size, align);
+	irq_restore(flags);
+	return result;
+}
+
+void kfree(void* ptr) {
+	uint32_t flags = irq_save_disable();
+	kfree_inner(ptr);
+	irq_restore(flags);
 }

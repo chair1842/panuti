@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <kernel/memman/tempmap.h>
 #include <kernel/mem/usr.h>
+#include <kernel/irq.h>
 #include <string.h>
 
 extern void enter_usermode_trampoline(void);
@@ -113,7 +114,7 @@ static void argv_writer_finish(argv_writer_t* w) {
 	}
 }
 
-int task_build_user_argv_stack(
+static int task_build_user_argv_stack_inner(
 	const uint32_t* stack_pages,
 	uint32_t stack_page_count,
 	uint32_t stack_virt_top,
@@ -186,4 +187,19 @@ int task_build_user_argv_stack(
 
 	*out_esp = user_esp;
 	return 0;
+}
+
+int task_build_user_argv_stack(
+	const uint32_t* stack_pages,
+	uint32_t stack_page_count,
+	uint32_t stack_virt_top,
+    char** argv,
+    int argc,
+    size_t max_bytes,
+    uint32_t* out_esp
+) {
+	uint32_t flags = irq_save_disable();
+	int rc = task_build_user_argv_stack_inner(stack_pages, stack_page_count, stack_virt_top, argv, argc, max_bytes, out_esp);
+	irq_restore(flags);
+	return rc;
 }

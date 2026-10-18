@@ -38,6 +38,8 @@ static void queue_push(kbd_queue_t* q, keypacket_t pkt) {
 }
 
 static int queue_read(kbd_queue_t* q, keypacket_t* out) {
+	uint32_t flags = irq_save_disable();
+
 	while (q->count == 0) {
 		if (q->n_waiting < KBD_MAX_WAITERS) {
 			q->waiting[q->n_waiting++] = sched_current();
@@ -48,6 +50,8 @@ static int queue_read(kbd_queue_t* q, keypacket_t* out) {
 	*out = q->buffer[q->head];
 	q->head = (q->head + 1) % KBD_QUEUE_SIZE;
 	q->count--;
+
+	irq_restore(flags);
 
 	return 0;
 }
