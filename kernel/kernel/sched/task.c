@@ -487,6 +487,10 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 		return PANUTIERRNO_NOTFOUND;
 	}
 
+	if (bin->type != INODE_FILE) {
+		return PANUTIERRNO_UNSUPPORTEDOP;
+	}
+
 	void* elf_data;
 	size_t elf_size;
 	if (elf_read_whole_file(bin, &elf_data, &elf_size) != 0) {
