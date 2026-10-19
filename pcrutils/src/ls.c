@@ -29,6 +29,7 @@ static const char* type_label(inode_type_t type) {
 		case INODE_DIR: return "dir";
 		case INODE_FILE: return "file";
 		case INODE_BLOCK: return "block";
+		case INODE_DVC: return "dev";
 		case INODE_PIPE: return "pipe";
 		default: return "other";
 	}

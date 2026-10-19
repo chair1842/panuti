@@ -51,5 +51,5 @@ static const handle_ops_t kbd_raw_ops = {
 };
 
 void kbd_raw_init(void) {
-	registry_add("/dvc/kbd/raw", INODE_FILE, nullptr, &kbd_raw_ops);
+	registry_add("/dvc/kbd/raw", INODE_DVC, nullptr, &kbd_raw_ops);
 }

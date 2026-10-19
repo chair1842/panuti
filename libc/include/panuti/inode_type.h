@@ -15,6 +15,7 @@ typedef enum : uint8_t {
     INODE_FILE,
     INODE_BLOCK,
     INODE_PIPE,
+    INODE_DVC,
 } inode_type_t;
 
 #if defined(__cplusplus)

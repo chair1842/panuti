@@ -783,7 +783,7 @@ int main(int argc, char** argv) {
 	section(console, "36. link");
 
 	{
-		/* /dvc/console is a FILE inode, linkable */
+		/* /dvc/console is a device inode, linkable */
 		int32_t r = panutisysf_link("/dvc/console", "/ln_console");
 		check_is_success(console, "link /dvc/console /ln_console", r);
 		/* the new name must work like the original */

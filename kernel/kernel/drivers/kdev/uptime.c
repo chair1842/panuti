@@ -53,5 +53,5 @@ static const handle_ops_t uptime_ops = {
 };
 
 void kdev_uptime_register() {
-	registry_add("/dvc/uptime", INODE_FILE, nullptr, &uptime_ops);
+	registry_add("/dvc/uptime", INODE_DVC, nullptr, &uptime_ops);
 }

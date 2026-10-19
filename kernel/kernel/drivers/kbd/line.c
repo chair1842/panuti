@@ -231,5 +231,5 @@ static const handle_ops_t kbd_line_ops = {
 void kbd_line_init(void) {
 	line_state = (kbd_line_state_t){0};
 	console_ready = false;
-	registry_add("/dvc/kbd/line", INODE_FILE, nullptr, &kbd_line_ops);
+	registry_add("/dvc/kbd/line", INODE_DVC, nullptr, &kbd_line_ops);
 }

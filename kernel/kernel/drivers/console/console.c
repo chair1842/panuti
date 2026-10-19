@@ -23,5 +23,5 @@ static const handle_ops_t console_file_ops = {
 };
 
 void console_register(void) {
-	registry_add("/dvc/console", INODE_FILE, nullptr, &console_file_ops);
+	registry_add("/dvc/console", INODE_DVC, nullptr, &console_file_ops);
 }

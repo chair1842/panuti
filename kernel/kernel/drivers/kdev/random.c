@@ -66,5 +66,5 @@ static const handle_ops_t random_ops = {
 };
 
 void kdev_random_register() {
-	registry_add("/dvc/random", INODE_FILE, nullptr, &random_ops);
+	registry_add("/dvc/random", INODE_DVC, nullptr, &random_ops);
 }

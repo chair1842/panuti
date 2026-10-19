@@ -12,6 +12,7 @@ static const char* type_label(inode_type_t type) {
 		case INODE_DIR: return "directory";
 		case INODE_FILE: return "file";
 		case INODE_BLOCK: return "block device";
+		case INODE_DVC: return "device";
 		case INODE_PIPE: return "pipe";
 		default: return "unknown";
 	}

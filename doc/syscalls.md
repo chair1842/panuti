@@ -745,14 +745,16 @@ reuses one `dirent_entry_t` across calls must not read it after a non-zero
 return without zeroing it first.
 
 `inode_type_t` values: `INODE_NONE = 0`, `INODE_DIR = 1`, `INODE_FILE = 2`,
-`INODE_BLOCK = 3`, `INODE_PIPE = 4`.
+`INODE_BLOCK = 3`, `INODE_PIPE = 4`, `INODE_DVC = 5`.
 
 For **native (registry) directories** the reported type is the entry's inode
-type verbatim, so a switch on it must handle `INODE_DIR`, `INODE_FILE`, *and*
-`INODE_BLOCK` -- listing `/dvc`, for example, yields `INODE_BLOCK` for block
-devices. `INODE_NONE` and `INODE_PIPE` are not reachable here: pipes exist only
-as handle slots and are never registered as directory entries. Entries sourced
-from **IsoFS** are always `INODE_DIR` or `INODE_FILE`.
+type verbatim, so a switch on it must handle `INODE_DIR`, `INODE_FILE`,
+`INODE_BLOCK`, *and* `INODE_DVC` -- listing `/dvc`, for example, yields
+`INODE_DVC` for character devices (console, kbd, null, zero, random, uptime)
+and `INODE_BLOCK` for block devices (`/dvc/ram`, `/dvc/pata`, `/dvc/cdrom`).
+`INODE_NONE` and `INODE_PIPE` are not reachable here: pipes exist only as handle
+slots and are never registered as directory entries. Entries sourced from
+**IsoFS** are always `INODE_DIR` or `INODE_FILE`.
 
 **Returns:** 0 on success (entry written to `dirent_out`), 1 on end of directory (no entry written), or error code.
 

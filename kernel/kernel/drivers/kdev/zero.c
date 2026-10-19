@@ -27,5 +27,5 @@ static const handle_ops_t zero_ops = {
 };
 
 void kdev_zero_register() {
-	registry_add("/dvc/zero", INODE_FILE, nullptr, &zero_ops);
+	registry_add("/dvc/zero", INODE_DVC, nullptr, &zero_ops);
 }
