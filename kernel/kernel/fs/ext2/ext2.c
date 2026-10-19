@@ -581,10 +581,6 @@ static int ext2_rename(void* fs_impl, struct inode* old_dir, const char* old_nam
 		return PANUTIERRNO_NOTFOUND;
 	}
 
-	if (ext2_dirent_find(fs, &ndih, new_name, new_len, &existing) == 0) {
-		return PANUTIERRNO_EXISTS;
-	}
-
 	if (ext2_read_inode(fs, inum, &tgt) != 0 || tgt.dtime != 0) {
 		return PANUTIERRNO_NOTFOUND;
 	}
@@ -594,6 +590,46 @@ static int ext2_rename(void* fs_impl, struct inode* old_dir, const char* old_nam
 
 	if (is_dir && crosses && ext2_in_subtree(fs, inum, ndi->inum)) {
 		return PANUTIERRNO_BUSY;
+	}
+
+	if (ext2_dirent_find(fs, &ndih, new_name, new_len, &existing) == 0) {
+		if (existing == inum) {
+			return 0;
+		}
+
+		ext2_inode_hdr_t dst;
+
+		if (ext2_read_inode(fs, existing, &dst) != 0 || dst.dtime != 0) {
+			return PANUTIERRNO_NOTFOUND;
+		}
+
+		bool dst_is_dir = (dst.mode & EXT2_S_IFMT) == EXT2_S_IFDIR;
+
+		if (is_dir != dst_is_dir) {
+			return PANUTIERRNO_UNSUPPORTEDOP;
+		}
+
+		if (dst_is_dir) {
+			bool empty = false;
+
+			if (ext2_dirent_is_empty(fs, &dst, &empty) != 0) {
+				return PANUTIERRNO_PLAINERR;
+			}
+
+			if (!empty) {
+				return PANUTIERRNO_BUSY;
+			}
+		}
+
+		int rep = ext2_unlink(fs, new_dir, new_name, new_len);
+
+		if (rep != 0) {
+			return rep;
+		}
+
+		if (ext2_read_inode(fs, ndi->inum, &ndih) != 0) {
+			return PANUTIERRNO_NOTFOUND;
+		}
 	}
 
 	uint8_t file_type = is_dir ? EXT2_FT_DIR : EXT2_FT_REG;

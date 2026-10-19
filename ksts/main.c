@@ -759,8 +759,32 @@ int main(int argc, char** argv) {
 		/* collision: /mv_b/thing no longer exists, so create one to clash with */
 		r = panutisysf_mkdir("/mv_b/thing");
 		check_is_success(console, "mkdir /mv_b/thing (collision setup)", r);
+		/* the destination is an empty directory, so it is replaced */
 		r = panutisysf_rename("/mv_b/thing2", "/mv_b/thing");
-		check(console, "rename onto existing name -> EXISTS", r, PANUTIERRNO_EXISTS);
+		check_is_success(console, "rename onto existing empty dir -> replace", r);
+		r = panutisysf_chdir("/mv_b/thing2");
+		check(console, "old name gone after replace", r, PANUTIERRNO_NOTFOUND);
+		r = panutisysf_chdir("/mv_b/thing");
+		check_is_success(console, "destination survives replace", r);
+		r = panutisysf_chdir("/");
+		check_is_success(console, "chdir / (reset)", r);
+	}
+
+	{
+		/* a populated directory refuses to make way for a replace */
+		int32_t r = panutisysf_mkdir("/mv_b/full");
+		check_is_success(console, "mkdir /mv_b/full", r);
+		r = panutisysf_mkdir("/mv_b/full/child");
+		check_is_success(console, "mkdir /mv_b/full/child", r);
+		r = panutisysf_rename("/mv_b/thing", "/mv_b/full");
+		check(console, "rename dir over non-empty dir -> BUSY", r, PANUTIERRNO_BUSY);
+		/* a refused replace must leave both names reachable */
+		r = panutisysf_chdir("/mv_b/thing");
+		check_is_success(console, "source intact after refused replace", r);
+		r = panutisysf_chdir("/mv_b/full/child");
+		check_is_success(console, "destination intact after refused replace", r);
+		r = panutisysf_chdir("/");
+		check_is_success(console, "chdir / (reset)", r);
 	}
 
 	{
@@ -920,13 +944,24 @@ int main(int argc, char** argv) {
 		check(console, "write via renamed file", r, 9);
 		panutisysf_close(fd);
 
-		/* renaming a file onto an existing dir name is a collision */
+		/* a file cannot take over a directory of a different kind */
 		r = panutisysf_mkdir("/rn_dir2");
 		check_is_success(console, "mkdir /rn_dir2 (collision setup)", r);
 		r = panutisysf_rename("/rn_file2", "/rn_dir2");
-		check(console, "rename file over dir -> EXISTS", r, PANUTIERRNO_EXISTS);
-		r = panutisysf_unlink("/rn_file2");
-		check_is_success(console, "unlink renamed file", r);
+		check(console, "rename file over dir -> UNSUPPORTEDOP", r, PANUTIERRNO_UNSUPPORTEDOP);
+
+		/* a file replaces another file, the move an atomic save relies on */
+		r = panutisysf_link("/dvc/zero", "/rn_victim");
+		check_is_success(console, "link /dvc/zero /rn_victim", r);
+		r = panutisysf_rename("/rn_file2", "/rn_victim");
+		check_is_success(console, "rename file onto file -> replace", r);
+		fd = panutisysf_open("/rn_file2");
+		check(console, "old name gone after replace", fd, PANUTIERRNO_NOTFOUND);
+		fd = panutisysf_open("/rn_victim");
+		check_is_success(console, "destination survives replace", fd);
+		panutisysf_close(fd);
+		r = panutisysf_unlink("/rn_victim");
+		check_is_success(console, "unlink replaced file", r);
 
 		/* renaming into a missing parent is NOTFOUND */
 		r = panutisysf_rename("/rn_dir2", "/no/such/parent/child");

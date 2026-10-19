@@ -443,20 +443,33 @@ int32_t panutisysf_rename(const char* oldpath, const char* newpath);
 ```
 
 Move a directory entry from one path to another (same inode, new name/location).
+When `newpath` already names an entry, that entry is **replaced** rather than
+rejected, POSIX-style, so a rename can take over an existing name without a
+separate unlink.
 
 **Parameters:**
 - `oldpath` -- current path of the entry
 - `newpath` -- desired new path
+
+**Replace rules** (applied only when `newpath` already exists):
+- destination is the same inode as the source (a hard link, or the same entry) -- success, no change
+- both the source and the destination are non-directories -- the destination is replaced
+- both are directories -- the destination is replaced only when it is empty
+- a directory and a non-directory (either order) -- `PANUTIERRNO_UNSUPPORTEDOP`
+- destination is a non-empty directory -- `PANUTIERRNO_BUSY`
 
 **Returns:** 0 on success, or error code.
 
 **Errors:**
 - `PANUTIERRNO_INVALIDADDR` -- either pointer is not a valid userspace pointer
 - `PANUTIERRNO_NOTFOUND` -- source or destination parent does not exist, or source entry not found
-- `PANUTIERRNO_EXISTS` -- destination name already exists
-- `PANUTIERRNO_UNSUPPORTEDOP` -- rename involves a mounted filesystem
+- `PANUTIERRNO_UNSUPPORTEDOP` -- source and destination are of different kinds (one a directory, the other not), or the backing filesystem does not implement rename
+- `PANUTIERRNO_BUSY` -- destination is a non-empty directory
 
-**Note:** self-rename (same path) is a no-op.
+**Note:** self-rename (same path) is a no-op. A replace removes the destination
+and then moves the source onto the name, so it is not a crash-atomic overwrite:
+an interruption between the two steps can leave the name missing. A true
+overwrite-in-place primitive is still pending.
 
 ---
 

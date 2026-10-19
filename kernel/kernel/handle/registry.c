@@ -646,6 +646,19 @@ int registry_link(inode_t* target, inode_t* dir, const char* name, size_t len) {
 	return 0;
 }
 
+static bool registry_dir_is_empty(inode_t* dir) {
+	for (dirent_t* d = dir->children; d; d = d->next) {
+		bool self = (d->name_len == 1 && d->name[0] == '.');
+		bool parent = (d->name_len == 2 && d->name[0] == '.' && d->name[1] == '.');
+
+		if (!self && !parent) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
 int registry_rename(inode_t* old_dir, const char* old_name, size_t old_len,
                     inode_t* new_dir, const char* new_name, size_t new_len) {
 	if (!old_dir || !new_dir || !old_name || !new_name) {
@@ -685,6 +698,12 @@ int registry_rename(inode_t* old_dir, const char* old_name, size_t old_len,
 			return ret;
 		}
 
+		dirent_t* victim = dirent_detach(new_dir, new_name, new_len);
+		if (victim) {
+			inode_unref(victim->inode);
+			dirent_unref(victim);
+		}
+
 		// keep the cache honest. the entry may never have been looked up in
 		// this session, in which case there is simply nothing to move
 		dirent_t* d = registry_finddirent(old_dir, old_name, old_len);
@@ -718,8 +737,30 @@ int registry_rename(inode_t* old_dir, const char* old_name, size_t old_len,
 		return PANUTIERRNO_NOTFOUND;
 	}
 
-	if (registry_finddirent(new_dir, new_name, new_len)) {
-		return PANUTIERRNO_EXISTS;
+	dirent_t* dst = registry_finddirent(new_dir, new_name, new_len);
+	if (dst) {
+		if (dst->inode == src->inode) {
+			return 0;
+		}
+
+		bool src_dir = (src->inode->type == INODE_DIR);
+		bool dst_dir = (dst->inode->type == INODE_DIR);
+
+		if (src_dir != dst_dir) {
+			return PANUTIERRNO_UNSUPPORTEDOP;
+		}
+
+		if (dst_dir && !registry_dir_is_empty(dst->inode)) {
+			return PANUTIERRNO_BUSY;
+		}
+
+		dst = dirent_detach(new_dir, new_name, new_len);
+		if (!dst) {
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		inode_unref(dst->inode);
+		dirent_unref(dst);
 	}
 
 	// link the new name first (bumps refcount), then drop the old one
