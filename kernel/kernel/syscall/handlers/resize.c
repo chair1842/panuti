@@ -11,11 +11,7 @@ int32_t syshandler_resize(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	int fd = a1;
 	uint64_t* user_size = (uint64_t*)a2;
 
-	if (
-		!kernel_is_user_ptr(user_size)
-		||
-		!kernel_is_user_ptr((uint8_t*)user_size + sizeof(uint64_t) - 1)
-	) {
+	if (!kernel_usrptr_verify(user_size, sizeof(uint64_t))) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 	

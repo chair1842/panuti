@@ -14,7 +14,7 @@ int32_t syshandler_stream_read(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a
 	void* buf = (void*)a2;
 	size_t len = (size_t)a3;
 
-	if (!kernel_is_user_range(buf, len)) {
+	if (!kernel_usrptr_verify(buf, len)) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 

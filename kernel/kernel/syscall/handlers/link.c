@@ -13,8 +13,12 @@ int32_t syshandler_link(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	const char* target = (const char*)a1;
 	const char* newpath = (const char*)a2;
 
-	if (!kernel_is_user_ptr(target) || !kernel_is_user_ptr(newpath) ||
-	    kernel_user_strlen(target) == (size_t)-1 || kernel_user_strlen(newpath) == (size_t)-1) {
+	size_t target_len = kernel_user_strlen(target);
+	size_t newpath_len = kernel_user_strlen(newpath);
+
+	if (target_len == (size_t)-1 || newpath_len == (size_t)-1 ||
+	    !kernel_usrptr_verify(target, target_len + 1) ||
+	    !kernel_usrptr_verify(newpath, newpath_len + 1)) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 

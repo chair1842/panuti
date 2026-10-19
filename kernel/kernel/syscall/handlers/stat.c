@@ -15,12 +15,13 @@ int32_t syshandler_stat(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	const char* path = (const char*)a1;
 	dirent_entry_t* user_out = (dirent_entry_t*)a2;
 
-	if (!kernel_is_user_range(user_out, sizeof(dirent_entry_t))) {
+	if (!kernel_usrptr_verify(user_out, sizeof(dirent_entry_t))) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 
 	size_t pathlen = 0;
-	if (!kernel_is_user_ptr(path) || (pathlen = kernel_user_strlen(path)) == (size_t)-1) {
+	if ((pathlen = kernel_user_strlen(path)) == (size_t)-1 ||
+	    !kernel_usrptr_verify(path, pathlen + 1)) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 

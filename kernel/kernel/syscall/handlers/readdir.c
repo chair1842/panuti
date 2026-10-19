@@ -16,7 +16,7 @@ int32_t syshandler_readdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	int fd = (int)a1;
 	dirent_entry_t* user_out = (dirent_entry_t*)a2;
 
-	if (!kernel_is_user_range(user_out, sizeof(dirent_entry_t))) {
+	if (!kernel_usrptr_verify(user_out, sizeof(dirent_entry_t))) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 

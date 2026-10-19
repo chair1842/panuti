@@ -23,7 +23,9 @@ int32_t syshandler_munmap(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 
-	/* Also rejects a length that would wrap the 32-bit address space. */
+	/* Also rejects a length that would wrap the 32-bit address space. This is
+	 * deliberately the range check and not kernel_usrptr_verify(): a range that
+	 * spans unmapped pages is exactly what MUNMAP is asked to clean up. */
 	if (!kernel_is_user_range((void*)addr, len)) {
 		return PANUTIERRNO_INVALIDADDR;
 	}

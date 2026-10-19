@@ -12,13 +12,14 @@ int32_t syshandler_procreate(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4)
 	(void)a2; (void)a3; (void)a4;
 	const procreate_args_t* user_args = (const procreate_args_t*)a1;
 
-	if (!kernel_is_user_ptr(user_args)) {
+	if (!kernel_usrptr_verify(user_args, sizeof(procreate_args_t))) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 
 	procreate_args_t args = *user_args;
 
-	if (!kernel_is_user_ptr(args.path) || kernel_user_strlen(args.path) == (size_t)-1) {
+	size_t path_len = kernel_user_strlen(args.path);
+	if (path_len == (size_t)-1 || !kernel_usrptr_verify(args.path, path_len + 1)) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 
@@ -27,12 +28,13 @@ int32_t syshandler_procreate(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4)
 	}
 	
 	if (args.argc > 0) {
-		if (!kernel_is_user_range(args.argv, sizeof(char*) * (size_t)args.argc)) {
+		if (!kernel_usrptr_verify(args.argv, sizeof(char*) * (size_t)args.argc)) {
 			return PANUTIERRNO_INVALIDADDR;
 		}
 		
 		for (int i = 0; i < args.argc; i++) {
-			if (!kernel_is_user_ptr(args.argv[i]) || kernel_user_strlen(args.argv[i]) == (size_t)-1) {
+			size_t arg_len = kernel_user_strlen(args.argv[i]);
+			if (arg_len == (size_t)-1 || !kernel_usrptr_verify(args.argv[i], arg_len + 1)) {
 				return PANUTIERRNO_INVALIDADDR;
 			}
 		}
@@ -44,7 +46,7 @@ int32_t syshandler_procreate(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4)
 	
 	if (
 		args.no_in_streams > 0 
-		&& !kernel_is_user_range(args.in_streams, sizeof(int) * (size_t)args.no_in_streams)
+		&& !kernel_usrptr_verify(args.in_streams, sizeof(int) * (size_t)args.no_in_streams)
 	) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
@@ -55,7 +57,7 @@ int32_t syshandler_procreate(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4)
 	
 	if (
 		args.no_out_streams > 0 
-		&& !kernel_is_user_range(args.out_streams, sizeof(int) * (size_t)args.no_out_streams)
+		&& !kernel_usrptr_verify(args.out_streams, sizeof(int) * (size_t)args.no_out_streams)
 	) {
 		return PANUTIERRNO_INVALIDADDR;
 	}

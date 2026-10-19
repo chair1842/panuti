@@ -13,11 +13,7 @@ int32_t syshandler_seek(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	int64_t* user_off = (int64_t*)a2;
 	int whence = (int)a3;
 
-	if (
-		!kernel_is_user_ptr(user_off)
-		||
-		!kernel_is_user_ptr((uint8_t*)user_off + sizeof(int64_t) - 1)
-	) {
+	if (!kernel_usrptr_verify(user_off, sizeof(int64_t))) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 

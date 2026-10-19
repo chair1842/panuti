@@ -16,7 +16,7 @@ int32_t syshandler_getcwd(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	char* buf = (char*)a1;
 	size_t len = (size_t)a2;
 
-	if (!kernel_is_user_range(buf, len) || len == 0) {
+	if (!kernel_usrptr_verify(buf, len) || len == 0) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 

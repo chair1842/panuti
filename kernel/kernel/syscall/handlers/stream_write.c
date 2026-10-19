@@ -14,7 +14,7 @@ int32_t syshandler_stream_write(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t 
 	const void* buf = (const void*)a2;
 	size_t len = (size_t)a3;
 
-	if (!kernel_is_user_range((void*)buf, len)) {
+	if (!kernel_usrptr_verify((void*)buf, len)) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 

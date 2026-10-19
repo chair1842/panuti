@@ -17,10 +17,14 @@ int32_t syshandler_mount(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	const char* fstype = (const char*)a2;
 	const char* blkdev = (const char*)a3;
 
-	if (!kernel_is_user_ptr(mountp) || !kernel_is_user_ptr(fstype) || !kernel_is_user_ptr(blkdev) ||
-	    kernel_user_strlen(mountp) == (size_t)-1 ||
-	    kernel_user_strlen(fstype) == (size_t)-1 ||
-	    kernel_user_strlen(blkdev) == (size_t)-1) {
+	size_t mountp_len = kernel_user_strlen(mountp);
+	size_t fstype_len = kernel_user_strlen(fstype);
+	size_t blkdev_len = kernel_user_strlen(blkdev);
+
+	if (mountp_len == (size_t)-1 || fstype_len == (size_t)-1 || blkdev_len == (size_t)-1 ||
+	    !kernel_usrptr_verify(mountp, mountp_len + 1) ||
+	    !kernel_usrptr_verify(fstype, fstype_len + 1) ||
+	    !kernel_usrptr_verify(blkdev, blkdev_len + 1)) {
 		return PANUTIERRNO_INVALIDADDR;
 	}
 
