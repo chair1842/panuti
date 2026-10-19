@@ -3,10 +3,12 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <limits.h>
 #include <panuti/handle.h>
 #include <panuti/stat.h>
 #include <panuti/kbd.h>
 #include <panuti/stream.h>
+#include <panuti/errno.h>
 #include <panuti/syscall/syscallsf.h>
 
 #define ROWS 24
@@ -50,6 +52,8 @@ typedef struct editor_global {
 	commandmode_state_t cmstate;
 	
 	bool dirty;
+
+	bool trailing_nl;
 } editor_global_t;
 
 // why is this called egg?
@@ -65,22 +69,42 @@ static void line_init(line_t* l) {
 	l->cap = 0;
 }
 
+#define LINE_LEN_MAX (INT_MAX - 8)
+
 static bool line_reserve(line_t* l, int cap) {
+	if (cap < 0) {
+		return false;
+	}
+
 	if (l->cap >= cap) {
 		return true;
 	}
 
-	char* ns = realloc(l->string, cap);
+	int ncap = l->cap ? l->cap : 16;
+	while (ncap < cap) {
+		if (ncap > INT_MAX / 2) {
+			ncap = cap;
+			break;
+		}
+
+		ncap *= 2;
+	}
+
+	char* ns = realloc(l->string, (size_t)ncap);
 	if (!ns) {
 		return false;
 	}
 
 	l->string = ns;
-	l->cap = cap;
+	l->cap = ncap;
 	return true;
 }
 
 static bool line_set(line_t* l, const char* str, int len) {
+	if (len < 0 || len > LINE_LEN_MAX) {
+		return false;
+	}
+
 	if (!line_reserve(l, len + 1)) {
 		return false;
 	}
@@ -92,6 +116,10 @@ static bool line_set(line_t* l, const char* str, int len) {
 }
 
 static bool line_append(line_t* l, char c) {
+	if (l->len >= LINE_LEN_MAX) {
+		return false;
+	}
+
 	if (!line_reserve(l, l->len + 2)) {
 		return false;
 	}
@@ -107,6 +135,10 @@ static bool line_insert(line_t* l, int pos, char c) {
 	}
 	if (pos > l->len) {
 		pos = l->len;
+	}
+
+	if (l->len >= LINE_LEN_MAX) {
+		return false;
 	}
 
 	if (!line_reserve(l, l->len + 2)) {
@@ -194,68 +226,127 @@ static bool add_line(const char* str, int len) {
 	return true;
 }
 
-bool load(const char* path) {
-	dirent_entry_t dr;
-	if (!nexist(path)) {
-		return add_line("", 0);
+static void set_errmsg(const char* msg) {
+	line_set(&EGG.errormsg, msg, (int)strlen(msg));
+	EGG.show_errmsg = true;
+}
+
+static char* tmp_path(const char* path) {
+	size_t len = strlen(path);
+	char* tmp = malloc(len + 6);
+	if (!tmp) {
+		return NULL;
 	}
 
-	if (stat(path, &dr) != 0) {
-		return add_line("", 0);
+	memcpy(tmp, path, len);
+	memcpy(tmp + len, ".ntmp", 6);
+	return tmp;
+}
+
+typedef enum load_status {
+	LOAD_OK,
+	LOAD_NEW,
+	LOAD_EOOM,
+	LOAD_EIO,
+	LOAD_ENOTDIR
+} load_status_t;
+
+static load_status_t load(const char* path) {
+	char* stale = tmp_path(path);
+	if (stale) {
+		if (nexist(stale)) {
+			panutisysf_unlink(stale);
+		}
+
+		free(stale);
+	}
+
+	dirent_entry_t dr;
+	int32_t sr = stat(path, &dr);
+
+	if (sr != 0) {
+		if (sr != (int32_t)PANUTIERRNO_NOTFOUND) {
+			return LOAD_EIO;
+		}
+
+		EGG.trailing_nl = true;
+
+		if (!add_line("", 0)) {
+			return LOAD_EOOM;
+		}
+
+		return LOAD_NEW;
+	}
+
+	if (dr.type == INODE_DIR) {
+		return LOAD_ENOTDIR;
 	}
 
 	size_t size = dr.size;
 	char* data = malloc(size + 1);
 	if (!data) {
-		return false;
+		return LOAD_EOOM;
 	}
 
 	int fd = handle_open(path);
 	if (fd < 0) {
 		free(data);
-		return false;
+		return LOAD_EIO;
 	}
 
 	size_t b = 0;
 	while (b < size) {
 		int n = handle_read(fd, data + b, size - b);
-		if (n <= 0) {
+		if (n < 0) {
+			handle_close(fd);
+			free(data);
+			return LOAD_EIO;
+		}
+
+		if (n == 0) {
 			break;
 		}
-	
-		b += n;
+
+		b += (size_t)n;
 	}
-	
+
 	handle_close(fd);
+
+	if (b < size) {
+		free(data);
+		return LOAD_EIO;
+	}
 
 	size_t start = 0;
 	for (size_t i = 0; i < b; i++) {
 		if (data[i] == '\n') {
 			if (!add_line(data + start, (int)(i - start))) {
 				free(data);
-				return false;
+				return LOAD_EOOM;
 			}
-			
+
 			start = i + 1;
 		}
 	}
-	
+
 	if (start < b) {
 		if (!add_line(data + start, (int)(b - start))) {
 			free(data);
-			return false;
-		}
-	}
-	
-	if (EGG.nlines == 0) {
-		if (!add_line("", 0)) {
-			free(data);
-			return false;
+			return LOAD_EOOM;
 		}
 	}
 
+	if (EGG.nlines == 0) {
+		if (!add_line("", 0)) {
+			free(data);
+			return LOAD_EOOM;
+		}
+	}
+
+	EGG.trailing_nl = (b > 0 && data[b - 1] == '\n');
+
 	free(data);
-	return true;
+	return LOAD_OK;
 }
 
 static bool write_all(int fd, const void* data, size_t len) {
@@ -279,14 +370,21 @@ bool save(const char* path) {
 		return true;
 	}
 
-	if (!nexist(path)) {
-		if (panutisysf_mkfile(path) < 0) {
+	char* tmp = tmp_path(path);
+	if (!tmp) {
+		return false;
+	}
+
+	if (!nexist(tmp)) {
+		if (panutisysf_mkfile(tmp) < 0) {
+			free(tmp);
 			return false;
 		}
 	}
 
-	int fd = handle_open(path);
+	int fd = handle_open(tmp);
 	if (fd < 0) {
+		free(tmp);
 		return false;
 	}
 
@@ -294,6 +392,8 @@ bool save(const char* path) {
 
 	if (panutisysf_resize(fd, &zero) < 0) {
 		handle_close(fd);
+		panutisysf_unlink(tmp);
+		free(tmp);
 		return false;
 	}
 
@@ -304,13 +404,23 @@ bool save(const char* path) {
 			ok = write_all(fd, EGG.lines[i].string, (size_t)EGG.lines[i].len);
 		}
 
-		if (ok) {
+		if (ok && (i + 1 < EGG.nlines || EGG.trailing_nl)) {
 			char nl = '\n';
 			ok = write_all(fd, &nl, 1);
 		}
 	}
 
 	handle_close(fd);
+
+	if (ok) {
+		ok = panutisysf_rename(tmp, path) == 0;
+	}
+
+	if (!ok) {
+		panutisysf_unlink(tmp);
+	}
+
+	free(tmp);
 
 	if (ok) {
 		EGG.dirty = false;
@@ -329,8 +439,7 @@ int handin_normal(keypacket_t kp) {
 	} else if (kp.keycode == KEYCODE_ENTER) {
 		line_t* l = line_new_at(EGG.cur_y + 1);
 		if (!l) {
-			line_free(&EGG.errormsg);
-			line_set(&EGG.errormsg, "out of memory", 13);
+			set_errmsg("out of memory");
 			return 2;
 		}
 
@@ -342,8 +451,7 @@ int handin_normal(keypacket_t kp) {
 	} else if (kp.keycode == KEYCODE_O && !kp.shift) {
 		line_t* l = line_new_at(EGG.cur_y + 1);
 		if (!l) {
-			line_free(&EGG.errormsg);
-			line_set(&EGG.errormsg, "out of memory", 13);
+			set_errmsg("out of memory");
 			return 2;
 		}
 
@@ -357,8 +465,7 @@ int handin_normal(keypacket_t kp) {
 	} else if (kp.keycode == KEYCODE_O) {
 		line_t* l = line_new_at(EGG.cur_y);
 		if (!l) {
-			line_free(&EGG.errormsg);
-			line_set(&EGG.errormsg, "out of memory", 13);
+			set_errmsg("out of memory");
 			return 2;
 		}
 
@@ -434,24 +541,21 @@ static int hicommand_prcc(void) {
 
 	if (strcmp(command->string, "q") == 0) {
 		if (EGG.dirty) {
-			line_free(&EGG.errormsg);
-			line_set(&EGG.errormsg, "unsaved changes, use \":q!\" to override", 38);
+			set_errmsg("unsaved changes, use \":q!\" to override");
 			return 2;
 		}
 
 		return 1;
 	} else if (strcmp(command->string, "w") == 0) {
 		if (!save(EGG.path)) {
-			line_free(&EGG.errormsg);
-			line_set(&EGG.errormsg, "could not save the file", 24);
+			set_errmsg("could not save the file");
 			return 2;
 		}
 
 		return 0;
 	} else if (strcmp(command->string, "wq") == 0) {
 		if (!save(EGG.path)) {
-			line_free(&EGG.errormsg);
-			line_set(&EGG.errormsg, "could not save the file", 24);
+			set_errmsg("could not save the file");
 			return 2;
 		}
 
@@ -460,18 +564,22 @@ static int hicommand_prcc(void) {
 		return 1;
 	}
 
-	line_free(&EGG.errormsg);
 	line_set(&EGG.errormsg, "command \"", 9);
 
 	for (int i = 0; i < command->len; i++) {
-		line_append(&EGG.errormsg, command->string[i]);
+		if (!line_append(&EGG.errormsg, command->string[i])) {
+			break;
+		}
 	}
 
 	const char* tail = "\" is not recognized";
 	for (const char* p = tail; *p != '\0'; p++) {
-		line_append(&EGG.errormsg, *p);
+		if (!line_append(&EGG.errormsg, *p)) {
+			break;
+		}
 	}
 
+	EGG.show_errmsg = true;
 	return 2;
 }
 
@@ -501,7 +609,10 @@ int handin_command(keypacket_t kp) {
 
 	char c = keypacket_to_ascii(kp);
 	if (c != 0) {
-		line_append(&EGG.cmstate.command, c);
+		if (!line_append(&EGG.cmstate.command, c)) {
+			set_errmsg("out of memory");
+			return 2;
+		}
 	}
 	
 	return 0;
@@ -523,17 +634,13 @@ int handin_insert(keypacket_t kp) {
 		
 			line_t* nl = line_new_at(EGG.cur_y + 1);
 			if (!nl) {
-				line_free(&EGG.errormsg);
-				line_set(&EGG.errormsg, "out of memory", 13);
-				EGG.show_errmsg = true;
+				set_errmsg("out of memory");
 				return 0;
 			}
 		
 			if (!line_set(nl, str + at, len - at)) {
 				line_delete_at(EGG.cur_y + 1);
-				line_free(&EGG.errormsg);
-				line_set(&EGG.errormsg, "out of memory", 13);
-				EGG.show_errmsg = true;
+				set_errmsg("out of memory");
 				return 0;
 			}
 		
@@ -556,17 +663,20 @@ int handin_insert(keypacket_t kp) {
 				line_t* cur = &EGG.lines[EGG.cur_y];
 				int at = prev->len;
 
-				if (line_reserve(prev, prev->len + cur->len + 1)) {
-					for (int i = 0; i < cur-> len; i++) {
-						line_append(prev, cur->string[i]);
-					}
+				if (!line_reserve(prev, prev->len + cur->len + 1)) {
+					set_errmsg("out of memory");
+					return 0;
+				}
+
+				for (int i = 0; i < cur->len; i++) {
+					line_append(prev, cur->string[i]);
+				}
 
 				line_delete_at(EGG.cur_y);
 				EGG.cur_y--;
 				EGG.cur_x = at;
 				EGG.insert_x = at;
 				EGG.dirty = true;
-				}
 			}
 
 			return 0;
@@ -574,6 +684,8 @@ int handin_insert(keypacket_t kp) {
 			if (line_insert(&EGG.lines[EGG.cur_y], EGG.cur_x, '\t')) {
 				EGG.cur_x++;
 				EGG.dirty = true;
+			} else {
+				set_errmsg("out of memory");
 			}
 
 			return 0;
@@ -586,6 +698,8 @@ int handin_insert(keypacket_t kp) {
 		if (line_insert(&EGG.lines[EGG.cur_y], EGG.cur_x, c)) {
 			EGG.cur_x++;
 			EGG.dirty = true;
+		} else {
+			set_errmsg("out of memory");
 		}
 	}
 	
@@ -789,9 +903,20 @@ int main(int argc, char** argv) {
 
 	EGG.path = argv[1];
 
-	if (!load(EGG.path)) {
-		printf("nib: could not open \"%s\"\n", argv[1]);
-		return -1;
+	switch (load(EGG.path)) {
+		case LOAD_OK:
+		case LOAD_NEW:
+			break;
+		case LOAD_EOOM:
+			printf("nib: out of memory loading \"%s\"\n", argv[1]);
+			return -1;
+		case LOAD_ENOTDIR:
+			printf("nib: \"%s\" is a directory\n", argv[1]);
+			return -1;
+		case LOAD_EIO:
+		default:
+			printf("nib: could not read \"%s\"\n", argv[1]);
+			return -1;
 	}
 
 	int kbd = handle_open("/dvc/kbd/raw");
@@ -811,7 +936,11 @@ int main(int argc, char** argv) {
 		int n = handle_read(kbd, &kp, sizeof(kp));
 
 		if (n < 0) {
-			break;
+			// a read error is no reason to throw away unsaved edits, so report
+			// it and keep the editor running
+			set_errmsg("keyboard read error");
+			panutisysf_yield();
+			continue;
 		}
 
 		if (n != (int)(sizeof(kp))) {
