@@ -1,6 +1,6 @@
 # Licenses
 
-There are 7 projects/components inside panuti.
+There are 9 projects/components inside panuti.
 - kernel
 - ksts
 - libc
@@ -23,5 +23,5 @@ The licences for the following projects/components are stated here.
 - pur - GPLv2-or-later
 - pcrutils - BSD 3-Clause
 - nib - GPLv2-or-later
-- calc - BSD 3-Claude
+- calc - BSD 3-Clause
 - conway - BSD 3-Clause
