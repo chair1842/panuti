@@ -2,6 +2,31 @@
 
 a hobbyist os
 
+## How to try out
+
+You can use panuti on any virtual machine (the type of virt machine doesn't make a difference)
+
+These instructions will use QEMU.
+
+```
+qemu-system-i386 -cdrom panuti.iso
+```
+
+if you want to try out hard disks,
+get an already formatted to ext2 disk image and use it.
+Panuti does not have a utility to format yet.
+
+```
+qemu-system-i386 -cdrom panuti.iso -hda disk.img
+```
+
+to mount your formatted disk, type these commands out on panuti:
+
+```
+mkdir mnt
+mount mnt ext2 /dvc/pata/0
+```
+
 ## Projects
 
 - [kernel](kernel/README.md)
