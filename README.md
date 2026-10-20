@@ -4,7 +4,8 @@ a hobbyist os
 
 ## Gifs
 
-<img width="718" height="400" alt="ezgif-3e093a54a6cdcfb9" src="https://github.com/user-attachments/assets/8bc1d011-ece4-4487-a12a-779d88c42489" />
+<img width="49%" alt="conway of life running on panuti" src="https://github.com/user-attachments/assets/8bc1d011-ece4-4487-a12a-779d88c42489" /> <img width="49%" alt="really slow editing on nib" src="https://github.com/user-attachments/assets/7fc04482-d8b3-457b-930c-872cb8978654" />
+
 
 ## How to try out
 
