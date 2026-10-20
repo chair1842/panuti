@@ -27,6 +27,16 @@ mkdir mnt
 mount mnt ext2 /dvc/pata/0
 ```
 
+## Current limitations
+
+- Pur and Pint both assume unconditionally that the OS is being booted from a cd
+- Pur hardcodes its PATH at `/cd/usr/bin`
+- only 1024 inodes can exist at a time.
+- only 2048 dirents can exist at a time
+- only 64 tasks at a time.
+
+that's all i can think about :)
+
 ## Projects
 
 - [kernel](kernel/README.md)
