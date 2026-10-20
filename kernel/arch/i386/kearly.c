@@ -6,6 +6,7 @@
 #include <kernel/klog.h>
 #include "drivers/kbd/ps2.h"
 #include "kernel/kbd/core.h"
+#include <kernel/serial/core.h>
 
 #define TIMER_FREQ 100
 
@@ -19,6 +20,8 @@ void kearly(void) {
 	kbd_core_init();
 
 	kbd_ps2_init();
+
+	serial_register();
 
 	timer_init(TIMER_FREQ);
 	klog(KLOG_INFO, "kearly: timer initialized\n");

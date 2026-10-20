@@ -83,6 +83,7 @@ kernel/syscall/handlers/wait.o \
 kernel/drivers/kbd/core.o \
 kernel/drivers/kbd/line.o \
 kernel/drivers/kbd/raw.o \
+kernel/drivers/serial/serial.o \
 kernel/handle/dir.o \
 kernel/syscall/handlers/readdir.o \
 kernel/syscall/handlers/stat.o \

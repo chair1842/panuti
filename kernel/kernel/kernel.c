@@ -16,6 +16,7 @@
 #include "drivers/ramblock/ramblock.h"
 #include "drivers/kdev/kdev.h"
 #include <kernel/kbd/dvc.h>
+#include <kernel/serial/dvc.h>
 
 static void idle_task_entry(void) {
     while (1) {
@@ -45,6 +46,8 @@ void kernel_main(void) {
 	kdev_uptime_register();
 
 	kmsg_init();
+
+	serial_dvc_init();
 
 	// ide_init probes both buses and hangs the irq handlers, then each
 	// protocol driver claims whichever slots turned out to speak it
