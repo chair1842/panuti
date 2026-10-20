@@ -32,6 +32,8 @@ mkdir mnt
 mount mnt ext2 /dvc/pata/0
 ```
 
+make sure to unmount before shutting down
+
 ## Current limitations
 
 - Pur and Pint both assume unconditionally that the OS is being booted from a cd
