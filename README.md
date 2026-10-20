@@ -2,6 +2,10 @@
 
 a hobbyist os
 
+## Gifs
+
+<img width="718" height="400" alt="ezgif-3e093a54a6cdcfb9" src="https://github.com/user-attachments/assets/8bc1d011-ece4-4487-a12a-779d88c42489" />
+
 ## How to try out
 
 You can use panuti on any virtual machine (the type of virt machine doesn't make a difference)
