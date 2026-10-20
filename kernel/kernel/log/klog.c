@@ -3,7 +3,6 @@
 #include <kernel/klog.h>
 #include <kernel/kmsg.h>
 #include <kernel/tty.h>
-#include <kernel/serial.h>
 #include <stdarg.h>
 #include <stdio.h>
 
