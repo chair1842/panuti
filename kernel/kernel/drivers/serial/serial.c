@@ -139,6 +139,8 @@ void serial_register(void) {
 	} candidates[SERIAL_MAX_PORTS] = {
 		{UART_COM1_BASE, 0x24},
 		{UART_COM2_BASE, 0x23},
+		{UART_COM3_BASE, 0x24},
+		{UART_COM4_BASE, 0x23},
 	};
 
 	for (int i = 0; i < SERIAL_MAX_PORTS; i++) {

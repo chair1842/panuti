@@ -8,7 +8,7 @@
 #include <stdint.h>
 
 #define SERIAL_RING_SIZE 1024
-#define SERIAL_MAX_PORTS 2
+#define SERIAL_MAX_PORTS 4
 #define SERIAL_MAX_WAITERS 8
 
 typedef enum serial_chip {

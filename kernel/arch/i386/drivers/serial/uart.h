@@ -9,9 +9,13 @@
 
 #define UART_COM1_BASE 0x3F8
 #define UART_COM2_BASE 0x2F8
+#define UART_COM3_BASE 0x3E8
+#define UART_COM4_BASE 0x2E8
 
 #define UART_IRQ_COM1 4
 #define UART_IRQ_COM2 3
+#define UART_IRQ_COM3 4
+#define UART_IRQ_COM4 3
 
 #define UART_REG_DATA(base) ((base) + 0)
 #define UART_REG_IER(base) ((base) + 1)
