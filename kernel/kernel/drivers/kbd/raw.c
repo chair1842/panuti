@@ -7,8 +7,9 @@
 #include <panuti/kbd.h>
 #include <string.h>
 
-static int kbd_raw_open(void* impl) {
+static int kbd_raw_open(void* impl, void** out_impl) {
 	(void)impl;
+	(void)out_impl;
 	kbd_core_drain_raw_queue();
 	return 0;
 }

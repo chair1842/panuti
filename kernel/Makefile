@@ -35,8 +35,8 @@ kernel/kernel.o \
 kernel/pardet.o \
 kernel/memman/slab/slab.o \
 kernel/memman/vmalloc/vmalloc.o \
-kernel/klog.o \
-kernel/kpanic.o \
+kernel/log/klog.o \
+kernel/log/kpanic.o \
 kernel/sched/task.o \
 kernel/sched/sched.o \
 kernel/elf/elf32.o \
@@ -93,7 +93,8 @@ kernel/fs/ext2/ext2.o \
 kernel/fs/ext2/helpers.o \
 kernel/syscall/handlers/resize.o \
 kernel/syscall/handlers/mkfile.o \
-kernel/syscall/handlers/seek.o
+kernel/syscall/handlers/seek.o \
+kernel/log/kmsg.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

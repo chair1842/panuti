@@ -23,5 +23,7 @@ void kpanic_impl(const char *file, int line, const char *fmt, ...) {
 	va_end(args);
 
 	asm volatile ("cli");
-	for (;;) { asm volatile ("hlt"); }
+	while (1) {
+		asm volatile ("hlt");
+	}
 }

@@ -6,6 +6,7 @@
 #include <kernel/tty.h>
 #include <kernel/sched/sched.h>
 #include <kernel/klog.h>
+#include <kernel/kmsg.h>
 #include <kernel/boot_mod.h>
 #include <kernel/kpanic.h>
 #include <kernel/ata/atapi.h>
@@ -42,6 +43,8 @@ void kernel_main(void) {
 	kdev_zero_register();
 	kdev_random_register();
 	kdev_uptime_register();
+
+	kmsg_init();
 
 	// ide_init probes both buses and hangs the irq handlers, then each
 	// protocol driver claims whichever slots turned out to speak it
