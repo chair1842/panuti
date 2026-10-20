@@ -51,10 +51,14 @@ static uart_t serial_ports[SERIAL_MAX_PORTS];
 static int serial_n_ports;
 
 uart_t* serial_get_port(int index) {
-	if (index < 0 || index >= serial_n_ports) {
+	if (index < 0 || index >= SERIAL_MAX_PORTS) {
 		return nullptr;
 	}
-	
+
+	if (!serial_ports[index].present) {
+		return nullptr;
+	}
+
 	return &serial_ports[index];
 }
 
@@ -133,6 +137,8 @@ void serial_rx_error(uart_t* u) {
 void serial_register(void) {
 	serial_n_ports = 0;
 
+	memset(serial_ports, 0, sizeof(serial_ports));
+
 	struct {
 		uint16_t base;
 		uint32_t vector;
@@ -149,11 +155,11 @@ void serial_register(void) {
 			continue;
 		}
 
-		uart_t* u = &serial_ports[serial_n_ports];
+		uart_t* u = &serial_ports[i];
 		memset(u, 0, sizeof(*u));
 		u->base = candidates[i].base;
 		u->irq_vector = candidates[i].vector;
-		u->index = serial_n_ports;
+		u->index = i;
 		u->chip = chip;
 		u->present = true;
 		u->baud = 115200;
@@ -161,12 +167,12 @@ void serial_register(void) {
 		uart_init(u->base, u->baud);
 
 		const char* name = (chip == SERIAL_CHIP_16550A) ? "16550A" : "8250";
-		klog(KLOG_INFO, "serial: COM%d at 0x%x is a %s\n", serial_n_ports + 1, u->base, name);
+		klog(KLOG_INFO, "serial: COM%d at 0x%x is a %s\n", i + 1, u->base, name);
 
 		if (uart_loopback_test(u->base)) {
-			klog(KLOG_INFO, "serial: COM%d loopback pass\n", serial_n_ports + 1);
+			klog(KLOG_INFO, "serial: COM%d loopback pass\n", i + 1);
 		} else {
-			klog(KLOG_WARN, "serial: COM%d loopback FAIL\n", serial_n_ports + 1);
+			klog(KLOG_WARN, "serial: COM%d loopback FAIL\n", i + 1);
 		}
 
 		serial_isa_attach(u);
@@ -481,8 +487,12 @@ void serial_dvc_init(void) {
 
 	registry_mkdir("/dvc/serial");
 
-	for (int i = 0; i < serial_n_ports; i++) {
+	for (int i = 0; i < SERIAL_MAX_PORTS; i++) {
 		uart_t* u = &serial_ports[i];
+
+		if (!u->present) {
+			continue;
+		}
 
 		char dir[32];
 		render_snprintf(dir, sizeof(dir), "/dvc/serial/%d", i);
