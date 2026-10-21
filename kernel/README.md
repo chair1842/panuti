@@ -1,3 +1,4 @@
 # Panuti Kernel
 
-The panuti kernel, the most core project out of all.
+The Panuti Kernel.  
+This project is the very core of the Panuti OS.
