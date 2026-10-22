@@ -9,7 +9,7 @@ a hobbyist os
 
 ## How to try out
 
-You can use panuti on any virtual machine (the type of virt machine doesn't make a difference)
+You can use panuti on any virtual machine (ofc)
 
 These instructions will use QEMU.
 
@@ -19,13 +19,13 @@ qemu-system-i386 -cdrom panuti.iso
 
 if you want to try out hard disks,
 get an already formatted to ext2 disk image and use it.
-Panuti does not have a utility to format yet.
+Panuti does not have a utility to format a block device to ext2 by itself yet.
 
 ```
 qemu-system-i386 -cdrom panuti.iso -hda disk.img
 ```
 
-to mount your formatted disk, type these commands out on panuti:
+to mount your formatted disk, type these commands out on panuti, you can replace mnt with whatever name you desire:
 
 ```
 mkdir mnt
@@ -36,11 +36,15 @@ make sure to unmount before shutting down
 
 ## Current limitations
 
-- Pur and Pint both assume unconditionally that the OS is being booted from a cd
+- Pur and Pint both assume unconditionally that the OS is being booted from a cd:
+- Pint always mounts `/dvc/cdrom/0` to `/cd` and launches pur from there
 - Pur hardcodes its PATH at `/cd/usr/bin`
-- only 1024 inodes can exist at a time.
-- only 2048 dirents can exist at a time
+- only 1024 inodes can exist at a time in the registry.
+- only 2048 dirents can exist at a time in the registry
 - only 64 tasks at a time.
+- mounting at places that alr have registry nodes (such as root) will hide those registry nodes
+- mounting at root will hide `/dvc` which,,, yk.
+- mounting on a subdir of a mount is not allowed. so no `/mnt1/mnt2`
 
 that's all i can think about :)
 
