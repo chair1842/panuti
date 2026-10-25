@@ -22,16 +22,17 @@ int32_t syshandler_readdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 
 	task_t* t = sched_current();
 
-	if (fd < 0 || fd >= MAX_HANDLES || t->handles[fd].type == INODE_NONE) {
+	handle_t* h = task_return_hslot((uint32_t)fd, t);
+	if (!h) {
 		return PANUTIERRNO_BADFD;
 	}
 
-	if (t->handles[fd].type != INODE_DIR) {
+	if (h->type != INODE_DIR) {
 		return PANUTIERRNO_UNSUPPORTEDOP;
 	}
 
-	dir_handle_t* dh = t->handles[fd].impl;
-	inode_t* dir_inode = t->handles[fd].inode;
+	dir_handle_t* dh = h->impl;
+	inode_t* dir_inode = h->inode;
 
 	dirent_entry_t entry_out;
 	int rc;

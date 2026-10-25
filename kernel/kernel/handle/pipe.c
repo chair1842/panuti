@@ -245,15 +245,28 @@ int pipe_create_pair(task_t* t, int* out_read, int* out_write) {
 		return PANUTIERRNO_NOFDS;
 	}
 
-	t->handles[r_des].type = INODE_PIPE;
-	t->handles[r_des].impl = read_end;
-	t->handles[r_des].ops = &pipe_ops;
-	t->handles[r_des].inode = nullptr;
+	handle_t* read_slot = task_return_hslot((uint32_t)r_des, t);
+	handle_t* write_slot = task_return_hslot((uint32_t)w_des, t);
+	if (!read_slot || !write_slot) {
+		handle_free(t, r_des);
+		handle_free(t, w_des);
+		
+		kfree(read_end);
+		kfree(write_end);
+		kfree(p);
+		
+		return PANUTIERRNO_PLAINERR;
+	}
 
-	t->handles[w_des].type = INODE_PIPE;
-	t->handles[w_des].impl = write_end;
-	t->handles[w_des].ops = &pipe_ops;
-	t->handles[w_des].inode = nullptr;
+	read_slot->type = INODE_PIPE;
+	read_slot->impl = read_end;
+	read_slot->ops = &pipe_ops;
+	read_slot->inode = nullptr;
+
+	write_slot->type = INODE_PIPE;
+	write_slot->impl = write_end;
+	write_slot->ops = &pipe_ops;
+	write_slot->inode = nullptr;
 
 	*out_read = r_des;
 	*out_write = w_des;

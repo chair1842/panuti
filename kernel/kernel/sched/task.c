@@ -322,14 +322,20 @@ handle_t* task_return_hslot(uint32_t slot, task_t* task) {
 }
 
 static void task_release_handles(task_t* t) {
-	for (int i = 0; i < MAX_HANDLES; i++) {
-		if (t->handles[i].type != INODE_NONE) {
-			inode_unref(t->handles[i].inode);
-			if (t->handles[i].ops && t->handles[i].ops->close) {
-				t->handles[i].ops->close(t->handles[i].impl, t);
-			}
-			handle_free(t, i);
+	fdtable_t* fdt = &t->fdtable;
+
+	for (uint32_t i = 0; fdt->table && fdt->openb && i < fdt->cap; i++) {
+		if (!(fdt->openb[i / 8] & (1u << (i % 8)))) {
+			continue;
 		}
+
+		handle_t* h = &fdt->table[i];
+		inode_unref(h->inode);
+		if (h->ops && h->ops->close) {
+			h->ops->close(h->impl, t);
+		}
+		
+		handle_free(t, (int)i);
 	}
 }
 
@@ -481,15 +487,15 @@ static int elf_read_whole_file(inode_t* n, void** out_data, size_t* out_size) {
 }
 
 static int install_stream(task_t* caller, int fd, handle_t* dest) {
-	if (fd < 0 || fd >= MAX_HANDLES || caller->handles[fd].type == INODE_NONE) {
+	handle_t* h = task_return_hslot((uint32_t)fd, caller);
+	if (!h) {
 		return -1;
 	}
 
 	stream_unref(dest);
 
-	*dest = caller->handles[fd];
+	*dest = *h;
 	if (dest->type == INODE_PIPE) {
-		/* pipe impls have no inode; keep the shared pipe_end alive instead */
 		pipe_end_ref((pipe_end_t*)dest->impl);
 	} else if (dest->inode) {
 		dest->inode->refcount++;

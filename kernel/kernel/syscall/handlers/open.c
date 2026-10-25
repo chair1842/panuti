@@ -33,6 +33,12 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	if (des < 0) {
 		return PANUTIERRNO_NOFDS;
 	}
+
+	handle_t* h = task_return_hslot((uint32_t)des, t);
+	if (!h) {
+		handle_free(t, des);
+		return PANUTIERRNO_PLAINERR;
+	}
 	
 	if (n->type == INODE_DIR) {
 		dir_handle_t* dh = kmalloc(sizeof(dir_handle_t), alignof(dir_handle_t));
@@ -43,10 +49,10 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 
 		dir_handle_start(dh, n->children);
 
-		t->handles[des].type = n->type;
-		t->handles[des].impl = dh;
-		t->handles[des].ops = &dir_handle_ops;
-		t->handles[des].inode = n;
+		h->type = n->type;
+		h->impl = dh;
+		h->ops = &dir_handle_ops;
+		h->inode = n;
 		n->refcount++;
 		return des;
 	}
@@ -57,10 +63,10 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 			handle_free(t, des);
 			return PANUTIERRNO_PLAINERR;
 		}
-		t->handles[des].type = n->type;
-		t->handles[des].impl = bh;
-		t->handles[des].ops = &block_handle_ops;
-		t->handles[des].inode = n;
+		h->type = n->type;
+		h->impl = bh;
+		h->ops = &block_handle_ops;
+		h->inode = n;
 		n->refcount++;
 		return des;
 	}
@@ -71,18 +77,18 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 			handle_free(t, des);
 			return PANUTIERRNO_PLAINERR;
 		}
-		t->handles[des].type = n->type;
-		t->handles[des].impl = file_impl;
-		t->handles[des].ops = &fs_file_ops;
-		t->handles[des].inode = n;
+		h->type = n->type;
+		h->impl = file_impl;
+		h->ops = &fs_file_ops;
+		h->inode = n;
 		n->refcount++;
 		return des;
 	}
 
-	t->handles[des].type = n->type;
-	t->handles[des].impl = n->impl;
-	t->handles[des].ops = n->ops;
-	t->handles[des].inode = n;
+	h->type = n->type;
+	h->impl = n->impl;
+	h->ops = n->ops;
+	h->inode = n;
 
 	if (n->ops && n->ops->open) {
 		void* open_impl = n->impl;
@@ -92,7 +98,7 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 			return orc;
 		}
 		
-		t->handles[des].impl = open_impl;
+		h->impl = open_impl;
 	}
 
 	n->refcount++;

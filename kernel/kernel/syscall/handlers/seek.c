@@ -25,13 +25,14 @@ int32_t syshandler_seek(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 
 	task_t* t = sched_current();
 
-	if (fd < 0 || fd >= MAX_HANDLES || t->handles[fd].type == INODE_NONE) {
+	handle_t* h = task_return_hslot((uint32_t)fd, t);
+	if (!h) {
 		return PANUTIERRNO_BADFD;
 	}
 
-	if (!t->handles[fd].ops->seek) {
+	if (!h->ops->seek) {
 		return PANUTIERRNO_UNSUPPORTEDOP;
 	}
 
-	return t->handles[fd].ops->seek(t->handles[fd].impl, whence, offset);
+	return h->ops->seek(h->impl, whence, offset);
 }
