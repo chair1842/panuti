@@ -80,6 +80,7 @@ static int fdtable_grow(task_t* t) {
 	if (fdt->table && fdt->cap) {
 		memcpy(new_table, fdt->table, fdt->cap * sizeof(handle_t));
 	}
+	
 	if (fdt->openb) {
 		memcpy(new_openb, fdt->openb, (fdt->cap + 7) / 8);
 	}
@@ -111,6 +112,7 @@ int handle_alloc(task_t* t, inode_type_t type) {
 			if (slot >= fdt->cap) {
 				break;
 			}
+			
 			if (fdt->openb[byte] & (1u << bit)) {
 				continue;
 			}

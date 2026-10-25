@@ -26,7 +26,7 @@ Errors are returned with bit 31 set (i.e. negative when interpreted as signed):
 | `PANUTIERRNO_INVALIDSYSCALL` | `0x80000001` | Invalid syscall number |
 | `PANUTIERRNO_UNSUPPORTEDOP` | `0x80000002` | Operation not supported |
 | `PANUTIERRNO_NOTFOUND` | `0x80000003` | Path or entry not found |
-| `PANUTIERRNO_NOFDS` | `0x80000004` | No free file descriptors (max 32) |
+| `PANUTIERRNO_NOFDS` | `0x80000004` | No free file descriptors (per-task limit reached) |
 | `PANUTIERRNO_BADFD` | `0x80000005` | Bad or closed file descriptor |
 | `PANUTIERRNO_INVALIDADDR` | `0x80000006` | Invalid userspace address |
 | `PANUTIERRNO_NOTSUPPORTED` | `0x80000007` | Filesystem type not supported |
@@ -161,7 +161,7 @@ Open a file, device, block device, or directory by path and obtain a file descri
 **Errors:**
 - `PANUTIERRNO_INVALIDADDR` -- `path` is not a valid userspace pointer
 - `PANUTIERRNO_NOTFOUND` -- path does not resolve
-- `PANUTIERRNO_NOFDS` -- all 32 handle slots are in use
+- `PANUTIERRNO_NOFDS` -- all handle slots are in use (the per-task table grows on demand up to 1024 slots)
 - `PANUTIERRNO_PLAINERR` -- open failed internally (e.g. could not allocate a directory handle)
 
 **Note:** Opening a directory returns a *directory handle*: it does not support `READ`/`WRITE`, but it can be passed to `READDIR` to iterate its entries, and to `CLOSE` afterwards.
@@ -1071,7 +1071,7 @@ than permanently invalid.
 
 | Limit | Value |
 |---|---|
-| File descriptors per task | 32 |
+| File descriptors per task | 1024 (table grows on demand from 16) |
 | Total inodes | 1024 |
 | Total directory entries | 2048 |
 | Max path component name | 255 bytes (256-byte buffer, NUL included) |

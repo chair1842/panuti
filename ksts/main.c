@@ -334,8 +334,9 @@ int main(int argc, char** argv) {
 	{
 		/* the handle table size is a kernel policy, so fill it the only way
 		 * that survives a change to that policy: keep opening until it says
-		 * no, and check the refusal is the exhaustion error */
-		int fds[128];
+		 * no, and check the refusal is the exhaustion error. the buffer only
+		 * has to be larger than the current ceiling (MAX_HANDLES = 1024). */
+		static int fds[2048];
 		int count = 0;
 		int refusal = 0;
 
