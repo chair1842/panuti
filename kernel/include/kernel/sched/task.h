@@ -13,8 +13,6 @@
 #define TASK_KERNEL_STACK_SIZE (TASK_KERNEL_STACK_PAGES * 4096)
 #define TASK_USER_STACK_PAGES 4
 #define TASK_USER_STACK_SIZE (TASK_USER_STACK_PAGES * 4096)
-// task_init_user_stack pushes 8 words below the argv block, so the argv block
-// can never claim the last 32 bytes of the stack
 #define TASK_USER_CONTEXT_BYTES 32
 #define MAX_STREAMS 16
 
@@ -28,6 +26,12 @@ typedef enum task_state {
 	TASK_TERMINATED,
 } task_state_t;
 
+typedef struct fdtable {
+	handle_t* table;
+	uint32_t cap;
+	uint8_t* openb; // stores as many bits as cap
+} fdtable_t;
+
 typedef struct task {
 	uint32_t esp;
 	uint32_t kernel_stack;
@@ -40,7 +44,8 @@ typedef struct task {
 	
 	struct task* next;
 	
-	handle_t handles[MAX_HANDLES];
+	fdtable_t fdtable;
+	
 	inode_t* cwd;
 
 	handle_t in_streams[MAX_STREAMS];
@@ -70,8 +75,10 @@ int task_build_user_argv_stack(
     size_t max_bytes,
     uint32_t* out_esp
 ); 
+
 pid_t task_procreate(task_t* caller, const procreate_args_t* args);
 int task_wait_pid(pid_t target, int* exit_code_out);
 void task_wake_waiters(pid_t exited_pid);
+handle_t* task_return_hslot(uint32_t slot, task_t* task);
 
 #endif

@@ -304,6 +304,23 @@ static void stream_unref(handle_t* h) {
 	}
 }
 
+handle_t* task_return_hslot(uint32_t slot, task_t* task) {
+	if (!task) {
+		return nullptr;
+	}
+
+	fdtable_t* fdt = &task->fdtable;
+	if (!fdt->table || !fdt->openb || slot >= fdt->cap) {
+		return nullptr;
+	}
+	
+	if (!(fdt->openb[slot / 8] & (1u << (slot % 8)))) {
+		return nullptr;
+	}
+
+	return &fdt->table[slot];
+}
+
 static void task_release_handles(task_t* t) {
 	for (int i = 0; i < MAX_HANDLES; i++) {
 		if (t->handles[i].type != INODE_NONE) {
