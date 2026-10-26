@@ -40,6 +40,10 @@ int mount_attach(struct inode* mountpoint, const fs_ops_t* fs_ops, void* fs_impl
 	if (mountpoint->mnt) {
 		return -1; // inside an existing mount
 	}
+	
+	if (mountpoint->deleted) {
+		return -1; // no longer in the namespace
+	}
 
 	mount_t* m = nullptr;
 	for (int i = 0; i < REG_MAX_MOUNTS; i++) {
@@ -61,7 +65,8 @@ int mount_attach(struct inode* mountpoint, const fs_ops_t* fs_ops, void* fs_impl
 	m->refcount = 0;
 	m->next = nullptr;
 
-	root->refcount++;
+	inode_ref(mountpoint);
+	inode_ref(root);
 	klog(KLOG_INFO, "mount: id=%u mp=%p root=%p\n", m->id, mountpoint, root);
 	return 0;
 }
@@ -78,20 +83,19 @@ int mount_detach(struct inode* mountpoint) {
 	if (m->fs_ops->finish) {
 		m->fs_ops->finish(m->fs_impl);
 	}
-	if (m->root) {
+
+	inode_t* root = m->root;
+	inode_t* mountpoint_inode = m->mountpoint;
+
+	if (root) {
 		// the mounted root no longer hangs off anything. clear this before
 		// the drop, so a destroy triggered by the last reference does not see
 		// a stale mount
-		m->root->mnt = nullptr;
-		
-		// drop the mount's own reference on the root inode. this has to go
-		// through inode_unref rather than a bare decrement, or the inode slot
-		// is never returned to the registry and repeated mounts exhaust it
-		inode_unref(m->root);
+		root->mnt = nullptr;
 	}
-	if (m->mountpoint) {
+	if (mountpoint_inode) {
 		// just in case a walk ever left a stale pointer on the cover
-		m->mountpoint->mnt = nullptr;
+		mountpoint_inode->mnt = nullptr;
 	}
 
 	m->in_use = false;
@@ -101,5 +105,15 @@ int mount_detach(struct inode* mountpoint) {
 	m->fs_impl = nullptr;
 	m->refcount = 0;
 	m->next = nullptr;
+
+	// drop the mount's own references. this has to go through inode_unref
+	// rather than a bare decrement, or the slots are never returned
+	if (root) {
+		inode_unref(root);
+	}
+	if (mountpoint_inode) {
+		inode_unref(mountpoint_inode);
+	}
+
 	return 0;
 }

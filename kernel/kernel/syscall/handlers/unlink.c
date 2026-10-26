@@ -58,7 +58,11 @@ int32_t syshandler_unlink(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return PANUTIERRNO_NOTFOUND;
 	}
 
-	if (registry_unlink(parent, last, namelen) != 0) {
+	int ret = registry_unlink(parent, last, namelen);
+	if ((uint32_t)ret == PANUTIERRNO_BUSY) {
+		return ret;
+	}
+	if (ret != 0) {
 		return PANUTIERRNO_NOTFOUND;
 	}
 

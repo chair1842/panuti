@@ -16,8 +16,8 @@ int32_t syshandler_close(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return PANUTIERRNO_BADFD;
 	}
 
-	inode_unref(h->inode);
 	int ret = h->ops->close(h->impl, t);
+	inode_unref(h->inode);
 	handle_free(t, desc);
 	return ret;
 }

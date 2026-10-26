@@ -53,7 +53,7 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		h->impl = dh;
 		h->ops = &dir_handle_ops;
 		h->inode = n;
-		n->refcount++;
+		inode_ref(n);
 		return des;
 	}
 
@@ -67,7 +67,7 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		h->impl = bh;
 		h->ops = &block_handle_ops;
 		h->inode = n;
-		n->refcount++;
+		inode_ref(n);
 		return des;
 	}
 
@@ -81,7 +81,7 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		h->impl = file_impl;
 		h->ops = &fs_file_ops;
 		h->inode = n;
-		n->refcount++;
+		inode_ref(n);
 		return des;
 	}
 
@@ -101,6 +101,6 @@ int32_t syshandler_open(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		h->impl = open_impl;
 	}
 
-	n->refcount++;
+	inode_ref(n);
 	return des;
 }

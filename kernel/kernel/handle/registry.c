@@ -4,9 +4,17 @@
 #include <kernel/memman/slab.h>
 #include <kernel/klog.h>
 #include <panuti/errno.h>
+#include <limits.h>
 #include <string.h>
 
 static void registry_destroy(inode_t* inode);
+static dirent_t* dirent_detach(inode_t* dir, const char* name, size_t len);
+static void dirent_put(dirent_t* d, bool drop_inode);
+static bool registry_dir_is_empty(inode_t* dir);
+
+static bool is_dot_name(const char* name, size_t len) {
+	return (len == 1 && name[0] == '.') || (len == 2 && name[0] == '.' && name[1] == '.');
+}
 
 static inode_t inodes[REG_MAX_INODES];
 static dirent_t dirents[REG_MAX_DIRENTS];
@@ -18,6 +26,7 @@ inode_t* registry_inode_alloc(inode_type_t type) {
 			inodes[i].in_use = true;
 			inodes[i].type = type;
 			inodes[i].refcount = 1;
+			inodes[i].deleted = false;
 			inodes[i].impl = nullptr;
 			inodes[i].ops = nullptr;
 			inodes[i].children = nullptr;
@@ -55,7 +64,7 @@ void dirent_ref(dirent_t* d) {
 	d->refcount++;
 }
 
-void dirent_unref(dirent_t* d) {
+static void dirent_put(dirent_t* d, bool drop_inode) {
 	if (!d || !d->name) {
 		return;
 	}
@@ -68,11 +77,20 @@ void dirent_unref(dirent_t* d) {
 		return;
 	}
 
+	inode_t* target = drop_inode ? d->inode : nullptr;
 	kfree(d->name);
 	d->name = nullptr;
 	d->name_len = 0;
 	d->inode = nullptr;
 	d->next = nullptr;
+
+	if (target) {
+		inode_unref(target);
+	}
+}
+
+void dirent_unref(dirent_t* d) {
+	dirent_put(d, true);
 }
 
 // links name -> target into dir's children list. does not check for collisions
@@ -102,7 +120,10 @@ dirent_t* registry_linkdirent(inode_t* dir, const char* name, size_t len, inode_
 	d->inode = target;
 	d->next = dir->children;
 	dir->children = d;
-	target->refcount++;
+	if (target != dir) {
+		inode_ref(target);
+	}
+	
 	return d;
 }
 
@@ -210,6 +231,10 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 			child = d ? d->inode : nullptr;
 
 			if (!child && is_last && create_last) {
+				if (current->deleted) {
+					return nullptr;
+				}
+
 				inode_t* new_inode = registry_inode_alloc(create_type);
 				if (!new_inode) {
 					return nullptr;
@@ -221,11 +246,34 @@ static inode_t* walk(inode_t* start, const char* path, bool create_last, inode_t
 				}
 
 				if (create_type == INODE_DIR) {
-					registry_linkdirent(new_inode, ".", 1, new_inode);
-					registry_linkdirent(new_inode, "..", 2, current);
+					// this amount of nesting is fucking criminal
+					bool linked = registry_linkdirent(new_inode, ".", 1, new_inode) 
+								&&
+								registry_linkdirent(new_inode, "..", 2, current);
+					
+					if (!linked) {
+						dirent_t* self = dirent_detach(new_inode, ".", 1);
+						if (self) {
+							dirent_put(self, self->inode != new_inode);
+						}
+						
+						dirent_t* parent = dirent_detach(new_inode, "..", 2);
+						if (parent) {
+							dirent_put(parent, parent->inode != new_inode);
+						}
+						
+						dirent_t* entry = dirent_detach(current, seg_start, len);
+						if (entry) {
+							dirent_unref(entry);
+						}
+						
+						inode_unref(new_inode);
+						return nullptr;
+					}
 				}
 
-				return new_inode; // last component, done
+				inode_unref(new_inode);
+				return new_inode;
 			}
 		}
 
@@ -296,7 +344,7 @@ int registry_mkdir_at(inode_t* start, const char* path) {
 		parent = registry_resolve((inode_t*)base, buf);
 	}
 
-	if (!parent || parent->type != INODE_DIR) {
+	if (!parent || parent->type != INODE_DIR || parent->deleted) {
 		return -1;
 	}
 
@@ -352,12 +400,13 @@ int registry_mkfile_at(inode_t* start, const char* path) {
 		if (plen >= sizeof(buf)) {
 			return -1;
 		}
+		
 		memcpy(buf, path, plen);
 		buf[plen] = '\0';
 		parent = registry_resolve((inode_t*)base, buf);
 	}
 
-	if (!parent || parent->type != INODE_DIR) {
+	if (!parent || parent->type != INODE_DIR || parent->deleted) {
 		return -1;
 	}
 
@@ -405,6 +454,7 @@ int registry_mount(const char* path, const fs_ops_t* fs_ops, void* fs_impl) {
 		return -1;
 	}
 
+	inode_unref(r);
 	return 0;
 }
 
@@ -436,6 +486,7 @@ int registry_unmount(const char* path) {
 	if (!d || d->inode->type != INODE_DIR) {
 		return -1;
 	}
+	
 	if (!mount_find(d->inode)) {
 		return -1; // not mounted
 	}
@@ -460,13 +511,10 @@ static void registry_destroy(inode_t* inode) {
 		dirent_t* d = inode->children;
 		while (d) {
 			dirent_t* next = d->next;
-			if (d->inode != inode) {
-				inode_unref(d->inode);
-			}
-			
-			dirent_unref(d);
+			dirent_put(d, d->inode != inode);
 			d = next;
 		}
+		
 		inode->children = nullptr;
 	}
 
@@ -509,6 +557,7 @@ int registry_splitpath(
 		if (plen >= sizeof(buf)) {
 			return -1;
 		}
+		
 		memcpy(buf, path, plen);
 		buf[plen] = '\0';
 		p = registry_resolve(start, buf);
@@ -537,6 +586,7 @@ static dirent_t* dirent_detach(inode_t* dir, const char* name, size_t len) {
 			} else {
 				dir->children = curr->next;
 			}
+			
 			curr->next = nullptr;
 			return curr;
 		}
@@ -580,6 +630,20 @@ int registry_unlink(inode_t* dir, const char* name, size_t len) {
 		return -1;
 	}
 
+	if (is_dot_name(name, len) || dir->deleted) {
+		return PANUTIERRNO_BUSY;
+	}
+
+	dirent_t* d = registry_finddirent(dir, name, len);
+	if (d && mount_find(d->inode)) {
+		return PANUTIERRNO_BUSY;
+	}
+
+	if (!dir->mnt && d && d->inode->type == INODE_DIR &&
+	    !registry_dir_is_empty(d->inode)) {
+		return PANUTIERRNO_BUSY;
+	}
+
 	if (dir->mnt && dir->mnt->fs_ops->unlink) {
 		int ret = dir->mnt->fs_ops->unlink(dir->mnt->fs_impl, dir, name, len);
 		if (ret < 0) {
@@ -587,12 +651,15 @@ int registry_unlink(inode_t* dir, const char* name, size_t len) {
 		}
 	}
 
-	dirent_t* d = dirent_detach(dir, name, len);
+	d = dirent_detach(dir, name, len);
 	if (!d) {
 		return -1;
 	}
 
-	inode_unref(d->inode);
+	if (!dir->mnt && d->inode->type == INODE_DIR) {
+		d->inode->deleted = true;
+	}
+
 	dirent_unref(d);
 	return 0;
 }
@@ -604,6 +671,14 @@ int registry_link(inode_t* target, inode_t* dir, const char* name, size_t len) {
 
 	if (dir->type != INODE_DIR) {
 		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if (dir->deleted) {
+		return PANUTIERRNO_BUSY;
+	}
+
+	if (is_dot_name(name, len) || target->type == INODE_DIR) {
+		return PANUTIERRNO_UNSUPPORTEDOP;
 	}
 
 	// a hard link is a second name for one inode, so both ends have to live on
@@ -659,6 +734,23 @@ static bool registry_dir_is_empty(inode_t* dir) {
 	return true;
 }
 
+// true when dir is ancestor itself or lies below it in the native tree
+static bool dir_has_ancestor(inode_t* dir, inode_t* ancestor) {
+	while (dir) {
+		if (dir == ancestor) {
+			return true;
+		}
+
+		dirent_t* up = registry_finddirent(dir, "..", 2);
+		if (!up || up->inode == dir) {
+			return false;
+		}
+		dir = up->inode;
+	}
+
+	return false;
+}
+
 int registry_rename(inode_t* old_dir, const char* old_name, size_t old_len,
                     inode_t* new_dir, const char* new_name, size_t new_len) {
 	if (!old_dir || !new_dir || !old_name || !new_name) {
@@ -674,11 +766,29 @@ int registry_rename(inode_t* old_dir, const char* old_name, size_t old_len,
 		return PANUTIERRNO_PLAINERR;
 	}
 
+	if (old_dir->deleted || new_dir->deleted) {
+		return PANUTIERRNO_BUSY;
+	}
+
+	if (is_dot_name(old_name, old_len) || is_dot_name(new_name, new_len)) {
+		return PANUTIERRNO_BUSY;
+	}
+
 	// renaming onto itself changes nothing, and must not be reported as a
 	// collision with the entry we are about to move
 	if (old_dir == new_dir && old_len == new_len &&
 	    memcmp(old_name, new_name, old_len) == 0) {
 		return 0;
+	}
+
+	dirent_t* old_entry = registry_finddirent(old_dir, old_name, old_len);
+	if (old_entry && mount_find(old_entry->inode)) {
+		return PANUTIERRNO_BUSY;
+	}
+
+	dirent_t* new_entry = registry_finddirent(new_dir, new_name, new_len);
+	if (new_entry && mount_find(new_entry->inode)) {
+		return PANUTIERRNO_BUSY;
 	}
 
 	mount_t* m = dir_fs(old_dir);
@@ -700,12 +810,10 @@ int registry_rename(inode_t* old_dir, const char* old_name, size_t old_len,
 
 		dirent_t* victim = dirent_detach(new_dir, new_name, new_len);
 		if (victim) {
-			inode_unref(victim->inode);
 			dirent_unref(victim);
 		}
 
-		// keep the cache honest. the entry may never have been looked up in
-		// this session, in which case there is simply nothing to move
+		// ts is sooo dense
 		dirent_t* d = registry_finddirent(old_dir, old_name, old_len);
 		if (d) {
 			if (old_dir == new_dir) {
@@ -718,12 +826,9 @@ int registry_rename(inode_t* old_dir, const char* old_name, size_t old_len,
 					// put it back rather than leave the tree claiming a name
 					// the old directory no longer has
 					registry_linkdirent(old_dir, old_name, old_len, moved->inode);
-					inode_unref(moved->inode);
 					klog(KLOG_WARN, "registry_rename: could not cache new name in mounted dir\n");
 					dirent_unref(moved);
 				} else if (moved) {
-					// linkdirent took its own reference, so drop the old one
-					inode_unref(moved->inode);
 					dirent_unref(moved);
 				}
 			}
@@ -737,16 +842,22 @@ int registry_rename(inode_t* old_dir, const char* old_name, size_t old_len,
 		return PANUTIERRNO_NOTFOUND;
 	}
 
+	inode_t* moved_inode = src->inode;
+	bool moved_is_dir = (moved_inode->type == INODE_DIR);
+
+	if (moved_is_dir && dir_has_ancestor(new_dir, moved_inode)) {
+		return PANUTIERRNO_BUSY;
+	}
+
 	dirent_t* dst = registry_finddirent(new_dir, new_name, new_len);
 	if (dst) {
-		if (dst->inode == src->inode) {
+		if (dst->inode == moved_inode) {
 			return 0;
 		}
 
-		bool src_dir = (src->inode->type == INODE_DIR);
 		bool dst_dir = (dst->inode->type == INODE_DIR);
 
-		if (src_dir != dst_dir) {
+		if (moved_is_dir != dst_dir) {
 			return PANUTIERRNO_UNSUPPORTEDOP;
 		}
 
@@ -759,12 +870,15 @@ int registry_rename(inode_t* old_dir, const char* old_name, size_t old_len,
 			return PANUTIERRNO_PLAINERR;
 		}
 
-		inode_unref(dst->inode);
+		if (dst_dir) {
+			dst->inode->deleted = true;
+		}
+		
 		dirent_unref(dst);
 	}
 
 	// link the new name first (bumps refcount), then drop the old one
-	if (!registry_linkdirent(new_dir, new_name, new_len, src->inode)) {
+	if (!registry_linkdirent(new_dir, new_name, new_len, moved_inode)) {
 		return PANUTIERRNO_PLAINERR;
 	}
 
@@ -774,23 +888,45 @@ int registry_rename(inode_t* old_dir, const char* old_name, size_t old_len,
 		// link above claimed does not leak
 		dirent_t* added = dirent_detach(new_dir, new_name, new_len);
 		if (added) {
-			inode_unref(added->inode);
 			dirent_unref(added);
 		}
+		
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	inode_unref(old->inode);
 	dirent_unref(old);
+
+	if (moved_is_dir && old_dir != new_dir) {
+		dirent_t* up = registry_finddirent(moved_inode, "..", 2);
+		if (up && up->inode != new_dir) {
+			inode_t* old_parent = up->inode;
+			inode_ref(new_dir);
+			up->inode = new_dir;
+			inode_unref(old_parent);
+		}
+	}
+
 	return 0;
+}
+
+void inode_ref(inode_t* inode) {
+	if (!inode) {
+		return;
+	}
+	
+	if (inode->refcount < INT_MAX) {
+		inode->refcount++;
+	}
 }
 
 void inode_unref(inode_t* inode) {
 	if (!inode) {
 		return;
 	}
+	
 	if (--inode->refcount != 0) {
 		return;
 	}
+	
 	registry_destroy(inode);
 }

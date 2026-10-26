@@ -26,6 +26,6 @@ int32_t syshandler_chdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		return PANUTIERRNO_UNSUPPORTEDOP;
 	}
 
-	t->cwd = n;
+	task_set_cwd(t, n);
 	return 0;
 }

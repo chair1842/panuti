@@ -130,6 +130,17 @@ static pid_t task_alloc_pid(void) {
 	return 0;
 }
 
+void task_set_cwd(task_t* t, inode_t* cwd) {
+	if (!t) {
+		return;
+	}
+
+	inode_ref(cwd);
+	inode_t* old = t->cwd;
+	t->cwd = cwd;
+	inode_unref(old);
+}
+
 static task_t* task_alloc_common(void) {
 	uint32_t flags = irq_save_disable();
 
@@ -162,7 +173,7 @@ static task_t* task_alloc_common(void) {
 		return nullptr;
 	}
 
-	t->cwd = registry_root();
+	task_set_cwd(t, registry_root());
 	task_init_default_streams(t);
 
 	return t;
@@ -300,7 +311,7 @@ static void stream_unref(handle_t* h) {
 			pipe_end_unref((pipe_end_t*)h->impl);
 		}
 	} else if (h->inode) {
-		h->inode->refcount--;
+		inode_unref(h->inode);
 	}
 }
 
@@ -330,11 +341,12 @@ static void task_release_handles(task_t* t) {
 		}
 
 		handle_t* h = &fdt->table[i];
-		inode_unref(h->inode);
 		if (h->ops && h->ops->close) {
 			h->ops->close(h->impl, t);
 		}
 		
+		inode_unref(h->inode);
+
 		handle_free(t, (int)i);
 	}
 }
@@ -363,7 +375,7 @@ void task_destroy(task_t* t) {
 	t->esp = 0;
 	t->kernel_stack = 0;
 	t->addr_space = nullptr;
-	t->cwd = nullptr;
+	task_set_cwd(t, nullptr);
 	t->next = nullptr;
 	t->no_in_streams = 0;
 	t->no_out_streams = 0;
@@ -395,6 +407,7 @@ static void procreate_cleanup(task_t* t) {
 		memman_destroy_addr_space(t->addr_space);
 	}
 
+	task_set_cwd(t, nullptr);
 	t->state = TASK_NONE;
 }
 
@@ -498,7 +511,7 @@ static int install_stream(task_t* caller, int fd, handle_t* dest) {
 	if (dest->type == INODE_PIPE) {
 		pipe_end_ref((pipe_end_t*)dest->impl);
 	} else if (dest->inode) {
-		dest->inode->refcount++;
+		inode_ref(dest->inode);
 	}
 
 	return 0;
@@ -534,7 +547,7 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 		return PANUTIERRNO_NOFDS;
 	}
 
-	t->cwd = caller->cwd;
+	task_set_cwd(t, caller->cwd);
 
 	if (elf_load_segments(t->addr_space, elf_data, segs, nsegs) != 0) {
 		kfree(elf_data);

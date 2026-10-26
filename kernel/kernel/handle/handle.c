@@ -177,6 +177,6 @@ bool handle_build(const char* path, handle_t* out) {
 	out->ops = n->ops;
 	out->inode = n;
 
-	n->refcount++;
+	inode_ref(n);
 	return true;
 }
