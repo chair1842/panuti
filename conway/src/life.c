@@ -6,16 +6,16 @@
 
 bool life_is_alive(char c) {
 	switch (c) {
-	case '#':
-	case '*':
-	case 'O':
-	case 'o':
-	case 'X':
-	case 'x':
-	case '1':
-		return true;
-	default:
-		return false;
+		case '#':
+		case '*':
+		case 'O':
+		case 'o':
+		case 'X':
+		case 'x':
+		case '1':
+			return true;
+		default:
+			return false;
 	}
 }
 
