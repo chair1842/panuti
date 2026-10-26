@@ -8,8 +8,8 @@
 #include <kernel/handle/mount.h>
 #include <panuti/inode_type.h>
 
-#define REG_MAX_INODES 1024
-#define REG_MAX_DIRENTS 2048
+#define REG_MAX_INODES 65536
+#define REG_MAX_DIRENTS 262144
 #define REG_MAX_NAME_LEN 256
 
 typedef struct dirent {
@@ -25,7 +25,6 @@ typedef struct dirent {
 typedef struct inode {
 	inode_type_t type;
 	int refcount;
-	bool in_use;
 	bool deleted;
 
 	// leaf-only

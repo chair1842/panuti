@@ -16,40 +16,53 @@ static bool is_dot_name(const char* name, size_t len) {
 	return (len == 1 && name[0] == '.') || (len == 2 && name[0] == '.' && name[1] == '.');
 }
 
-static inode_t inodes[REG_MAX_INODES];
-static dirent_t dirents[REG_MAX_DIRENTS];
+static int inode_count;
+static int dirent_count;
 static inode_t* root;
 
 inode_t* registry_inode_alloc(inode_type_t type) {
-	for (int i = 0; i < REG_MAX_INODES; i++) {
-		if (!inodes[i].in_use) {
-			inodes[i].in_use = true;
-			inodes[i].type = type;
-			inodes[i].refcount = 1;
-			inodes[i].deleted = false;
-			inodes[i].impl = nullptr;
-			inodes[i].ops = nullptr;
-			inodes[i].children = nullptr;
-			inodes[i].mnt = nullptr;
-			return &inodes[i];
-		}
+	if (inode_count > REG_MAX_INODES) {
+		klog(KLOG_WARN, "registry: inode conut cap reached\n");
+		return nullptr;
+	}
+
+	inode_t* in = kmalloc(sizeof(inode_t), alignof(inode_t));
+	if (!in) {
+		klog(KLOG_WARN, "registry: no more memory to allocate inode\n");
+		return nullptr;
 	}
 	
-	return nullptr;
+	in->type = type;
+	in->refcount = 1;
+	in->deleted = false;
+	in->impl = nullptr;
+	in->ops = nullptr;
+	in->children = nullptr;
+	in->mnt = nullptr;
+	
+	inode_count++;
+	
+	return in;
 }
 
 static dirent_t* dirent_alloc(void) {
-	for (int i = 0; i < REG_MAX_DIRENTS; i++) {
-		if (!dirents[i].name) {
-			dirents[i].name_len = 0;
-			dirents[i].refcount = 1;
-			dirents[i].inode = nullptr;
-			dirents[i].next = nullptr;
-			return &dirents[i];
-		}
+	if (dirent_count > REG_MAX_DIRENTS) {
+		klog(KLOG_WARN, "registry: dirent count cap reached\n");
+		return nullptr;
 	}
-
-	return nullptr;
+	
+	dirent_t* d = kmalloc(sizeof(dirent_t), alignof(dirent_t));
+	if (!d) {
+		klog(KLOG_WARN, "registry: no more memory to allocate dirent\n");
+		return nullptr;
+	}
+	
+	d->name_len = 0;
+	d->refcount = 1;
+	d->inode = nullptr;
+	d->next = nullptr;
+	
+	return d;
 }
 
 void dirent_ref(dirent_t* d) {
@@ -76,13 +89,12 @@ static void dirent_put(dirent_t* d, bool drop_inode) {
 	if (d->refcount != 0) {
 		return;
 	}
+	
+	dirent_count--;
 
 	inode_t* target = drop_inode ? d->inode : nullptr;
 	kfree(d->name);
-	d->name = nullptr;
-	d->name_len = 0;
-	d->inode = nullptr;
-	d->next = nullptr;
+	kfree(d);
 
 	if (target) {
 		inode_unref(target);
@@ -139,21 +151,11 @@ dirent_t* registry_finddirent(inode_t* dir, const char* name, size_t len) {
 
 void registry_init(void) {
 	mount_init();
-
-	for (int i = 0; i < REG_MAX_INODES; i++) {
-		inodes[i].in_use = false;
-	}
 	
-	for (int i = 0; i < REG_MAX_DIRENTS; i++) {
-		dirents[i].name = nullptr;
-		dirents[i].name_len = 0;
-		dirents[i].refcount = 0;
-		dirents[i].inode = nullptr;
-		dirents[i].next = nullptr;
-	}
+	inode_count = 0;
+	dirent_count = 0;
 
 	root = registry_inode_alloc(INODE_DIR);
-	// root is its own parent, by convention
 	registry_linkdirent(root, ".", 1, root);
 	registry_linkdirent(root, "..", 2, root);
 }
@@ -518,7 +520,8 @@ static void registry_destroy(inode_t* inode) {
 		inode->children = nullptr;
 	}
 
-	inode->in_use = false;
+	inode_count--;
+	kfree(inode);
 }
 
 int registry_splitpath(
