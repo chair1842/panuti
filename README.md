@@ -39,8 +39,6 @@ make sure to unmount before shutting down
 - Pur and Pint both assume unconditionally that the OS is being booted from a cd:
 - Pint always mounts `/dvc/cdrom/0` to `/cd` and launches pur from there
 - Pur hardcodes its PATH at `/cd/usr/bin`
-- only 1024 inodes can exist at a time in the registry.
-- only 2048 dirents can exist at a time in the registry
 - only 64 tasks at a time.
 - mounting at places that alr have registry nodes (such as root) will hide those registry nodes
 - mounting at root will hide `/dvc` which,,, yk.

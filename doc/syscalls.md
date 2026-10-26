@@ -1072,8 +1072,8 @@ than permanently invalid.
 | Limit | Value |
 |---|---|
 | File descriptors per task | 1024 (table grows on demand from 16) |
-| Total inodes | 1024 |
-| Total directory entries | 2048 |
+| Total inodes | 65536 |
+| Total directory entries | 262144 |
 | Max path component name | 255 bytes (256-byte buffer, NUL included) |
 | Max getcwd nesting | 64 components |
 | Max mounted filesystems | 64 |
