@@ -12,6 +12,7 @@ extern "C" {
 typedef uint32_t pid_t;
 typedef int64_t off_t;
 typedef unsigned int mode_t;
+typedef int64_t time_t;
 
 #if defined(__cplusplus)
 }
