@@ -34,6 +34,16 @@ mount mnt ext2 /dvc/pata/0
 
 make sure to unmount before shutting down
 
+## Planned for 0.2
+
+- ~~Make registry inodes and dirents dynamic~~
+- Make tasks dynamic
+- add time (read from RTC at boot to sync) (`/dvc/clock`)
+- add support for the [PC Speaker](https://en.wikipedia.org/wiki/PC_speaker) (`/dvc/beepr`)
+- add formatting and repairing ext2
+- add sleep functionality to the kernel + syscall
+- add motions and operators to nib
+
 ## Current limitations
 
 - Pur and Pint both assume unconditionally that the OS is being booted from a cd:
