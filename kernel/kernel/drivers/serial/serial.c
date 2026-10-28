@@ -2,6 +2,7 @@
 
 #include <kernel/serial/core.h>
 #include <kernel/serial/dvc.h>
+#include <kernel/serial/uart.h>
 #include <kernel/handle/handle.h>
 #include <kernel/handle/registry.h>
 #include <kernel/irq.h>
@@ -13,8 +14,6 @@
 #include <panuti/inode_type.h>
 #include <stdio.h>
 #include <string.h>
-
-#include "../../../arch/i386/drivers/serial/uart.h"
 
 typedef struct {
 	char* buf;
