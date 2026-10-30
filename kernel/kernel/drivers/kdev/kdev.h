@@ -6,6 +6,5 @@
 void kdev_null_register();
 void kdev_zero_register();
 void kdev_random_register();
-void kdev_uptime_register();
 
 #endif

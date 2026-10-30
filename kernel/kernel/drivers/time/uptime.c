@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
-#include "kdev.h"
+#include "time.h"
 
 struct uptime_sink {
 	char* p;
@@ -18,6 +18,7 @@ static void uptime_putchar(char c, void* extra) {
 	if (s->n < 31) {
 		s->p[s->n] = c;
 	}
+	
 	s->n++;
 }
 
@@ -52,6 +53,6 @@ static const handle_ops_t uptime_ops = {
 	.close = op_not_supported_close,
 };
 
-void kdev_uptime_register() {
-	registry_add("/dvc/uptime", INODE_DVC, nullptr, &uptime_ops);
+void timedev_uptime_register() {
+	registry_add("/dvc/time/uptime", INODE_DVC, nullptr, &uptime_ops);
 }

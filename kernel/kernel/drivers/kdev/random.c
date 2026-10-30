@@ -5,6 +5,7 @@
 #include <kernel/timer.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <kernel/rtc.h>
 #include "kdev.h"
 
 static uint32_t rng_state = 0x853C49E1u;
@@ -24,9 +25,7 @@ static void rng_seed(void) {
 		return;
 	}
 
-	// there is no real entropy in the kernel yet; the PIT tick low bits
-	// at least vary from boot to boot
-	rng_state ^= (uint32_t)timer_get_ticks();
+	rng_state ^= (uint32_t)timer_get_ticks() + (uint32_t)rtc_cur_timestamp() - 0xBEEF;
 	rng_seeded = true;
 }
 

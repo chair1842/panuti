@@ -15,6 +15,7 @@
 #include "drivers/console/console.h"
 #include "drivers/ramblock/ramblock.h"
 #include "drivers/kdev/kdev.h"
+#include "drivers/time/time.h"
 #include <kernel/kbd/dvc.h>
 #include <kernel/serial/dvc.h>
 
@@ -33,6 +34,8 @@ void kernel_main(void) {
 	registry_mkdir("/dvc/ram");
 	registry_mkdir("/dvc/pata");
 	registry_mkdir("/dvc/cdrom");
+	registry_mkdir("/dvc/time");
+	
 	console_register();
 	
 	kbd_line_init();
@@ -43,14 +46,13 @@ void kernel_main(void) {
 	kdev_null_register();
 	kdev_zero_register();
 	kdev_random_register();
-	kdev_uptime_register();
+	
+	timedev_uptime_register();
 
 	kmsg_init();
 
 	serial_dvc_init();
 
-	// ide_init probes both buses and hangs the irq handlers, then each
-	// protocol driver claims whichever slots turned out to speak it
 	ide_init();
 	atapi_init();
 	ata_init();

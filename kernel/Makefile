@@ -50,7 +50,7 @@ kernel/drivers/ramblock/ramblock.o \
 kernel/drivers/kdev/null.o \
 kernel/drivers/kdev/zero.o \
 kernel/drivers/kdev/random.o \
-kernel/drivers/kdev/uptime.o \
+kernel/drivers/time/uptime.o \
 kernel/handle/fs.o \
 kernel/block/block.o \
 kernel/syscall/syscall.o \
