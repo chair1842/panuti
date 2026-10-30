@@ -15,6 +15,7 @@
 #define RTC_DAYR 0x07
 #define RTC_MONR 0x08
 #define RTC_YEARR 0x09
+#define RTC_CENTR 0x32
 
 #define RTC_REGB 0x0B
 
@@ -42,6 +43,33 @@ static int get_cmos_reg(int reg) {
 	return inb(CMOS_DATA);
 }
 
+static void set_cmos_reg(int reg, int value) {
+	outb(CMOS_ADDRESS, reg);
+	outb(CMOS_DATA, (uint8_t)value);
+}
+
+static uint8_t to_bcd(int value) {
+	return (uint8_t)(((value / 10) << 4) | (value % 10));
+}
+
+static int from_bcd(int value) {
+	return (value & 0x0F) + ((value / 16) * 10);
+}
+
+static int read_century(uint8_t regb) {
+	int century = get_cmos_reg(RTC_CENTR);
+
+	if (!(regb & RTC_BCD_S)) {
+		century = from_bcd(century);
+	}
+
+	if (century < 19 || century > 99) {
+		return -1;
+	}
+
+	return century;
+}
+
 static int is_leap_year(int year) {
 	if (year % 400 == 0) {
 		return 1;
@@ -54,6 +82,7 @@ static int is_leap_year(int year) {
 	if (year % 4 == 0) {
 		return 1;
 	}
+	
 	return 0;
 }
 
@@ -116,8 +145,6 @@ static rtc_datetime_t read_rtc(void) {
 		dt.day = get_cmos_reg(RTC_DAYR);
 		dt.month = get_cmos_reg(RTC_MONR);
 		dt.year = get_cmos_reg(RTC_YEARR);
-
-		
 	} while (
 		(lsec != dt.second) ||
 		(lmin != dt.minute) ||
@@ -129,13 +156,16 @@ static rtc_datetime_t read_rtc(void) {
 
 	regb = get_cmos_reg(RTC_REGB);
 
+	int century = get_cmos_reg(RTC_CENTR);
+
 	if (!(regb & RTC_BCD_S)) {
-		dt.second = (dt.second & 0x0F) + ((dt.second / 16) * 10);
-		dt.minute = (dt.minute & 0x0F) + ((dt.minute / 16) * 10);
-		dt.hour = ((dt.hour & 0x0F) + (((dt.hour & 0x70) / 16) * 10)) | (dt.hour & 0x80);
-		dt.day = (dt.day & 0x0F) + ((dt.day / 16) * 10);
-		dt.month = (dt.month & 0x0F) + ((dt.month / 16) * 10);
-		dt.year = (dt.year & 0x0F) + ((dt.year / 16) * 10);
+		dt.second = from_bcd(dt.second);
+		dt.minute = from_bcd(dt.minute);
+		dt.hour = from_bcd(dt.hour & 0x7F) | (dt.hour & 0x80);
+		dt.day = from_bcd(dt.day);
+		dt.month = from_bcd(dt.month);
+		dt.year = from_bcd(dt.year);
+		century = from_bcd(century);
 	}
 
 	if (!(regb & RTC_24H_S) && (dt.hour & RTC_PMH)) {
@@ -146,7 +176,9 @@ static rtc_datetime_t read_rtc(void) {
 		}
 	}
 
-	if (dt.year < 70) {
+	if (century >= 19 && century <= 99) {
+		dt.year = (uint16_t)(century * 100 + dt.year);
+	} else if (dt.year < 70) {
 		dt.year += 2000;
 	} else {
 		dt.year += 1900;
@@ -180,3 +212,96 @@ int64_t rtc_cur_timestamp(void) {
 	
 	return seconds * 100LL;
 }
+
+int rtc_set_timestamp(int64_t timestamp) {
+	if (timestamp < 0) {
+		return -1;
+	}
+
+	int64_t seconds = timestamp / 100;
+
+	int64_t days = seconds / 86400;
+	int64_t rem = seconds % 86400;
+
+	int hour = (int)(rem / 3600);
+	rem %= 3600;
+	int minute = (int)(rem / 60);
+	int second = (int)(rem % 60);
+
+	int year = 1970;
+	while (days >= (is_leap_year(year) ? 366 : 365)) {
+		if (year >= 9999) {
+			return -1;
+		}
+
+		days -= is_leap_year(year) ? 366 : 365;
+		year++;
+	}
+
+	int month = 1;
+	while (days >= days_in_month(month, year)) {
+		days -= days_in_month(month, year);
+		month++;
+	}
+
+	int day = (int)days + 1;
+
+	uint8_t regb = get_cmos_reg(RTC_REGB);
+	int has_century = read_century(regb) >= 0;
+
+	if (!has_century && year > 2069) {
+		return -1;
+	}
+
+	int values[7] = {
+		second,
+		minute,
+		hour,
+		day,
+		month,
+		year % 100,
+		year / 100,
+	};
+
+	int pm = 0;
+
+	if (!(regb & RTC_24H_S)) {
+		pm = values[2] >= 12;
+
+		values[2] %= 12;
+		if (values[2] == 0) {
+			values[2] = 12;
+		}
+	}
+
+	if (!(regb & RTC_BCD_S)) {
+		for (int i = 0; i < 7; i++) {
+			values[i] = to_bcd(values[i]);
+		}
+	}
+
+	if (pm) {
+		values[2] |= RTC_PMH;
+	}
+
+	while (getf_update_in_prog());
+
+	// stop the RTC from updating while the registers are being written
+	set_cmos_reg(RTC_REGB, regb | 0x80);
+
+	set_cmos_reg(RTC_SECR, values[0]);
+	set_cmos_reg(RTC_MINR, values[1]);
+	set_cmos_reg(RTC_HOURR, values[2]);
+	set_cmos_reg(RTC_DAYR, values[3]);
+	set_cmos_reg(RTC_MONR, values[4]);
+	set_cmos_reg(RTC_YEARR, values[5]);
+
+	if (has_century) {
+		set_cmos_reg(RTC_CENTR, values[6]);
+	}
+
+	set_cmos_reg(RTC_REGB, regb);
+
+	return 0;
+}
+

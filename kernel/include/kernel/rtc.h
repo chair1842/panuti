@@ -7,4 +7,6 @@
 
 int64_t rtc_cur_timestamp();
 
+int rtc_set_timestamp(int64_t timestamp);
+
 #endif
