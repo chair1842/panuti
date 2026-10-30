@@ -286,7 +286,6 @@ int rtc_set_timestamp(int64_t timestamp) {
 
 	while (getf_update_in_prog());
 
-	// stop the RTC from updating while the registers are being written
 	set_cmos_reg(RTC_REGB, regb | 0x80);
 
 	set_cmos_reg(RTC_SECR, values[0]);

@@ -38,7 +38,7 @@ make sure to unmount before shutting down
 
 - ~~Make registry inodes and dirents dynamic~~
 - Make tasks dynamic
-- add time (read from RTC at boot to sync) (`/dvc/clock`)
+- ~~add time (read from RTC at boot to sync) (`/dvc/time/clock`)~~
 - add support for the [PC Speaker](https://en.wikipedia.org/wiki/PC_speaker) (`/dvc/beepr`)
 - add formatting and repairing ext2
 - add sleep functionality to the kernel + syscall
