@@ -326,66 +326,102 @@ static const handle_ops_t serial_data_ops = {
 	.close = serial_data_close,
 };
 
+typedef enum {
+	SERIAL_ATTR_PORT,
+	SERIAL_ATTR_BASE,
+	SERIAL_ATTR_CHIP,
+	SERIAL_ATTR_RX_BYTES,
+	SERIAL_ATTR_TX_BYTES,
+	SERIAL_ATTR_OVERRUNS,
+	SERIAL_ATTR_COUNT,
+} serial_attr_kind_t;
+
 typedef struct {
 	uart_t* port;
-	char snapshot[256];
+	serial_attr_kind_t kind;
+} serial_attr_t;
+
+typedef struct {
+	char text[32];
 	size_t len;
 	size_t pos;
-} serial_status_handle_t;
+} serial_attr_handle_t;
 
-static int serial_status_open(void* impl, void** out_impl) {
-	uart_t* u = (uart_t*)impl;
+static serial_attr_t serial_attrs[SERIAL_MAX_PORTS][SERIAL_ATTR_COUNT];
 
-	serial_status_handle_t* h = kmalloc(sizeof(*h), alignof(serial_status_handle_t));
+static const char* const serial_attr_names[SERIAL_ATTR_COUNT] = {
+	[SERIAL_ATTR_PORT] = "port",
+	[SERIAL_ATTR_BASE] = "base",
+	[SERIAL_ATTR_CHIP] = "chip",
+	[SERIAL_ATTR_RX_BYTES] = "rx_bytes",
+	[SERIAL_ATTR_TX_BYTES] = "tx_bytes",
+	[SERIAL_ATTR_OVERRUNS] = "overruns",
+};
+
+static size_t render_attr(char* buf, size_t cap, const serial_attr_t* a) {
+	switch (a->kind) {
+	case SERIAL_ATTR_PORT:
+		return render_snprintf(buf, cap, "COM%d\n", a->port->index + 1);
+	case SERIAL_ATTR_BASE:
+		return render_snprintf(buf, cap, "0x%x\n", a->port->base);
+	case SERIAL_ATTR_CHIP:
+		return render_snprintf(buf, cap, "%s\n",
+			a->port->chip == SERIAL_CHIP_16550A ? "16550A" : "8250");
+	case SERIAL_ATTR_RX_BYTES:
+		return render_snprintf(buf, cap, "%u\n", a->port->rx_bytes);
+	case SERIAL_ATTR_TX_BYTES:
+		return render_snprintf(buf, cap, "%u\n", a->port->tx_bytes);
+	case SERIAL_ATTR_OVERRUNS:
+		return render_snprintf(buf, cap, "%u\n", a->port->overruns);
+	default:
+		return 0;
+	}
+}
+
+static int serial_attr_open(void* impl, void** out_impl) {
+	serial_attr_t* a = (serial_attr_t*)impl;
+
+	serial_attr_handle_t* h = kmalloc(sizeof(*h), alignof(serial_attr_handle_t));
 	if (!h) {
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	h->port = u;
 	h->pos = 0;
-
-	const char* chip = (u->chip == SERIAL_CHIP_16550A) ? "16550A" : "8250";
-
-	h->len = render_snprintf(h->snapshot, sizeof(h->snapshot),
-		"port=COM%d\n"
-		"base=0x%x\n"
-		"chip=%s\n"
-		"baud=%u\n"
-		"rx_bytes=%u\n"
-		"tx_bytes=%u\n"
-		"overruns=%u\n",
-		u->index + 1, u->base, chip, u->baud,
-		u->rx_bytes, u->tx_bytes, u->overruns);
+	h->len = render_attr(h->text, sizeof(h->text), a);
 
 	*out_impl = h;
 	return 0;
 }
 
-static int serial_status_read(void* impl, void* buf, size_t len) {
-	serial_status_handle_t* h = (serial_status_handle_t*)impl;
+static int serial_attr_read(void* impl, void* buf, size_t len) {
+	serial_attr_handle_t* h = (serial_attr_handle_t*)impl;
+
+	if (h->pos >= h->len) {
+		return 0;
+	}
 
 	size_t avail = h->len - h->pos;
 	size_t n = (avail < len) ? avail : len;
-	memcpy(buf, h->snapshot + h->pos, n);
+	memcpy(buf, h->text + h->pos, n);
 	h->pos += n;
-	
+
 	return (int)n;
 }
 
-static int serial_status_close(void* impl, struct task* self) {
+static int serial_attr_close(void* impl, struct task* self) {
 	(void)self;
 	kfree(impl);
 	return 0;
 }
 
-static const handle_ops_t serial_status_ops = {
-	.open = serial_status_open,
-	.read = serial_status_read,
+static const handle_ops_t serial_attr_ops = {
+	.open = serial_attr_open,
+	.read = serial_attr_read,
 	.write = op_not_supported_w,
 	.activate = op_not_supported_act,
 	.ready = op_not_supported_rdy,
 	.seek = op_seek_ignore,
-	.close = serial_status_close,
+	.close = serial_attr_close,
 };
 
 typedef struct {
@@ -502,10 +538,17 @@ void serial_dvc_init(void) {
 		render_snprintf(path, sizeof(path), "/dvc/serial/%d/data", i);
 		registry_add(path, INODE_DVC, u, &serial_data_ops);
 
-		render_snprintf(path, sizeof(path), "/dvc/serial/%d/status", i);
-		registry_add(path, INODE_DVC, u, &serial_status_ops);
-
 		render_snprintf(path, sizeof(path), "/dvc/serial/%d/baud", i);
 		registry_add(path, INODE_DVC, u, &serial_baud_ops);
+
+		for (int k = 0; k < SERIAL_ATTR_COUNT; k++) {
+			serial_attrs[i][k] = (serial_attr_t){
+				.port = u,
+				.kind = (serial_attr_kind_t)k,
+			};
+
+			render_snprintf(path, sizeof(path), "/dvc/serial/%d/%s", i, serial_attr_names[k]);
+			registry_add(path, INODE_DVC, &serial_attrs[i][k], &serial_attr_ops);
+		}
 	}
 }
