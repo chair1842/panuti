@@ -14,3 +14,7 @@ void timedev_init_coord() {
 int64_t timedev_get_bt() {
 	return boott;
 }
+
+void timedev_set_bt(int64_t bt) {
+	boott = bt;
+}

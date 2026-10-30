@@ -3,6 +3,7 @@
 #include <kernel/handle/handle.h>
 #include <kernel/handle/registry.h>
 #include <kernel/memman/slab.h>
+#include <kernel/rtc.h>
 #include <kernel/timer.h>
 #include <panuti/errno.h>
 #include <stddef.h>
@@ -68,6 +69,42 @@ static int clock_read(void* impl, void* buf, size_t len) {
 	return (int)n;
 }
 
+static int clock_write(void* impl, const void* buf, size_t len) {
+	(void)impl;
+
+	const char* in = (const char*)buf;
+	size_t i = 0;
+
+	while (i < len && (in[i] == ' ' || in[i] == '\t')) {
+		i++;
+	}
+
+	if (i >= len || in[i] < '0' || in[i] > '9') {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	int64_t value = 0;
+
+	while (i < len && in[i] >= '0' && in[i] <= '9') {
+		int digit = in[i] - '0';
+
+		if (value > (INT64_MAX - digit) / 10) {
+			return PANUTIERRNO_INVALIDARG;
+		}
+
+		value = value * 10 + digit;
+		i++;
+	}
+
+	if (rtc_set_timestamp(value) != 0) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	timedev_set_bt(value - (int64_t)timer_get_ticks());
+
+	return (int)len;
+}
+
 static int clock_close(void* impl, struct task* self) {
 	(void)self;
 	kfree(impl);
@@ -77,7 +114,7 @@ static int clock_close(void* impl, struct task* self) {
 static const handle_ops_t clock_ops = {
 	.open = clock_open,
 	.read = clock_read,
-	.write = op_not_supported_w,
+	.write = clock_write,
 	.activate = op_not_supported_act,
 	.ready = op_not_supported_rdy,
 	.close = clock_close,
