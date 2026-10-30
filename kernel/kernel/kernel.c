@@ -47,7 +47,10 @@ void kernel_main(void) {
 	kdev_zero_register();
 	kdev_random_register();
 	
+	timedev_init_coord();
 	timedev_uptime_register();
+	timedev_boot_register();
+	timedev_clock_register();
 
 	kmsg_init();
 

@@ -95,7 +95,10 @@ kernel/fs/ext2/helpers.o \
 kernel/syscall/handlers/resize.o \
 kernel/syscall/handlers/mkfile.o \
 kernel/syscall/handlers/seek.o \
-kernel/log/kmsg.o
+kernel/log/kmsg.o \
+kernel/drivers/time/coord.o \
+kernel/drivers/time/boot.o \
+kernel/drivers/time/clock.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

@@ -2,7 +2,6 @@
 
 // slab.c
 #include "kernel/klog.h"
-#include "kernel/tty.h"
 #include <kernel/memman/slab.h>
 #include <kernel/memman/vmalloc.h>
 #include <string.h>
