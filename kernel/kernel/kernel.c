@@ -46,6 +46,7 @@ void kernel_main(void) {
 	kdev_null_register();
 	kdev_zero_register();
 	kdev_random_register();
+	kdev_beepr_register();
 	
 	timedev_init_coord();
 	timedev_uptime_register();
