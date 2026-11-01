@@ -56,6 +56,8 @@ typedef struct task {
 	
 	uint32_t exit_code;
 	pid_t pid_waiting_on;
+	
+	int64_t wake_at;
 } task_t;
 
 task_t* task_create(void (*entry)(void));
