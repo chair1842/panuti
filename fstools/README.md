@@ -9,4 +9,3 @@ This project is a set of tools for maintaining the filesystems supported by the 
 ### Ext2
 
 - ffs-ext2
-- fsck-ext2
