@@ -47,8 +47,8 @@ make sure to unmount before shutting down
 ## Current limitations
 
 - Pur and Pint both assume unconditionally that the OS is being booted from a cd:
-- Pint always mounts `/dvc/cdrom/0` to `/cd` and launches pur from there
-- Pur hardcodes its PATH at `/cd/usr/bin`
+  - Pint always mounts `/dvc/cdrom/0` to `/cd` and launches pur from there
+  - Pur hardcodes its PATH at `/cd/usr/bin`
 - only 64 tasks at a time.
 - mounting at places that alr have registry nodes (such as root) will hide those registry nodes
 - mounting at root will hide `/dvc` which,,, yk.
