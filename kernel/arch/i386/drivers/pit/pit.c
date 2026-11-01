@@ -7,6 +7,7 @@
 #include <kernel/sched/sched.h>
 #include <kernel/klog.h>
 #include "../../intpt/pic/pic.h"
+#include <kernel/ksleep.h>
 
 #define PIT_CHANNEL0 0x40
 #define PIT_COMMAND 0x43
@@ -46,5 +47,6 @@ uint64_t pit_get_ticks(void) {
 void pit_handler(registers_t *reg) {
 	(void)reg;
 	ticks++;
+	sleep_tick();
 	sched_schedule();
 }
