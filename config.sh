@@ -1,5 +1,5 @@
 SYSTEM_HEADER_PROJECTS="libc kernel"
-PROJECTS="libc kernel pint ksts pur pcrutils nib calc conway"
+PROJECTS="libc kernel pint ksts pur pcrutils nib calc conway fstools"
 
 export MAKE=${MAKE:-make}
 export HOST=${HOST:-$(./default-host.sh)}
