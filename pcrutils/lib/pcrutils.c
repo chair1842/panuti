@@ -37,6 +37,42 @@ int pcr_uptime_centis(long* out) {
 	return 0;
 }
 
+// read the wall clock. 0 on success, -1 on failure; sets centis
+int pcr_clock_centis(int64_t* out) {
+	int32_t fd = handle_open("/dvc/time/clock");
+	if (fd < 0) {
+		return -1;
+	}
+
+	char buf[32];
+	int32_t n = handle_read(fd, buf, sizeof(buf) - 1);
+	handle_close(fd);
+	if (n <= 0) {
+		return -1;
+	}
+
+	int64_t centis = 0;
+	bool any = false;
+
+	for (int i = 0; i < n && buf[i] >= '0' && buf[i] <= '9'; i++) {
+		int digit = buf[i] - '0';
+
+		if (centis > (INT64_MAX - digit) / 10) {
+			return -1;
+		}
+
+		centis = centis * 10 + digit;
+		any = true;
+	}
+
+	if (!any) {
+		return -1;
+	}
+
+	*out = centis;
+	return 0;
+}
+
 int pcr_write_all(int stream, const char* buf, size_t len) {
 	size_t off = 0;
 

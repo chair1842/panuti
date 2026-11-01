@@ -7,7 +7,7 @@ int main(void) {
 	printf("available utils:\n");
 	printf("echo in pwd tsb ls sleep clear cat mul cbi grep wc tail head split nexist stat mkdir mount umount ");
 	printf("sort uniq cut tr rev tac nl paste join comm seq printf yes od out rm mv ln find du touch tee cp ");
-	printf("truncate basename dirname cmp fold cksum\n");
+	printf("truncate basename dirname cmp fold cksum date\n");
 
 	return 0;
 }

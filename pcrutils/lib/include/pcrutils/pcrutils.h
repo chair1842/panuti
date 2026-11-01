@@ -4,6 +4,7 @@
 #define _PCRUTILS_PCRUTILS_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 typedef struct {
 	char** v;
@@ -21,6 +22,10 @@ int pcr_write_all(int stream, const char* buf, size_t len);
 
 // read the kernel clock (/dvc/uptime), in centiseconds. 0 on success
 int pcr_uptime_centis(long* out);
+
+// read the wall clock (/dvc/time/clock), in centiseconds since the Unix epoch.
+// 0 on success
+int pcr_clock_centis(int64_t* out);
 
 // write to a file handle, retrying until every byte is out
 int pcr_handle_write_all(int fd, const char* buf, size_t len);
