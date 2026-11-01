@@ -7,5 +7,7 @@
 
 int beepr_play(uint32_t frequency);
 void beepr_stop(void);
+void beepr_beep(void);
+void beepr_tick(void);
 
 #endif

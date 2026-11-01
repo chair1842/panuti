@@ -8,6 +8,7 @@
 #include <kernel/klog.h>
 #include "../../intpt/pic/pic.h"
 #include <kernel/ksleep.h>
+#include <kernel/beepr.h>
 
 #define PIT_CHANNEL0 0x40
 #define PIT_COMMAND 0x43
@@ -48,5 +49,6 @@ void pit_handler(registers_t *reg) {
 	(void)reg;
 	ticks++;
 	sleep_tick();
+	beepr_tick();
 	sched_schedule();
 }

@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include <kernel/tty.h>
+#include <kernel/beepr.h>
 
 #include "vga.h"
 #include "io.h"
@@ -216,6 +217,8 @@ void terminal_putchar(char c) {
 			terminal_row--;
 			terminal_column = VGA_WIDTH - 1;
 		}
+	} else if (c == '\a') {
+		beepr_beep();
 	} else if (uc < 0x20 || uc == 0x7F) {
 	} else {
 		terminal_putentryat(uc, terminal_color, terminal_column, terminal_row);
