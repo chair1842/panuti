@@ -44,6 +44,8 @@ typedef struct task {
 	
 	struct task* next;
 	
+	struct task* task_next;
+	
 	fdtable_t fdtable;
 	
 	inode_t* cwd;

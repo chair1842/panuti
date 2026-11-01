@@ -37,7 +37,7 @@ make sure to unmount before shutting down
 ## Planned for 0.2
 
 - ~~Make registry inodes and dirents dynamic~~
-- Make tasks dynamic
+- ~~Make tasks dynamic~~
 - ~~add time (read from RTC at boot to sync) (`/dvc/time/clock`)~~
 - ~~add support for the [PC Speaker](https://en.wikipedia.org/wiki/PC_speaker) (`/dvc/beepr`)~~
 - add formatting and repairing ext2
@@ -49,7 +49,6 @@ make sure to unmount before shutting down
 - Pur and Pint both assume unconditionally that the OS is being booted from a cd:
   - Pint always mounts `/dvc/cdrom/0` to `/cd` and launches pur from there
   - Pur hardcodes its PATH at `/cd/usr/bin`
-- only 64 tasks at a time.
 - mounting at places that alr have registry nodes (such as root) will hide those registry nodes
 - mounting at root will hide `/dvc` which,,, yk.
 - mounting on a subdir of a mount is not allowed. so no `/mnt1/mnt2`

@@ -16,14 +16,33 @@
 #include <kernel/elf.h>
 #include <panuti/errno.h>
 
-#define MAX_TASKS 64
 #define USER_STACK_VIRT_TOP 0xB0000000
 #define PAGE_SIZE 0x1000
 #define MAX_ARGV_BYTES (TASK_USER_STACK_SIZE - TASK_USER_CONTEXT_BYTES)
 #define ELF_READ_MAX (256 * 1024)
 
-static uint32_t task_count = 0;
-static task_t tasks[MAX_TASKS] = {0};
+static task_t* task_list = nullptr;
+
+static void task_list_push(task_t* t) {
+	t->task_next = task_list;
+	task_list = t;
+}
+
+static void task_list_unlink(task_t* t) {
+	task_t** pp = &task_list;
+	while (*pp) {
+		if (*pp == t) {
+			*pp = t->task_next;
+			break;
+		}
+		
+		pp = &(*pp)->task_next;
+	}
+	
+	t->task_next = nullptr;
+}
+
+static void task_teardown(task_t* t);
 
 static void task_init_default_streams(task_t* t) {
 	// a recycled slot still holds the handle_t copies the previous task left
@@ -55,68 +74,37 @@ static void task_init_default_streams(task_t* t) {
 // to collect this task's exit code", and it holds from the moment a waiter
 // commits until it clears the field on the way out.
 static bool task_has_waiter(pid_t pid) {
-	for (int i = 0; i < MAX_TASKS; i++) {
-		if (tasks[i].state != TASK_NONE && tasks[i].pid_waiting_on == pid) {
+	for (task_t* t = task_list; t; t = t->task_next) {
+		if (t->state != TASK_NONE && t->pid_waiting_on == pid) {
 			return true;
 		}
 	}
 	return false;
 }
 
-// finds a free slot: one that's never been used (state == 0 / TASK_NONE,
-// assuming that's the zero-value of task_state_t). A TASK_TERMINATED task
-// is a zombie whose parent hasn't reaped it yet — it still holds a live PID
-// that task_wait_pid must be able to find, so its slot is not free until
-// task_destroy resets it to TASK_NONE.
-//
-// If every slot is occupied, fall back to reclaiming a zombie that nobody is
-// waiting on. task_destroy() is otherwise only reachable from task_wait_pid(),
-// so a child that exits without being waited on would hold its slot, its
-// 4-page kernel stack, and its whole address space forever: after MAX_TASKS
-// such children, task creation fails permanently with NOFDS and never
-// recovers. Reclaiming only unwaited zombies keeps wait() working — a zombie
-// someone is blocked on is skipped, so its exit code is still delivered — and
-// matches the lazy reaping a real kernel does on fork.
-// Returns NULL if every slot is occupied by a task that is live, or a zombie
-// somebody is still waiting on.
-static task_t* task_find_free_slot(void) {
-	for (int i = 0; i < MAX_TASKS; i++) {
-		if (tasks[i].state == TASK_NONE) {
-			return &tasks[i];
+static task_t* task_alloc_task(void) {
+	for (task_t* t = task_list; t; ) {
+		task_t* next = t->task_next;
+
+		if (t->state == TASK_TERMINATED && !task_has_waiter(t->pid)) {
+			sched_remove(t);
+			task_teardown(t);
+			task_list_unlink(t);
+			return t;
 		}
+
+		t = next;
 	}
 
-	for (int i = 0; i < MAX_TASKS; i++) {
-		if (tasks[i].state == TASK_TERMINATED && !task_has_waiter(tasks[i].pid)) {
-			task_t* victim = &tasks[i];
-			// mirrors task_wait_pid(): a zombie is already off the run
-			// queue, but removing it is a no-op if it still is on one, and
-			// task_destroy() would otherwise leave a dangling next pointer
-			sched_remove(victim);
-			// clears state to TASK_NONE, so this same slot is now free
-			task_destroy(victim);
-			return victim;
-		}
-	}
-
-	return nullptr;
+	return kmalloc(sizeof(task_t), alignof(task_t));
 }
 
-// hands out the lowest pid no live task is using, so pids get recycled instead
-// of climbing forever. with at most MAX_TASKS live tasks this keeps every pid
-// inside [1, MAX_TASKS], so there is no wraparound case to get wrong.
-//
-// a TASK_TERMINATED slot still owns its pid until task_destroy clears the
-// slot, so a pid is never handed to a new task while a parent could still be
-// blocked in wait() on it -- task_find_free_slot keeps zombies out of the free
-// pool for exactly that reason. pid 0 is never handed out, so it doubles as
-// the failure return.
 static pid_t task_alloc_pid(void) {
-	for (pid_t candidate = 1; candidate <= MAX_TASKS; candidate++) {
+	for (pid_t candidate = 1; ; candidate++) {
 		bool taken = false;
 
-		for (int i = 0; i < MAX_TASKS; i++) {
-			if (tasks[i].state != TASK_NONE && tasks[i].pid == candidate) {
+		for (task_t* t = task_list; t; t = t->task_next) {
+			if (t->state != TASK_NONE && t->pid == candidate) {
 				taken = true;
 				break;
 			}
@@ -126,8 +114,6 @@ static pid_t task_alloc_pid(void) {
 			return candidate;
 		}
 	}
-
-	return 0;
 }
 
 void task_set_cwd(task_t* t, inode_t* cwd) {
@@ -144,7 +130,7 @@ void task_set_cwd(task_t* t, inode_t* cwd) {
 static task_t* task_alloc_common(void) {
 	uint32_t flags = irq_save_disable();
 
-	task_t* t = task_find_free_slot();
+	task_t* t = task_alloc_task();
 	if (!t) {
 		irq_restore(flags);
 		return nullptr;
@@ -153,6 +139,8 @@ static task_t* task_alloc_common(void) {
 	t->pid = task_alloc_pid();
 	if (t->pid == 0) {
 		irq_restore(flags);
+		task_list_unlink(t);
+		kfree(t);
 		return nullptr;
 	}
 
@@ -163,14 +151,16 @@ static task_t* task_alloc_common(void) {
 
 	t->kernel_stack = (uint32_t)vmalloc_pages(TASK_KERNEL_STACK_PAGES);
 	if (!t->kernel_stack) {
-		t->state = TASK_NONE;
+		task_list_unlink(t);
+		kfree(t);
 		return nullptr;
 	}
 
 	t->addr_space = memman_create_addr_space();
 	if (!t->addr_space) {
 		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
-		t->state = TASK_NONE;
+		task_list_unlink(t);
+		kfree(t);
 		return nullptr;
 	}
 
@@ -191,7 +181,7 @@ task_t* task_create(void (*entry)(void)) {
 	}
 
 	task_init_stack(t, entry);
-	task_count++;
+	task_list_push(t);
 	sched_add(t);
 
 	return t;
@@ -256,12 +246,13 @@ task_t* task_create_user(void (*entry)(void)) {
 	if (user_stack_setup(t->addr_space, &us) != 0) {
 		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
 		memman_destroy_addr_space(t->addr_space);
-		t->state = TASK_NONE; // release the slot back, since alloc_common already claimed it
+		task_list_unlink(t);
+		kfree(t);
 		return nullptr;
 	}
 
 	task_init_user_stack(t, entry, us.esp);
-	task_count++;
+	task_list_push(t);
 	sched_add(t);
 
 	return t;
@@ -284,7 +275,8 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 	if (elf_load_segments(t->addr_space, elf_data, segs, nsegs) != 0) {
 		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
 		memman_destroy_addr_space(t->addr_space);
-		t->state = TASK_NONE;
+		task_list_unlink(t);
+		kfree(t);
 		return nullptr;
 	}
 
@@ -292,12 +284,13 @@ task_t* task_create_frelf_user(const void* elf_data, size_t elf_size) {
 	if (user_stack_setup(t->addr_space, &us) != 0) {
 		vmalloc_free_pages((void*)t->kernel_stack, TASK_KERNEL_STACK_PAGES);
 		memman_destroy_addr_space(t->addr_space);
-		t->state = TASK_NONE;
+		task_list_unlink(t);
+		kfree(t);
 		return nullptr;
 	}
 
 	task_init_user_stack(t, (void (*)(void))(uint32_t)entry, us.esp);
-	task_count++;
+	task_list_push(t);
 	sched_add(t);
 
 	return t;
@@ -352,11 +345,7 @@ static void task_release_handles(task_t* t) {
 	}
 }
 
-void task_destroy(task_t* t) {
-	if (!t || t->state != TASK_TERMINATED) {
-		return;
-	}
-
+static void task_teardown(task_t* t) {
 	task_release_handles(t);
 
 	for (int i = 0; i < t->no_in_streams; i++) {
@@ -381,7 +370,16 @@ void task_destroy(task_t* t) {
 	t->no_in_streams = 0;
 	t->no_out_streams = 0;
 	t->state = TASK_NONE;
-	task_count--;
+}
+
+void task_destroy(task_t* t) {
+	if (!t || t->state != TASK_TERMINATED) {
+		return;
+	}
+
+	task_teardown(t);
+	task_list_unlink(t);
+	kfree(t);
 }
 
 static void procreate_cleanup(task_t* t) {
@@ -410,6 +408,8 @@ static void procreate_cleanup(task_t* t) {
 
 	task_set_cwd(t, nullptr);
 	t->state = TASK_NONE;
+	task_list_unlink(t);
+	kfree(t);
 }
 
 static int elf_read_whole_file(inode_t* n, void** out_data, size_t* out_size) {
@@ -545,7 +545,7 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 	task_t* t = task_alloc_common();
 	if (!t) {
 		kfree(elf_data);
-		return PANUTIERRNO_NOFDS;
+		return PANUTIERRNO_NOMEM;
 	}
 
 	task_set_cwd(t, caller->cwd);
@@ -596,45 +596,55 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 	}
 
 	task_init_user_stack(t, (void (*)(void))(uint32_t)entry, user_esp);
-	task_count++;
+	task_list_push(t);
 	sched_add(t);
 
 	return t->pid;
 }
 
 int task_wait_pid(pid_t target, int* exit_code_out) {
-	for (int i = 0; i < MAX_TASKS; i++) {
-		if (tasks[i].pid == target && tasks[i].state != TASK_NONE) {
-			if (tasks[i].state == TASK_TERMINATED) {
-				*exit_code_out = tasks[i].exit_code;
-				sched_remove(&tasks[i]);
-				task_destroy(&tasks[i]);
+	for (task_t* t = task_list; t; ) {
+		task_t* next = t->task_next;
+
+		if (t->pid == target && t->state != TASK_NONE) {
+			if (t->state == TASK_TERMINATED) {
+				*exit_code_out = t->exit_code;
+				sched_remove(t);
+				task_destroy(t);
 				return 0;
 			}
 			
 			return 1;
 		}
+
+		t = next;
 	}
 	
 	return -1;
 }
 
 void task_wake_waiters(pid_t exited_pid) {
-	for (int i = 0; i < MAX_TASKS; i++) {
-		if (tasks[i].state == TASK_BLOCKED && tasks[i].pid_waiting_on == exited_pid) {
-			tasks[i].pid_waiting_on = 0;
-			task_wake(&tasks[i]);
+	for (task_t* t = task_list; t; ) {
+		task_t* next = t->task_next;
+
+		if (t->state == TASK_BLOCKED && t->pid_waiting_on == exited_pid) {
+			t->pid_waiting_on = 0;
+			task_wake(t);
 		}
+
+		t = next;
 	}
 }
 
 void task_wake_sleepers(int64_t now) {
-	for (int i = 0; i < MAX_TASKS; i++) {
-		task_t* t = &tasks[i];
+	for (task_t* t = task_list; t; ) {
+		task_t* next = t->task_next;
 
 		if (t->state == TASK_BLOCKED && t->wake_at && t->wake_at <= now) {
 			t->wake_at = 0;
 			task_wake(t);
 		}
+
+		t = next;
 	}
 }
