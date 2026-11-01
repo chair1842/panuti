@@ -677,6 +677,7 @@ typedef struct procreate_args {
 - `PANUTIERRNO_PLAINERR` -- `argc`, `no_in_streams`, or `no_out_streams` is out of range
 - `PANUTIERRNO_NOTFOUND` -- `path` does not resolve to anything
 - `PANUTIERRNO_UNSUPPORTEDOP` -- `path` is not a regular file (a directory, device, or pipe)
+- `PANUTIERRNO_NOMEM` -- the task could not be created (out of memory or setup failure)
 
 **Note:** the executable must be a regular file. Devices, block devices, pipes
 and directories are refused before any bytes are read.
