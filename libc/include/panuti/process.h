@@ -3,6 +3,7 @@
 #ifndef _PANUTI_PROCESS_H
 #define _PANUTI_PROCESS_H
 
+#include <stdint.h>
 #include <sys/types.h>
 
 #if defined(__cplusplus)
@@ -19,6 +20,9 @@ pid_t procreate(
 
 // block until the waited-on process exits and then output the exit code to ec_out
 int wait(pid_t pid, int* ec_out);
+
+// sleep for cs amount of centiseconds
+int sleep(int cs);
 
 #if defined(__cplusplus)
 }

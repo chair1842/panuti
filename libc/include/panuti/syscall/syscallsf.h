@@ -157,6 +157,10 @@ static inline int32_t panutisysf_seek(int fd, int64_t* offset, int whence) {
 	return panuti_syscall(SYSHANDLER_SEEK, (uint32_t)fd, (uint32_t)offset, (uint32_t)whence, 0);
 }
 
+static inline int32_t panutisysf_sleep(int cs) {
+	return panuti_syscall(SYSHANDLER_SLEEP, (uint32_t)cs, 0, 0, 0);
+}
+
 #if defined(__cplusplus)
 }
 #endif

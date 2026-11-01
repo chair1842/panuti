@@ -99,7 +99,8 @@ kernel/log/kmsg.o \
 kernel/drivers/time/coord.o \
 kernel/drivers/time/boot.o \
 kernel/drivers/time/clock.o \
-kernel/klseep.o
+kernel/klseep.o \
+kernel/syscall/handlers/sleep.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

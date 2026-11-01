@@ -73,7 +73,8 @@ panuti/mmap/mmapan.o \
 panuti/mmap/munmap.o \
 panuti/registry/mkfile.o \
 panuti/kbd/kpktasc.o \
-panuti/handle/seek.o
+panuti/handle/seek.o \
+panuti/process/sleep.o
 
 HOSTEDOBJS=\
 $(ARCH_HOSTEDOBJS) \

@@ -96,4 +96,7 @@ int32_t syshandler_mkfile(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // change the read/write handle offset
 int32_t syshandler_seek(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// sleep
+int32_t syshandler_sleep(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif
