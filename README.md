@@ -41,7 +41,7 @@ make sure to unmount before shutting down
 - ~~add time (read from RTC at boot to sync) (`/dvc/time/clock`)~~
 - add support for the [PC Speaker](https://en.wikipedia.org/wiki/PC_speaker) (`/dvc/beepr`)
 - add formatting and repairing ext2
-- add sleep functionality to the kernel + syscall
+- ~~add sleep functionality to the kernel + syscall~~
 - add motions and operators to nib
 
 ## Current limitations
