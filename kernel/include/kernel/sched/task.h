@@ -81,6 +81,7 @@ int task_build_user_argv_stack(
 pid_t task_procreate(task_t* caller, const procreate_args_t* args);
 int task_wait_pid(pid_t target, int* exit_code_out);
 void task_wake_waiters(pid_t exited_pid);
+void task_wake_sleepers(int64_t now);
 handle_t* task_return_hslot(uint32_t slot, task_t* task);
 void task_set_cwd(task_t* task, inode_t* cwd);
 

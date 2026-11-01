@@ -157,6 +157,7 @@ static task_t* task_alloc_common(void) {
 	}
 
 	t->state = TASK_READY;
+	t->wake_at = 0;
 
 	irq_restore(flags);
 
@@ -623,6 +624,17 @@ void task_wake_waiters(pid_t exited_pid) {
 		if (tasks[i].state == TASK_BLOCKED && tasks[i].pid_waiting_on == exited_pid) {
 			tasks[i].pid_waiting_on = 0;
 			task_wake(&tasks[i]);
+		}
+	}
+}
+
+void task_wake_sleepers(int64_t now) {
+	for (int i = 0; i < MAX_TASKS; i++) {
+		task_t* t = &tasks[i];
+
+		if (t->state == TASK_BLOCKED && t->wake_at && t->wake_at <= now) {
+			t->wake_at = 0;
+			task_wake(t);
 		}
 	}
 }

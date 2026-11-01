@@ -21,13 +21,5 @@ void ksleep(uint32_t cs) {
 }
 
 void sleep_tick() {
-	int64_t now = timer_get_ticks();
-	task_t* t = sched_current();
-	
-	for (int i = 0; i < 64; i++) {
-		if (t->wake_at && t->wake_at <= now) {
-			t->wake_at = 0;
-			task_wake(t);
-		}
-	}
+	task_wake_sleepers((int64_t)timer_get_ticks());
 }
