@@ -51,7 +51,7 @@ static int ext2_validate_gdt(ext2_t* fs) {
     return 0;
 }
 
-static struct inode* ext2_lookup(void* fs_impl, struct inode* dir, const char* name, size_t len) {
+static inode_t* ext2_lookup(void* fs_impl, inode_t* dir, const char* name, size_t len) {
 	ext2_t* fs = fs_impl;
 
 	if (!fs || !dir || !name || len == 0 || len > EXT2_NAME_LEN) {
@@ -217,7 +217,7 @@ static struct inode* ext2_lookup(void* fs_impl, struct inode* dir, const char* n
 	return n;
 }
 
-static int ext2_create(void* fs_impl, struct inode* dir, const char* name, size_t len, inode_type_t type) {
+static int ext2_create(void* fs_impl, inode_t* dir, const char* name, size_t len, inode_type_t type) {
 	ext2_t* fs = fs_impl;
 	ext2_inode_hdr_t dih;
 	uint32_t inum = 0;
@@ -374,7 +374,7 @@ static int ext2_create(void* fs_impl, struct inode* dir, const char* name, size_
 	return 0;
 }
 
-static int ext2_unlink(void* fs_impl, struct inode* dir, const char* name, size_t len) {
+static int ext2_unlink(void* fs_impl, inode_t* dir, const char* name, size_t len) {
 	ext2_t* fs = fs_impl;
 	ext2_inode_hdr_t dih;
 	ext2_inode_hdr_t tgt;
@@ -528,8 +528,8 @@ static bool ext2_in_subtree(ext2_t* fs, uint32_t root_inum, uint32_t start_inum)
 	return false;
 }
 
-static int ext2_rename(void* fs_impl, struct inode* old_dir, const char* old_name, size_t old_len,
-                       struct inode* new_dir, const char* new_name, size_t new_len) {
+static int ext2_rename(void* fs_impl, inode_t* old_dir, const char* old_name, size_t old_len,
+                       inode_t* new_dir, const char* new_name, size_t new_len) {
 	ext2_t* fs = fs_impl;
 	ext2_inode_hdr_t odih;
 	ext2_inode_hdr_t ndih;
@@ -704,7 +704,7 @@ static int ext2_rename(void* fs_impl, struct inode* old_dir, const char* old_nam
 	return 0;
 }
 
-static int ext2_link(void* fs_impl, struct inode* target, struct inode* dir,
+static int ext2_link(void* fs_impl, inode_t* target, inode_t* dir,
                      const char* name, size_t len) {
 	ext2_t* fs = fs_impl;
 	ext2_inode_hdr_t dih;
@@ -796,7 +796,7 @@ static int ext2_inode_length(ext2_t* fs, const ext2_inode_hdr_t* hdr, uint64_t* 
 	return 0;
 }
 
-static int64_t ext2_size(void* fs_impl, struct inode* node) {
+static int64_t ext2_size(void* fs_impl, inode_t* node) {
 	ext2_t* fs = fs_impl;
 
 	if (!fs || !node) {
@@ -825,7 +825,7 @@ static int64_t ext2_size(void* fs_impl, struct inode* node) {
 	return (int64_t)len;
 }
 
-static void* ext2_open(void* fs_impl, struct inode* node) {
+static void* ext2_open(void* fs_impl, inode_t* node) {
 	ext2_t* fs = fs_impl;
 
 	if (!fs || !node) {
@@ -1246,7 +1246,7 @@ static int ext2_resize(void* file_impl, uint64_t new_size) {
 	return 0;
 }
 
-static int ext2_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, size_t* cursor) {
+static int ext2_readdir(void* fs_impl, inode_t* dir, dirent_entry_t* out, size_t* cursor) {
 	ext2_t* fs = fs_impl;
 
 	if (!fs || !dir || !out || !cursor) {
