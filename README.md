@@ -1,11 +1,20 @@
 # Panuti
 
-a hobbyist os
+a unix-inspired hobbyist OS
 
 ## Gifs
 
 <img width="49%" alt="conway of life running on panuti" src="https://github.com/user-attachments/assets/8bc1d011-ece4-4487-a12a-779d88c42489" /> <img width="49%" alt="really slow editing on nib" src="https://github.com/user-attachments/assets/7fc04482-d8b3-457b-930c-872cb8978654" />
 
+## Features
+
+- Multitasking I386 kernel (no multiprocessing yet)
+- N-ary standard streams
+- VGA text mode, PC Speaker, Serial UART supported
+- PATA and CD-ROM support
+- ISO9660 and Ext2 filesystems
+- Has it's very own coreutils, vi/vim clone, and shell
+- Rename `/dev` to `/dvc` because why not
 
 ## How to try out
 
@@ -17,15 +26,20 @@ These instructions will use QEMU.
 qemu-system-i386 -cdrom panuti.iso
 ```
 
-if you want to try out hard disks,
-get an already formatted to ext2 disk image and use it.
-Panuti does not have a utility to format a block device to ext2 by itself yet.
+if you want to try out hard disks,  
+get a blank hard disk image and supply it to qemu:
 
 ```
-qemu-system-i386 -cdrom panuti.iso -hda disk.img
+qemu-system-i386 -cdrom panuti.iso -hda DISKIMG
 ```
 
-to mount your formatted disk, type these commands out on panuti, you can replace mnt with whatever name you desire:
+then in panuti, format the disk to ext2 before mounting it:
+
+```
+ffs-ext2 /dvc/pata/0
+```
+
+after formatting, you can mount the disk:
 
 ```
 mkdir mnt
@@ -40,7 +54,7 @@ make sure to unmount before shutting down
 - ~~Make tasks dynamic~~
 - ~~add time (read from RTC at boot to sync) (`/dvc/time/clock`)~~
 - ~~add support for the [PC Speaker](https://en.wikipedia.org/wiki/PC_speaker) (`/dvc/beepr`)~~
-- add formatting ext2
+- ~~add formatting ext2~~
 - ~~add sleep functionality to the kernel + syscall~~
 - add motions and operators to nib
 
@@ -88,6 +102,10 @@ that's all i can think about :)
 - [conway](conway/README.md)
 
     conway's game of life
+
+- [fstools](fstools/README.md)
+
+    tools for maintaining filesystems
 
 ## Building
 
