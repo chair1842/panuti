@@ -21,7 +21,7 @@ static int dirent_count;
 static inode_t* root;
 
 inode_t* registry_inode_alloc(inode_type_t type) {
-	if (inode_count > REG_MAX_INODES) {
+	if (inode_count >= REG_MAX_INODES) {
 		klog(KLOG_WARN, "registry: inode conut cap reached\n");
 		return nullptr;
 	}
@@ -46,7 +46,7 @@ inode_t* registry_inode_alloc(inode_type_t type) {
 }
 
 static dirent_t* dirent_alloc(void) {
-	if (dirent_count > REG_MAX_DIRENTS) {
+	if (dirent_count >= REG_MAX_DIRENTS) {
 		klog(KLOG_WARN, "registry: dirent count cap reached\n");
 		return nullptr;
 	}
@@ -61,6 +61,8 @@ static dirent_t* dirent_alloc(void) {
 	d->refcount = 1;
 	d->inode = nullptr;
 	d->next = nullptr;
+
+	dirent_count++;
 	
 	return d;
 }
