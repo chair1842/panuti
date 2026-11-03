@@ -23,10 +23,9 @@ static const char HELP[] =
 	"  -h - prints this help message\n";
 
 static int copy_in(int no_streams) {
-	int counts[2] = {0, 0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 1) {
+	if (counts.in < 1) {
 		printf("pcrutils: cat: there are no in streams to read from\n");
 		return -1;
 	}
@@ -117,10 +116,9 @@ int main(int argc, char** argv) {
 		only_out0 = true;
 	}
 
-	int counts[2] = {0, 0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	int no_streams = counts[1];
+	int no_streams = counts.out;
 	if (no_streams < 1) {
 		printf("pcrutils: cat: there are no out streams to write to\n");
 		return -1;

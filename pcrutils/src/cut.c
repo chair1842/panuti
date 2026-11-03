@@ -211,15 +211,14 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	int counts[2] = {0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 1) {
+	if (counts.in < 1) {
 		printf("pcrutils: cut: there is no in stream to read\n");
 		return -1;
 	}
 
-	if (counts[1] < 1) {
+	if (counts.out < 1) {
 		printf("pcrutils: cut: there are no out streams to write to\n");
 		return -1;
 	}
@@ -233,7 +232,7 @@ int main(int argc, char** argv) {
 	int failed = 0;
 
 	for (size_t k = 0; k < lines.n; k++) {
-		if (cut_line(counts[1], only_out0, lines.v[k]) != 0) {
+		if (cut_line(counts.out, only_out0, lines.v[k]) != 0) {
 			failed = 1;
 			break;
 		}

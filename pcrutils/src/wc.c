@@ -218,15 +218,14 @@ int main(int argc, char** argv) {
 		want_chars = true;
 	}
 
-	int counts[2] = {0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 1 && first == argc) {
+	if (counts.in < 1 && first == argc) {
 		printf("pcrutils: wc: there is nothing to count\n");
 		return -1;
 	}
 
-	if (counts[1] < 1) {
+	if (counts.out < 1) {
 		printf("pcrutils: wc: there are no out streams to write to\n");
 		return -1;
 	}
@@ -238,7 +237,7 @@ int main(int argc, char** argv) {
 	// way. reading in0 with no pipe on it would just sit waiting on the
 	// keyboard, the same as cat does.
 	if (first == argc || want_streams) {
-		for (int s = 0; s < counts[0]; s++) {
+		for (int s = 0; s < counts.in; s++) {
 			counter_t c = {0, 0, 0, false, '\0'};
 			char label[WC_LABELSZ];
 

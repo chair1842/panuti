@@ -121,16 +121,15 @@ int main(int argc, char** argv) {
 		panutisysf_resize(fd, &zero);
 	}
 
-	int counts[2] = {0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 1) {
+	if (counts.in < 1) {
 		printf("pcrutils: out: there are no in streams to read from\n");
 		failed = 1;
 		goto done;
 	}
 
-	for (int s = 0; s < counts[0]; s++) {
+	for (int s = 0; s < counts.in; s++) {
 		if (out_stream(fd, s) != 0) {
 			printf("pcrutils: out: could not write %s from the in streams\n", path);
 			failed = 1;

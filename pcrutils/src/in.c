@@ -84,10 +84,9 @@ int main(int argc, char** argv) {
 		broadcast = false;
 	}
 
-	int counts[2] = {0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	int no_streams = counts[1];
+	int no_streams = counts.out;
 	if (no_streams <= 0) {
 		printf("pcrutils: in: there are no out streams to write to\n");
 		return -1;

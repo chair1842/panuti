@@ -64,15 +64,14 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	int counts[2] = {0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 1) {
+	if (counts.in < 1) {
 		printf("pcrutils: fold: there is no in stream to read\n");
 		return -1;
 	}
 
-	if (counts[1] < 1) {
+	if (counts.out < 1) {
 		printf("pcrutils: fold: there are no out streams to write to\n");
 		return -1;
 	}
@@ -125,7 +124,7 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	if (!failed && out.len > 0 && pcr_output(counts[1], out.data, out.len, only_out0) != 0) {
+	if (!failed && out.len > 0 && pcr_output(counts.out, out.data, out.len, only_out0) != 0) {
 		printf("pcrutils: fold: could not write to the out streams\n");
 		failed = 1;
 	}

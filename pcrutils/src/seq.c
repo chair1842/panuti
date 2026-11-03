@@ -82,10 +82,9 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	int counts[2] = {0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[1] < 1) {
+	if (counts.out < 1) {
 		printf("pcrutils: seq: there are no out streams to write to\n");
 		return -1;
 	}
@@ -102,8 +101,8 @@ int main(int argc, char** argv) {
 			break;
 		}
 
-		if (pcr_output(counts[1], num, (size_t)n, 0) != 0 ||
-		    pcr_output(counts[1], "\n", 1, 0) != 0) {
+		if (pcr_output(counts.out, num, (size_t)n, 0) != 0 ||
+		    pcr_output(counts.out, "\n", 1, 0) != 0) {
 			failed = 1;
 			break;
 		}

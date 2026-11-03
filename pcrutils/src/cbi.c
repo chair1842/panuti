@@ -42,22 +42,21 @@ int main(int argc, char** argv) {
 		return 0;
 	}
 
-	int counts[2] = {0, 0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 1) {
+	if (counts.in < 1) {
 		printf("pcrutils: cbi: there are no in streams to read from\n");
 		return -1;
 	}
 
-	if (counts[1] < 1) {
+	if (counts.out < 1) {
 		printf("pcrutils: cbi: there are no out streams to write to\n");
 		return -1;
 	}
 
 	int failed = 0;
 
-	for (int s = 0; s < counts[0]; s++) {
+	for (int s = 0; s < counts.in; s++) {
 		if (copy_in(s) != 0) {
 			failed = 1;
 		}

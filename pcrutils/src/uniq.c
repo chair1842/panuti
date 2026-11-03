@@ -81,15 +81,14 @@ int main(int argc, char** argv) {
 		}
 	}
 
-	int counts[2] = {0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 1) {
+	if (counts.in < 1) {
 		printf("pcrutils: uniq: there is no in stream to read\n");
 		return -1;
 	}
 
-	if (counts[1] < 1) {
+	if (counts.out < 1) {
 		printf("pcrutils: uniq: there are no out streams to write to\n");
 		return -1;
 	}
@@ -113,13 +112,13 @@ int main(int argc, char** argv) {
 		size_t run_len = i - run_start;
 
 		if (show_counts) {
-			if (emit_counted(counts[1], only_out0, run_len, lines.v[run_start]) != 0) {
+			if (emit_counted(counts.out, only_out0, run_len, lines.v[run_start]) != 0) {
 				failed = 1;
 			}
 		} else if ((only_dups && run_len > 1) ||
 		           (only_unique && run_len == 1) ||
 		           (!only_dups && !only_unique)) {
-			if (pcr_output(counts[1], lines.v[run_start], strlen(lines.v[run_start]), only_out0) != 0) {
+			if (pcr_output(counts.out, lines.v[run_start], strlen(lines.v[run_start]), only_out0) != 0) {
 				failed = 1;
 			}
 		}

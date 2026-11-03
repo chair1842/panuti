@@ -38,15 +38,14 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	int counts[2] = {0, 0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 1) {
+	if (counts.in < 1) {
 		printf("pcrutils: mul: there are no in streams to read from\n");
 		return -1;
 	}
 
-	int no_streams = counts[1];
+	int no_streams = counts.out;
 	if (no_streams < 1) {
 		printf("pcrutils: mul: there are no out streams to write to\n");
 		return -1;

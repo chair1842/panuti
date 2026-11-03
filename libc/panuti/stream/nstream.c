@@ -3,6 +3,8 @@
 #include <panuti/stream.h>
 #include <panuti/syscall/syscallsf.h>
 
-void nstream(int out[2]) {
+nstreams_t nstream() {
+	int out[2];
 	panutisysf_nstream(out);
+	return (nstreams_t){ out[0], out[1] };
 }

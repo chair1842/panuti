@@ -43,15 +43,14 @@ int main(int argc, char** argv) {
 		only_out0 = true;
 	}
 
-	int counts[2] = {0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 1) {
+	if (counts.in < 1) {
 		printf("pcrutils: tac: there is no in stream to read\n");
 		return -1;
 	}
 
-	if (counts[1] < 1) {
+	if (counts.out < 1) {
 		printf("pcrutils: tac: there are no out streams to write to\n");
 		return -1;
 	}
@@ -65,7 +64,7 @@ int main(int argc, char** argv) {
 	int failed = 0;
 
 	for (size_t i = lines.n; i > 0; i--) {
-		if (pcr_output(counts[1], lines.v[i - 1], strlen(lines.v[i - 1]), only_out0) != 0) {
+		if (pcr_output(counts.out, lines.v[i - 1], strlen(lines.v[i - 1]), only_out0) != 0) {
 			failed = 1;
 			break;
 		}

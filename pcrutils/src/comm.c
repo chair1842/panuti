@@ -93,15 +93,14 @@ int main(int argc, char** argv) {
 		if (!col3_given) col3 = false;
 	}
 
-	int counts[2] = {0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 2) {
+	if (counts.in < 2) {
 		printf("pcrutils: comm: need two in streams, one on in0 and one on in1\n");
 		return -1;
 	}
 
-	if (counts[1] < 1) {
+	if (counts.out < 1) {
 		printf("pcrutils: comm: there are no out streams to write to\n");
 		return -1;
 	}
@@ -134,19 +133,19 @@ int main(int argc, char** argv) {
 		}
 
 		if (c < 0) {
-			if (col1 && emit_col(counts[1], only_out0, "", a.v[i]) != 0) {
+			if (col1 && emit_col(counts.out, only_out0, "", a.v[i]) != 0) {
 				failed = 1;
 				break;
 			}
 			i++;
 		} else if (c > 0) {
-			if (col2 && emit_col(counts[1], only_out0, "\t", b.v[j]) != 0) {
+			if (col2 && emit_col(counts.out, only_out0, "\t", b.v[j]) != 0) {
 				failed = 1;
 				break;
 			}
 			j++;
 		} else {
-			if (col3 && emit_col(counts[1], only_out0, "\t\t", a.v[i]) != 0) {
+			if (col3 && emit_col(counts.out, only_out0, "\t\t", a.v[i]) != 0) {
 				failed = 1;
 				break;
 			}

@@ -112,15 +112,14 @@ int main(int argc, char** argv) {
 		only_out0 = true;
 	}
 
-	int counts[2] = {0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 2) {
+	if (counts.in < 2) {
 		printf("pcrutils: join: need two in streams, one on in0 and one on in1\n");
 		return -1;
 	}
 
-	if (counts[1] < 1) {
+	if (counts.out < 1) {
 		printf("pcrutils: join: there are no out streams to write to\n");
 		return -1;
 	}
@@ -150,7 +149,7 @@ int main(int argc, char** argv) {
 		const char* rb = field_rest(b.v[j], &rb_len);
 
 		if (fields_equal(a.v[i], ka, b.v[j], kb)) {
-			if (emit_join(counts[1], only_out0, a.v[i], ka, ra, ra_len, rb, rb_len) != 0) {
+			if (emit_join(counts.out, only_out0, a.v[i], ka, ra, ra_len, rb, rb_len) != 0) {
 				failed = 1;
 				break;
 			}

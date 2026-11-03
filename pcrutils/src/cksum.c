@@ -30,10 +30,9 @@ int main(int argc, char** argv) {
 		return -1;
 	}
 
-	int counts[2] = {0};
-	nstream(counts);
+	nstreams_t counts = nstream();
 
-	if (counts[0] < 1) {
+	if (counts.in < 1) {
 		printf("pcrutils: cksum: there is no in stream to read\n");
 		return -1;
 	}
