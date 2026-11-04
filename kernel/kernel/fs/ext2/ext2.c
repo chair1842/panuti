@@ -796,33 +796,180 @@ static int ext2_inode_length(ext2_t* fs, const ext2_inode_hdr_t* hdr, uint64_t* 
 	return 0;
 }
 
-static int64_t ext2_size(void* fs_impl, inode_t* node) {
+static int ext2_time_from_centis(time_t centis, uint32_t* out) {
+	if (centis < 0) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	int64_t seconds = (int64_t)(centis / 100);
+
+	if (seconds > UINT32_MAX) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	*out = (uint32_t)seconds;
+	return 0;
+}
+
+static int ext2_inode_resize(ext2_t* fs, ext2_inode_hdr_t* hdr, uint64_t new_size) {
+	if (new_size > (uint64_t)fs->superblock->blocks_count * fs->block_size) {
+		return PANUTIERRNO_INVALIDARG; // past the end of the volume
+	}
+
+	if (!fs->large_files && new_size > 0xFFFFFFFFu) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	uint64_t cur_size = 0;
+
+	if (ext2_inode_length(fs, hdr, &cur_size) != 0) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	if (new_size < cur_size) {
+		uint32_t first = (uint32_t)((new_size + fs->block_size - 1) / fs->block_size);
+		uint32_t last = (uint32_t)((cur_size + fs->block_size - 1) / fs->block_size);
+
+		if (last > 0) {
+			last--;
+		}
+
+		uint32_t freed = 0;
+
+		if (ext2_free_blocks_from(fs, hdr, first, last, &freed) != 0) {
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		uint32_t drop = freed * ext2_sectors_per_block(fs);
+
+		hdr->blocks = drop > hdr->blocks ? 0 : hdr->blocks - drop;
+	}
+
+	hdr->size = (uint32_t)new_size;
+	hdr->size_high = fs->large_files ? (uint32_t)(new_size >> 32) : 0;
+
+	return 0;
+}
+
+static int ext2_getattr(void* fs_impl, inode_t* node, struct inode_attr* attr) {
 	ext2_t* fs = fs_impl;
 
-	if (!fs || !node) {
-		return -1;
+	if (!fs || !node || !attr) {
+		return PANUTIERRNO_INVALIDARG;
 	}
 
 	ext2_inode_t* ii = node->impl;
 	if (!ii || ii->fs != fs) {
-		return -1;
+		return PANUTIERRNO_NOTFOUND;
 	}
 
 	ext2_inode_hdr_t hdr;
 	if (ext2_read_inode(fs, ii->inum, &hdr) != 0) {
-		return -1;
+		return PANUTIERRNO_NOTFOUND;
 	}
 
 	if (hdr.dtime != 0) {
-		return -1; // unlinked: the name is gone, so there is nothing to report
+		return PANUTIERRNO_NOTFOUND; // unlinked: the name is gone, so there is nothing to report
 	}
 
 	uint64_t len = 0;
 	if (ext2_inode_length(fs, &hdr, &len) != 0) {
-		return -1; // an impossible length is a length we cannot vouch for
+		return PANUTIERRNO_PLAINERR; // an impossible length is a length we cannot vouch for
 	}
 
-	return (int64_t)len;
+	*attr = (inode_attr_t){
+		.valid = INODE_ATTR_SIZE | INODE_ATTR_ATIME | INODE_ATTR_MTIME | INODE_ATTR_CTIME,
+		.size = (int64_t)len,
+		.atime = (time_t)hdr.atime * 100,
+		.mtime = (time_t)hdr.mtime * 100,
+		.ctime = (time_t)hdr.ctime * 100,
+	};
+
+	return 0;
+}
+
+static int ext2_setattr(void* fs_impl, inode_t* node, const struct inode_attr* attr, uint32_t mask) {
+	ext2_t* fs = fs_impl;
+
+	if (!fs || !node || !attr) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (mask & ~INODE_ATTR_ALL) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (mask & INODE_ATTR_BTIME) {
+		return PANUTIERRNO_UNSUPPORTEDOP;
+	}
+
+	if (fs->read_only) {
+		return PANUTIERRNO_NOTSUPPORTED;
+	}
+
+	ext2_inode_t* ii = node->impl;
+	if (!ii || ii->fs != fs) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	ext2_inode_hdr_t hdr;
+	if (ext2_read_inode(fs, ii->inum, &hdr) != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	if (hdr.dtime != 0) {
+		return PANUTIERRNO_NOTFOUND;
+	}
+
+	uint32_t atime = hdr.atime;
+	uint32_t mtime = hdr.mtime;
+	uint32_t ctime = hdr.ctime;
+
+	if (mask & INODE_ATTR_ATIME) {
+		int rc = ext2_time_from_centis(attr->atime, &atime);
+		if (rc != 0) {
+			return rc;
+		}
+	}
+
+	if (mask & INODE_ATTR_MTIME) {
+		int rc = ext2_time_from_centis(attr->mtime, &mtime);
+		if (rc != 0) {
+			return rc;
+		}
+	}
+
+	if (mask & INODE_ATTR_CTIME) {
+		int rc = ext2_time_from_centis(attr->ctime, &ctime);
+		if (rc != 0) {
+			return rc;
+		}
+	}
+
+	if (mask & INODE_ATTR_SIZE) {
+		if ((hdr.mode & EXT2_S_IFMT) != EXT2_S_IFREG) {
+			return PANUTIERRNO_UNSUPPORTEDOP;
+		}
+
+		if (attr->size < 0) {
+			return PANUTIERRNO_INVALIDARG;
+		}
+
+		int rc = ext2_inode_resize(fs, &hdr, (uint64_t)attr->size);
+		if (rc != 0) {
+			return rc;
+		}
+	}
+
+	hdr.atime = atime;
+	hdr.mtime = mtime;
+	hdr.ctime = ctime;
+
+	if (ext2_write_inode(fs, ii->inum, &hdr) != BLOCK_OK) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	return 0;
 }
 
 static void* ext2_open(void* fs_impl, inode_t* node) {
@@ -1190,14 +1337,6 @@ static int ext2_resize(void* file_impl, uint64_t new_size) {
 		return PANUTIERRNO_NOTSUPPORTED;
 	}
 
-	if (new_size > (uint64_t)fs->superblock->blocks_count * fs->block_size) {
-		return PANUTIERRNO_INVALIDARG; // past the end of the volume
-	}
-
-	if (!fs->large_files && new_size > 0xFFFFFFFFu) {
-		return PANUTIERRNO_INVALIDARG;
-	}
-
 	ext2_inode_hdr_t hdr;
 
 	if (ext2_read_inode(fs, f->inum, &hdr) != 0) {
@@ -1208,33 +1347,10 @@ static int ext2_resize(void* file_impl, uint64_t new_size) {
 		return PANUTIERRNO_UNSUPPORTEDOP; // ftruncate needs a regular file
 	}
 
-	uint64_t cur_size = 0;
-
-	if (ext2_inode_length(fs, &hdr, &cur_size) != 0) {
-		return PANUTIERRNO_PLAINERR;
+	int rc = ext2_inode_resize(fs, &hdr, new_size);
+	if (rc != 0) {
+		return rc;
 	}
-
-	if (new_size < cur_size) {
-		uint32_t first = (uint32_t)((new_size + fs->block_size - 1) / fs->block_size);
-		uint32_t last = (uint32_t)((cur_size + fs->block_size - 1) / fs->block_size);
-
-		if (last > 0) {
-			last--;
-		}
-
-		uint32_t freed = 0;
-
-		if (ext2_free_blocks_from(fs, &hdr, first, last, &freed) != 0) {
-			return PANUTIERRNO_PLAINERR;
-		}
-
-		uint32_t drop = freed * ext2_sectors_per_block(fs);
-
-		hdr.blocks = drop > hdr.blocks ? 0 : hdr.blocks - drop;
-	}
-
-	hdr.size = (uint32_t)new_size;
-	hdr.size_high = fs->large_files ? (uint32_t)(new_size >> 32) : 0;
 
 	if (ext2_write_inode(fs, f->inum, &hdr) != BLOCK_OK) {
 		return PANUTIERRNO_PLAINERR;
@@ -1438,7 +1554,6 @@ static const fs_ops_t ext2_ops = {
 	.unlink = ext2_unlink,
 	.rename = ext2_rename,
 	.link = ext2_link,
-	.size = ext2_size,
 	.open = ext2_open,
 	.read = ext2_read,
 	.write = ext2_write,
@@ -1446,6 +1561,8 @@ static const fs_ops_t ext2_ops = {
 	.finish = ext2_finish,
 	.readdir = ext2_readdir,
 	.resize = ext2_resize,
+	.getattr = ext2_getattr,
+	.setattr = ext2_setattr,
 };
 
 int ext2_mount(const char* mountp, const char* blkdev) {

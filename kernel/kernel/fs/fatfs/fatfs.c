@@ -36,9 +36,14 @@ static int fatfs_link(void* fs_impl, struct inode* target, struct inode* dir,
 	return -1;
 }
 
-static int64_t fatfs_size(void* fs_impl, struct inode* node) {
-	(void)fs_impl; (void)node;
-	return -1; // fatfs is not implemented yet, so no length to report
+static int fatfs_getattr(void* fs_impl, struct inode* node, struct inode_attr* attr) {
+	(void)fs_impl; (void)node; (void)attr;
+	return PANUTIERRNO_UNSUPPORTEDOP; // fatfs is not implemented yet
+}
+
+static int fatfs_setattr(void* fs_impl, struct inode* node, const struct inode_attr* attr, uint32_t mask) {
+	(void)fs_impl; (void)node; (void)attr; (void)mask;
+	return PANUTIERRNO_UNSUPPORTEDOP; // fatfs is not implemented yet
 }
 
 static void* fatfs_open(void* fs_impl, struct inode* node) {
@@ -66,11 +71,12 @@ static const fs_ops_t fatfs_ops = {
 	.unlink = fatfs_unlink,
 	.rename = fatfs_rename,
 	.link = fatfs_link,
-	.size = fatfs_size,
 	.open = fatfs_open,
 	.read = fatfs_read,
 	.write = fatfs_write,
 	.close = fatfs_close,
+	.getattr = fatfs_getattr,
+	.setattr = fatfs_setattr,
 };
 
 int fatfs_mount(const char *mountp, const char *blkdev_path) {
