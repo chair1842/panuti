@@ -10,6 +10,7 @@
 #include <panuti/dirent.h>
 
 struct inode;
+struct inode_attr;
 
 typedef struct fs_ops {
 	struct inode* (*lookup)(void* fs_impl, struct inode* dir, const char* name, size_t len);
@@ -17,7 +18,6 @@ typedef struct fs_ops {
 	int (*unlink)(void* fs_impl, struct inode* dir, const char* name, size_t len);
 	int (*rename)(void* fs_impl, struct inode* old_dir, const char* old_name, size_t old_len, struct inode* new_dir, const char* new_name, size_t new_len);
 	int (*link)(void* fs_impl, struct inode* target, struct inode* dir, const char* name, size_t len);
-	int64_t (*size)(void* fs_impl, struct inode* node);
 	void* (*open)(void* fs_impl, struct inode* node);
 	int (*read)(void* file_impl, void* buf, size_t len, size_t offset);
 	int (*write)(void* file_impl, const void* buf, size_t len, size_t offset);
@@ -25,6 +25,8 @@ typedef struct fs_ops {
 	void (*close)(void* file_impl);
 	void (*finish)(void* fs_impl);
 	int (*resize)(void* file_impl, uint64_t new_size);
+	int (*getattr)(void* fs_impl, struct inode* node, struct inode_attr* attr);
+	int (*setattr)(void* fs_impl, struct inode* node, const struct inode_attr*, uint32_t mask);
 } fs_ops_t;
 
 extern const handle_ops_t fs_file_ops;

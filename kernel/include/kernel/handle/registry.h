@@ -7,6 +7,8 @@
 #include <kernel/handle/fs.h>
 #include <kernel/handle/mount.h>
 #include <panuti/inode_type.h>
+#include <sys/types.h>
+#include <time.h>
 
 #define REG_MAX_INODES 65536
 #define REG_MAX_DIRENTS 262144
@@ -21,6 +23,24 @@ typedef struct dirent {
 	struct inode* inode;
 	struct dirent* next;
 } dirent_t;
+
+#define INODE_ATTR_SIZE (1u << 0)
+#define INODE_ATTR_ATIME (1u << 1)
+#define INODE_ATTR_MTIME (1u << 2)
+#define INODE_ATTR_CTIME (1u << 3)
+#define INODE_ATTR_BTIME (1u << 4)
+#define INODE_ATTR_ALL (INODE_ATTR_SIZE | INODE_ATTR_ATIME | INODE_ATTR_MTIME | INODE_ATTR_CTIME | INODE_ATTR_BTIME)
+
+typedef struct inode_attr {
+	uint32_t valid;
+	
+	int64_t size;
+
+	time_t atime;
+	time_t mtime;
+	time_t ctime;
+	time_t btime;
+} inode_attr_t;
 
 typedef struct inode {
 	inode_type_t type;

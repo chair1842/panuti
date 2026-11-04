@@ -10,6 +10,8 @@
 extern "C" {
 #endif
 
+// low level file handling header
+
 // write len bytes of data to the fd
 int handle_write(int fd, const void* data, size_t len);
 
