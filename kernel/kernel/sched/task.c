@@ -421,11 +421,13 @@ static int elf_read_whole_file(inode_t* n, void** out_data, size_t* out_size) {
 	// program does not pay to allocate a worst-case one. ELF_READ_MAX still
 	// caps the request, so a bogus length cannot become a huge allocation.
 	size_t alloc = ELF_READ_MAX;
-	if (n->mnt->fs_ops->size) {
-		int64_t reported = n->mnt->fs_ops->size(n->mnt->fs_impl, n);
+	if (n->mnt->fs_ops->getattr) {
+		inode_attr_t attr;
 
-		if (reported > 0 && (uint64_t)reported < (uint64_t)ELF_READ_MAX) {
-			alloc = (size_t)reported;
+		if (n->mnt->fs_ops->getattr(n->mnt->fs_impl, n, &attr) == 0 &&
+		    (attr.valid & INODE_ATTR_SIZE) &&
+		    attr.size > 0 && (uint64_t)attr.size < (uint64_t)ELF_READ_MAX) {
+			alloc = (size_t)attr.size;
 		}
 	}
 

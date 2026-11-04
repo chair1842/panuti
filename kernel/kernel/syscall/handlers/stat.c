@@ -46,18 +46,34 @@ int32_t syshandler_stat(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		namelen = lastlen;
 	}
 
-	// only a mounted filesystem knows how long its own inodes are; the native
-	// registry tree has no lengths recorded anywhere
-	size_t size = 0;
-	if (n->mnt && n->mnt->fs_ops->size) {
-		int64_t reported = n->mnt->fs_ops->size(n->mnt->fs_impl, n);
-		if (reported > 0) {
-			size = (size_t)reported;
-		}
-	}
-
 	dirent_entry_t entry;
 	memset(&entry, 0, sizeof(entry));
+
+	if (n->mnt && n->mnt->fs_ops->getattr) {
+		inode_attr_t attr;
+
+		if (n->mnt->fs_ops->getattr(n->mnt->fs_impl, n, &attr) == 0) {
+			if (attr.valid & INODE_ATTR_SIZE) {
+				entry.size = attr.size > 0 ? (size_t)attr.size : 0;
+			}
+
+			if (attr.valid & INODE_ATTR_ATIME) {
+				entry.atime = attr.atime;
+			}
+
+			if (attr.valid & INODE_ATTR_MTIME) {
+				entry.mtime = attr.mtime;
+			}
+
+			if (attr.valid & INODE_ATTR_CTIME) {
+				entry.ctime = attr.ctime;
+			}
+
+			if (attr.valid & INODE_ATTR_BTIME) {
+				entry.btime = attr.btime;
+			}
+		}
+	}
 
 	if (namelen >= sizeof(entry.name)) {
 		return PANUTIERRNO_PLAINERR;
@@ -66,7 +82,6 @@ int32_t syshandler_stat(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	memcpy(entry.name, name, namelen);
 	entry.name[namelen] = '\0';
 	entry.type = n->type;
-	entry.size = size;
 
 	*user_out = entry;
 	return PANUTIERRNO_PLAINSUCCESS;

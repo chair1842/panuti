@@ -59,8 +59,13 @@ static int fs_file_seek(void* impl, int whence, int64_t offset) {
 	fs_file_t* f = (fs_file_t*)impl;
 
 	int64_t size = -1;
-	if (f->fs_ops->size && f->node) {
-		size = f->fs_ops->size(f->fs_impl, f->node);
+	if (f->fs_ops->getattr && f->node) {
+		inode_attr_t attr;
+
+		if (f->fs_ops->getattr(f->fs_impl, f->node, &attr) == 0 &&
+		    (attr.valid & INODE_ATTR_SIZE)) {
+			size = attr.size;
+		}
 	}
 
 	int64_t base;
