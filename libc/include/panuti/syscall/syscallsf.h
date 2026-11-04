@@ -4,6 +4,7 @@
 #define _PANUTI_SYSCALLSF_H
 
 #include "panuti/dirent.h"
+#include "panuti/inode_attr.h"
 #include "syscall.h"
 #include "syscallno.h"
 #include <stddef.h>
@@ -159,6 +160,10 @@ static inline int32_t panutisysf_seek(int fd, int64_t* offset, int whence) {
 
 static inline int32_t panutisysf_sleep(int cs) {
 	return panuti_syscall(SYSHANDLER_SLEEP, (uint32_t)cs, 0, 0, 0);
+}
+
+static inline int32_t panutisysf_settmsp(const char* path, inode_timestamp_t* timestamp, uint32_t mask) {
+	return panuti_syscall(SYSHANDLER_SETTMSP, (uint32_t)path, (uint32_t)timestamp, mask, 0);
 }
 
 #if defined(__cplusplus)

@@ -4,6 +4,7 @@
 #define _PANUTI_STAT_H
 
 #include <panuti/dirent.h>
+#include <panuti/inode_attr.h>
 
 #if defined(__cplusplus)
 extern "C" {
@@ -17,6 +18,9 @@ bool nexist(const char* path);
 
 // read the next entry of an open directory, 0 on entry, 1 once it is done
 int readdir(int fd, dirent_entry_t* dirent_out);
+
+// set the timestamps selected by mask on the entry at path, 0 on success
+int settmsp(const char* path, inode_timestamp_t* timestamp, unsigned int mask);
 
 #if defined(__cplusplus)
 }

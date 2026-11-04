@@ -6,6 +6,7 @@
 #include <kernel/handle/handle.h>
 #include <kernel/handle/fs.h>
 #include <kernel/handle/mount.h>
+#include <panuti/inode_attr.h>
 #include <panuti/inode_type.h>
 #include <sys/types.h>
 #include <time.h>
@@ -23,13 +24,6 @@ typedef struct dirent {
 	struct inode* inode;
 	struct dirent* next;
 } dirent_t;
-
-#define INODE_ATTR_SIZE (1u << 0)
-#define INODE_ATTR_ATIME (1u << 1)
-#define INODE_ATTR_MTIME (1u << 2)
-#define INODE_ATTR_CTIME (1u << 3)
-#define INODE_ATTR_BTIME (1u << 4)
-#define INODE_ATTR_ALL (INODE_ATTR_SIZE | INODE_ATTR_ATIME | INODE_ATTR_MTIME | INODE_ATTR_CTIME | INODE_ATTR_BTIME)
 
 typedef struct inode_attr {
 	uint32_t valid;

@@ -66,6 +66,7 @@ panuti/handle/open.o \
 panuti/stat/stat.o \
 panuti/stat/nexist.o \
 panuti/stat/readdir.o \
+panuti/stat/settmsp.o \
 panuti/stream/stream_write.o \
 panuti/stream/stream_read.o \
 panuti/stream/nstream.o \

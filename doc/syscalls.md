@@ -829,11 +829,14 @@ keeps the literal path the caller supplied.
 
 `type` uses the same `inode_type_t` vocabulary described under `READDIR`.
 
-`size` is `0` unless the entry came from a mounted filesystem that implements
-`fs_ops->size`. The native registry records no
-lengths anywhere, so **native entries always report `size == 0` even when they
-have real content**. IsoFS returns the same extent length that `READDIR` hands
-out for the same entry, so `STAT` and `READDIR` agree on `size`.
+`size` and the timestamps come from the mounted filesystem's `getattr` op when
+it implements one. The native registry records no lengths or timestamps
+anywhere, so **native entries always report `size == 0` and zero timestamps
+even when they have real content**. IsoFS reports the same extent length that
+`READDIR` hands out for the same entry, so `STAT` and `READDIR` agree on `size`.
+Timestamps are in centiseconds since the Unix epoch. A filesystem only fills in
+the fields whose `INODE_ATTR_*` bits it sets in `attr.valid`; the rest stay
+zero.
 
 **Returns:** 0 on success (entry written to `dirent_out`), or error code.
 
@@ -1039,15 +1042,77 @@ filesystem's read/write ops, so `READ`/`WRITE` on it work as usual.
 
 ---
 
+### 30 -- SLEEP
+
+```c
+int32_t panutisysf_sleep(int cs);
+```
+
+Block the calling task for `cs` centiseconds.
+
+**Parameters:**
+- `cs` -- duration in centiseconds
+
+**Returns:** the number of centiseconds still left to sleep, or `0` if the
+full duration elapsed.
+
+libc wraps this as `int sleep(int cs)` in `libc/panuti/process/sleep.c`.
+
+---
+
+### 31 -- SETTMSP
+
+```c
+int32_t panutisysf_settmsp(const char* path, inode_timestamp_t* timestamp, uint32_t mask);
+```
+
+Set the timestamps of the entry named by `path`.
+
+**Parameters:**
+- `path` -- path of the entry to update
+- `timestamp` -- userspace pointer to an `inode_timestamp_t` holding the new values
+- `mask` -- which fields to change, a combination of `INODE_ATTR_ATIME`,
+  `INODE_ATTR_MTIME`, `INODE_ATTR_CTIME`, and `INODE_ATTR_BTIME`
+
+`path` is resolved relative to the calling task's current working directory.
+The timestamps in `inode_timestamp_t` are in **centiseconds since the Unix
+epoch**, matching `STAT` and the kernel wall clock. Only the fields selected by
+`mask` are read and written; the others are ignored.
+
+The request is handed to the mounted filesystem's `setattr` op. A filesystem
+that does not implement it, or a native registry entry with no mounted
+filesystem behind it, fails with `PANUTIERRNO_UNSUPPORTEDOP`. IsoFS is
+read-only and rejects every change with `PANUTIERRNO_UNSUPPORTEDOP`. ext2
+supports atime, mtime, and ctime; it rejects `INODE_ATTR_BTIME` with
+`PANUTIERRNO_UNSUPPORTEDOP` because ext2 has no creation timestamp, and
+rejects changes on a volume mounted read-only with `PANUTIERRNO_NOTSUPPORTED`.
+
+`mask` may not contain `INODE_ATTR_SIZE`: this syscall only changes timestamps.
+Use `RESIZE` for file length.
+
+**Returns:** 0 on success, or error code.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `path` is not a valid NUL-terminated userspace pointer, or `timestamp` is not a valid userspace range of `sizeof(inode_timestamp_t)` bytes
+- `PANUTIERRNO_INVALIDARG` -- `mask` contains a bit other than the four timestamp bits
+- `PANUTIERRNO_NOTFOUND` -- `path` does not resolve
+- `PANUTIERRNO_UNSUPPORTEDOP` -- the filesystem has no `setattr` op, the entry is on the native registry, or the filesystem does not support one of the requested fields
+- `PANUTIERRNO_NOTSUPPORTED` -- the filesystem is mounted read-only
+
+libc wraps this as `int32_t settmsp(const char*, inode_timestamp_t*, uint32_t)`
+in `libc/panuti/stat/settmsp.c`.
+
+---
+
 ## Quick Reference
 
-All 30 syscalls listed here are registered in the kernel dispatch table and
+All 31 syscalls listed here are registered in the kernel dispatch table and
 documented in detail above. Numbers are defined in
 `libc/include/panuti/syscall/syscallno.h`.
 
 The dispatch table has 256 slots. Any number at or above `256` returns
 `PANUTIERRNO_INVALIDSYSCALL`, as does any number below `256` that is not
-registered -- today that is `30` through `255`, so they are reserved rather
+registered -- today that is `32` through `255`, so they are reserved rather
 than permanently invalid.
 
 | # | Name | # | Name |
@@ -1067,6 +1132,7 @@ than permanently invalid.
 | 12 | `YIELD` | 26 | `MMAPAN` |
 | 13 | `RENAME` | 27 | `MUNMAP` |
 | 28 | `RESIZE` | 29 | `MKFILE` |
+| 30 | `SLEEP` | 31 | `SETTMSP` |
 
 ## Limits
 
