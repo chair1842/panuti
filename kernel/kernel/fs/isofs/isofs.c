@@ -18,6 +18,65 @@ static inline uint32_t read_le32(const uint8_t* p) {
 	return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
+static bool isofs_is_leap_year(int year) {
+	return (year % 4 == 0 && year % 100 != 0) || year % 400 == 0;
+}
+
+static int isofs_days_in_month(int month, int year) {
+	static const int days[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+
+	if (month == 2 && isofs_is_leap_year(year)) {
+		return 29;
+	}
+
+	return days[month - 1];
+}
+
+// a directory record stores its recording time as seven bytes: years since
+// 1900, month, day, hour, minute, second and a signed GMT offset in 15-minute
+// units. turn that into centiseconds since the unix epoch, which is the unit
+// the kernel wall clock uses.
+static bool isofs_time_to_unix(const uint8_t* p, time_t* out) {
+	int year = 1900 + p[0];
+	int month = p[1];
+	int day = p[2];
+	int hour = p[3];
+	int minute = p[4];
+	int second = p[5];
+	int gmt_offset = (int8_t)p[6];
+
+	if (month < 1 || month > 12 ||
+	    day < 1 || day > isofs_days_in_month(month, year) ||
+	    hour > 23 || minute > 59 || second > 59
+	) {
+		return false;
+	}
+
+	int64_t days = 0;
+	if (year >= 1970) {
+		for (int y = 1970; y < year; y++) {
+			days += isofs_is_leap_year(y) ? 366 : 365;
+		}
+	} else {
+		for (int y = year; y < 1970; y++) {
+			days -= isofs_is_leap_year(y) ? 366 : 365;
+		}
+	}
+
+	for (int m = 1; m < month; m++) {
+		days += isofs_days_in_month(m, year);
+	}
+
+	days += day - 1;
+
+	int64_t seconds = days * 86400LL + (int64_t)hour * 3600LL + (int64_t)minute * 60LL + second;
+
+	seconds -= (int64_t)gmt_offset * 15 * 60;
+
+	*out = (time_t)(seconds * 100);
+	return true;
+}
+
 static bool rr_check_sp(const uint8_t* root_dot_record, uint8_t* out_len_skp) {
 	uint8_t dr_len = root_dot_record[0];
 	uint8_t len_fi = root_dot_record[32];
@@ -151,6 +210,7 @@ static int parse_dir_record(const uint8_t* dir_record, isofs_dirent_t* out_diren
 
 	out_dirent->start_lba = read_le32(&dir_record[2]);
 	out_dirent->length = read_le32(&dir_record[10]);
+	out_dirent->has_mtime = isofs_time_to_unix(&dir_record[18], &out_dirent->mtime);
 	// this works for bool bc true expands to 1 and false respectively.
 	out_dirent->is_dir = (dir_record[25] >> 1) & 1; // 2nd bit flag
 
@@ -285,6 +345,8 @@ static struct inode* isofs_lookup(void* fs_impl, struct inode* dir, const char* 
 					fs_n->start_lba = dirent.start_lba;
 					fs_n->length = dirent.length;
 					fs_n->is_dir = dirent.is_dir;
+					fs_n->has_mtime = dirent.has_mtime;
+					fs_n->mtime = dirent.mtime;
 
 					n->impl = fs_n;
 					n->mnt = dir->mnt;
@@ -317,22 +379,30 @@ static void isofs_finish(void* fs_impl) {
 	kfree(fs_impl);
 }
 
-static int64_t isofs_size(void* fs_impl, struct inode* node) {
+static int isofs_getattr(void* fs_impl, struct inode* node, struct inode_attr* attr) {
 	(void)fs_impl;
 
-	if (!node) {
-		return -1;
+	if (!node || !attr) {
+		return PANUTIERRNO_INVALIDARG;
 	}
 
-	// the length is already recorded on the dirent when the directory is read,
-	// so this costs nothing and needs no open. directories report their extent
-	// length too, which is what readdir hands out for them.
 	isofs_dirent_t* fs_n = node->impl;
 	if (!fs_n) {
-		return -1;
+		return PANUTIERRNO_NOTFOUND;
 	}
 
-	return (int64_t)fs_n->length;
+	*attr = (inode_attr_t){
+		.valid = INODE_ATTR_SIZE | (fs_n->has_mtime ? INODE_ATTR_MTIME : 0),
+		.size = (int64_t)fs_n->length,
+		.mtime = fs_n->has_mtime ? fs_n->mtime : 0,
+	};
+
+	return 0;
+}
+
+static int isofs_setattr(void* fs_impl, struct inode* node, const struct inode_attr* attr, uint32_t mask) {
+	(void)fs_impl; (void)node; (void)attr; (void)mask;
+	return PANUTIERRNO_UNSUPPORTEDOP;
 }
 
 static void* isofs_open(void* fs_impl, struct inode* node) {
@@ -492,13 +562,14 @@ static const fs_ops_t isofs_ops = {
 	.unlink = isofs_unlink,
 	.rename = isofs_rename,
 	.link = isofs_link,
-	.size = isofs_size,
 	.open = isofs_open,
 	.read = isofs_read,
 	.write = isofs_write,
 	.close = isofs_close,
 	.finish = isofs_finish,
 	.readdir = isofs_readdir,
+	.getattr = isofs_getattr,
+	.setattr = isofs_setattr,
 };
 
 int isofs_mount(const char *mountp, const char *blkdev) {

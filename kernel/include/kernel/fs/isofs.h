@@ -13,6 +13,8 @@ typedef struct isofs_dirent {
 	uint32_t start_lba;
 	uint32_t length;
 	bool is_dir;
+	bool has_mtime;
+	time_t mtime;
 	char name[REG_MAX_NAME_LEN];
 } isofs_dirent_t;
 
