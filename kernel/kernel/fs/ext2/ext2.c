@@ -1651,6 +1651,10 @@ static int ext2_readdir(void* fs_impl, inode_t* dir, dirent_entry_t* out, size_t
 		uint64_t len = 0;
 		out->size = ext2_inode_length(fs, &child, &len) == 0 ? (size_t)len : 0;
 
+		out->atime = (time_t)child.atime * 100;
+		out->mtime = (time_t)child.mtime * 100;
+		out->ctime = (time_t)child.ctime * 100;
+
 		*cursor = off + d.rec_len;
 
 		return 0;

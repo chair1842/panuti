@@ -541,6 +541,8 @@ static int isofs_readdir(void* fs_impl, struct inode* dir, dirent_entry_t* out, 
 			out->type = dirent.is_dir ? INODE_DIR : INODE_FILE;
 			out->size = dirent.length; // the extent length recorded on the dirent
 
+			out->mtime = dirent.has_mtime ? dirent.mtime : 0;
+
 			*cursor = offset + dr_len; // resume here next call
 			result = 0;
 			break;

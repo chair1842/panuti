@@ -35,6 +35,8 @@ int32_t syshandler_readdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	inode_t* dir_inode = h->inode;
 
 	dirent_entry_t entry_out;
+	memset(&entry_out, 0, sizeof(entry_out));
+
 	int rc;
 
 	if (dir_inode->mnt) {
