@@ -24,7 +24,20 @@ static const char HELP[] =
 	"usage:\n"
 	"  stat [path ...]\n\n"
 	"args:\n"
-	"  -h - prints this help message\n";
+	"  -h - prints this help message\n\n"
+	"timestamps are printed in UTC; a dash means the filesystem does not\n"
+	"report that timestamp\n";
+
+static void print_time(const char* label, time_t t) {
+	char buf[32];
+
+	if (t == 0 || pcr_format_centis(t, buf, sizeof(buf)) != 0) {
+		printf("  %s: -\n", label);
+		return;
+	}
+
+	printf("  %s: %s\n", label, buf);
+}
 
 static int stat_path(const char* path) {
 	dirent_entry_t e;
@@ -38,6 +51,10 @@ static int stat_path(const char* path) {
 	printf("  Name: %s\n", e.name);
 	printf("  Type: %s\n", type_label(e.type));
 	printf("  Size: %zu\n", e.size);
+	print_time("Accessed", e.atime);
+	print_time("Modified", e.mtime);
+	print_time("Changed", e.ctime);
+	print_time("Created", e.btime);
 
 	return 0;
 }

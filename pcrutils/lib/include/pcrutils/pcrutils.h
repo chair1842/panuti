@@ -27,6 +27,10 @@ int pcr_uptime_centis(long* out);
 // 0 on success
 int pcr_clock_centis(int64_t* out);
 
+// format centiseconds since the Unix epoch as "YYYY-MM-DD HH:MM:SS" in UTC.
+// out must have room for at least 20 bytes. 0 on success, -1 if cap is too small
+int pcr_format_centis(int64_t centis, char* out, size_t cap);
+
 // write to a file handle, retrying until every byte is out
 int pcr_handle_write_all(int fd, const char* buf, size_t len);
 

@@ -10,13 +10,12 @@
 
 static const char HELP[] =
 	"touch - a pcrutils utility\n\n"
-	"touch makes sure a file is there, creating it when it is not\n\n"
+	"touch creates missing files and moves an existing file's access and\n"
+	"modification times to now\n\n"
 	"usage:\n"
 	"  touch <path ...>\n\n"
 	"args:\n"
 	"  -h - prints this help message\n\n"
-	"the kernel has no timestamps yet, so there is nothing but the\n"
-	"creation to do: a file that already exists is simply left alone\n\n"
 	"examples:\n"
 	"  touch /tmp/junk\n";
 
@@ -26,6 +25,17 @@ static const char* reason(int32_t rc) {
 		case PANUTIERRNO_INVALIDADDR: return "not a valid user pointer";
 		case PANUTIERRNO_UNSUPPORTEDOP: return "the filesystem cannot create files";
 		case -1: return "no such parent, the name is taken, or the name is too long";
+		default: return NULL;
+	}
+}
+
+static const char* set_reason(int32_t rc) {
+	switch (rc) {
+		case PANUTIERRNO_PLAINSUCCESS: return "success";
+		case PANUTIERRNO_INVALIDADDR: return "not a valid user pointer";
+		case PANUTIERRNO_INVALIDARG: return "invalid timestamp request";
+		case PANUTIERRNO_NOTFOUND: return "the path disappeared";
+		case PANUTIERRNO_UNSUPPORTEDOP: return "the filesystem cannot set timestamps";
 		default: return NULL;
 	}
 }
@@ -55,20 +65,52 @@ int main(int argc, char** argv) {
 	}
 
 	int failed = 0;
+	int64_t now = 0;
+	int have_now = 0;
 
 	for (int i = first; i < argc; i++) {
 		const char* path = argv[i];
 
-		if (nexist(path)) {
+		if (!nexist(path)) {
+			int32_t rc = panutisysf_mkfile(path);
+
+			if (rc != PANUTIERRNO_PLAINSUCCESS) {
+				const char* why = reason(rc);
+
+				printf("pcrutils: touch: cannot create '%s': ", path);
+
+				if (why) {
+					printf("%s\n", why);
+				} else {
+					printf("unknown error %d\n", (int)rc);
+				}
+
+				failed = 1;
+			}
+
 			continue;
 		}
 
-		int32_t rc = panutisysf_mkfile(path);
+		if (!have_now) {
+			if (pcr_clock_centis(&now) != 0) {
+				printf("pcrutils: touch: cannot read /dvc/time/clock\n");
+				return -1;
+			}
 
-		if (rc != PANUTIERRNO_PLAINSUCCESS) {
-			const char* why = reason(rc);
+			have_now = 1;
+		}
 
-			printf("pcrutils: touch: cannot create '%s': ", path);
+		inode_timestamp_t ts = {
+			.atime = (time_t)now,
+			.mtime = (time_t)now,
+		};
+
+		int32_t rc = settmsp(path, &ts, INODE_ATTR_ATIME | INODE_ATTR_MTIME);
+
+		if (rc != 0) {
+			const char* why = set_reason(rc);
+
+			printf("pcrutils: touch: cannot set times on '%s': ", path);
 
 			if (why) {
 				printf("%s\n", why);

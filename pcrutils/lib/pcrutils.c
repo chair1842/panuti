@@ -73,6 +73,72 @@ int pcr_clock_centis(int64_t* out) {
 	return 0;
 }
 
+static int64_t pcr_floor_div(int64_t a, int64_t b) {
+	int64_t q = a / b;
+
+	if ((a % b) != 0 && ((a < 0) != (b < 0))) {
+		q--;
+	}
+
+	return q;
+}
+
+static void pcr_civil_from_days(int64_t days, int* year, int* month, int* day) {
+	int64_t z = days + 719468;
+	int64_t era = (z >= 0 ? z : z - 146096) / 146097;
+	unsigned doe = (unsigned)(z - era * 146097);
+	unsigned yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+	int y = (int)(yoe + era * 400);
+	unsigned doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+	unsigned mp = (5 * doy + 2) / 153;
+	unsigned d = doy - (153 * mp + 2) / 5 + 1;
+	unsigned m = mp < 10 ? mp + 3 : mp - 9;
+
+	*year = y + (m <= 2);
+	*month = (int)m;
+	*day = (int)d;
+}
+
+typedef struct {
+	char* out;
+	size_t cap;
+	size_t len;
+} pcr_fmt_sink_t;
+
+static void pcr_fmt_putc(char c, void* extra) {
+	pcr_fmt_sink_t* sink = extra;
+
+	// keep one byte for the terminator
+	if (sink->len + 1 < sink->cap) {
+		sink->out[sink->len++] = c;
+	}
+}
+
+int pcr_format_centis(int64_t centis, char* out, size_t cap) {
+	if (!out || cap < 20) {
+		return -1;
+	}
+
+	int64_t seconds = pcr_floor_div(centis, 100);
+	int64_t days = pcr_floor_div(seconds, 86400);
+	int64_t rem = seconds - days * 86400;
+
+	int year, month, day;
+	pcr_civil_from_days(days, &year, &month, &day);
+
+	int hour = (int)(rem / 3600);
+	rem %= 3600;
+	int minute = (int)(rem / 60);
+	int second = (int)(rem % 60);
+
+	pcr_fmt_sink_t sink = { out, cap, 0 };
+	fctprintf(pcr_fmt_putc, &sink, "%04d-%02d-%02d %02d:%02d:%02d",
+		year, month, day, hour, minute, second);
+	out[sink.len] = '\0';
+
+	return 0;
+}
+
 int pcr_write_all(int stream, const char* buf, size_t len) {
 	size_t off = 0;
 

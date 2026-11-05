@@ -14,10 +14,12 @@ static const char HELP[] =
 	"args:\n"
 	"  -h - prints this help message\n"
 	"  -a - do not ignore entries starting with '.'\n"
+	"  -l - long format: type, size, modification time, and name\n"
 	"  -p - do not print the type column\n"
 	"  <path> - directory to list (defaults to the current directory)\n";
 
 static int show_hidden = 0;
+static int long_format = 0;
 static int no_type = 0;
 
 static int is_hidden(const char* name) {
@@ -35,7 +37,31 @@ static const char* type_label(inode_type_t type) {
 	}
 }
 
+static void print_long(const dirent_entry_t* e) {
+	char buf[32];
+	const char* when = "-";
+
+	if (e->mtime != 0 && pcr_format_centis(e->mtime, buf, sizeof(buf)) == 0) {
+		when = buf;
+	}
+
+	int slash = (e->type == INODE_DIR) ? 1 : 0;
+
+	if (no_type) {
+		printf("%8zu %s %s%s\n", e->size, when, e->name, slash ? "/" : "");
+		return;
+	}
+
+	printf("%-5s %8zu %s %s%s\n", type_label(e->type), e->size, when,
+		e->name, slash ? "/" : "");
+}
+
 static void print_entry(const dirent_entry_t* e, size_t maxw) {
+	if (long_format) {
+		print_long(e);
+		return;
+	}
+
 	size_t n = strlen(e->name);
 	int slash = (e->type == INODE_DIR) ? 1 : 0;
 
@@ -111,6 +137,8 @@ int main(int argc, char** argv) {
 
 		if (strcmp(a, "-a") == 0) {
 			show_hidden = 1;
+		} else if (strcmp(a, "-l") == 0) {
+			long_format = 1;
 		} else if (strcmp(a, "-p") == 0) {
 			no_type = 1;
 		} else {
