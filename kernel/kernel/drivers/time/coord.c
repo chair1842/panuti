@@ -4,6 +4,8 @@
 
 #include "time.h"
 #include <kernel/rtc.h>
+#include <kernel/timer.h>
+#include <kernel/wallclock.h>
 
 static int64_t boott = 0; 
 
@@ -17,4 +19,8 @@ int64_t timedev_get_bt() {
 
 void timedev_set_bt(int64_t bt) {
 	boott = bt;
+}
+
+int64_t walltime_cs(void) {
+	return boott + (int64_t)timer_get_ticks();
 }

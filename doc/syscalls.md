@@ -836,7 +836,10 @@ even when they have real content**. IsoFS reports the same extent length that
 `READDIR` hands out for the same entry, so `STAT` and `READDIR` agree on `size`.
 Timestamps are in centiseconds since the Unix epoch. A filesystem only fills in
 the fields whose `INODE_ATTR_*` bits it sets in `attr.valid`; the rest stay
-zero.
+zero. ext2 maintains these automatically: reading a file or directory advances
+its atime, writing or resizing a file advances its mtime and ctime, and
+creating, unlinking, renaming, or linking an entry advances the affected
+directory's mtime and ctime.
 
 **Returns:** 0 on success (entry written to `dirent_out`), or error code.
 
@@ -1077,7 +1080,9 @@ Set the timestamps of the entry named by `path`.
 `path` is resolved relative to the calling task's current working directory.
 The timestamps in `inode_timestamp_t` are in **centiseconds since the Unix
 epoch**, matching `STAT` and the kernel wall clock. Only the fields selected by
-`mask` are read and written; the others are ignored.
+`mask` are read and written; the others are ignored. As with any metadata
+change, ext2 also advances ctime to the current time when atime or mtime is
+changed, unless `INODE_ATTR_CTIME` is explicitly present in `mask`.
 
 The request is handed to the mounted filesystem's `setattr` op. A filesystem
 that does not implement it, or a native registry entry with no mounted

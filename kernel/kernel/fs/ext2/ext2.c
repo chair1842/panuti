@@ -6,6 +6,7 @@
 #include <panuti/errno.h>
 #include <kernel/memman/slab.h>
 #include <kernel/block/utils.h>
+#include <kernel/wallclock.h>
 #include <stdint.h>
 #include <string.h>
 #include <limits.h>
@@ -26,6 +27,49 @@
 #define EXT2_WRITES_IMPLEMENTED 1
 
 #define EXT2_MAX_INODE_SIZE 256
+
+static uint32_t ext2_now(void) {
+	int64_t cs = walltime_cs();
+
+	if (cs <= 0) {
+		return 0;
+	}
+
+	uint64_t secs = (uint64_t)cs / 100u;
+
+	return secs > UINT32_MAX ? UINT32_MAX : (uint32_t)secs;
+}
+
+static void ext2_stamp(ext2_inode_hdr_t* hdr, bool atime, bool mtime, bool ctime) {
+	uint32_t now = ext2_now();
+
+	if (atime) {
+		hdr->atime = now;
+	}
+
+	if (mtime) {
+		hdr->mtime = now;
+	}
+
+	if (ctime) {
+		hdr->ctime = now;
+	}
+}
+
+static void ext2_touch_atime(ext2_t* fs, uint32_t inum, ext2_inode_hdr_t* hdr) {
+	if (fs->read_only) {
+		return;
+	}
+
+	uint32_t now = ext2_now();
+
+	if (hdr->atime == now) {
+		return;
+	}
+
+	hdr->atime = now;
+	ext2_write_inode(fs, inum, hdr);
+}
 
 static int ext2_validate_gdt(ext2_t* fs) {
     uint32_t itables_in_group = div_ceil_u32(fs->inode_size * fs->superblock->inodes_per_group, fs->block_size);
@@ -88,6 +132,9 @@ static inode_t* ext2_lookup(void* fs_impl, inode_t* dir, const char* name, size_
 	if ((dih.mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
 		return nullptr;
 	}
+
+	// looking a name up reads the directory, so its access time moves forward
+	ext2_touch_atime(fs, dir_inode->inum, &dih);
 
 	if (dih.size == 0) {
 		return nullptr; // mke2fs gives a fresh empty directory no blocks at all
@@ -266,7 +313,7 @@ static int ext2_create(void* fs_impl, inode_t* dir, const char* name, size_t len
 	tgt.links_count = 1;
 	tgt.size = 0;
 	tgt.blocks = 0;
-	tgt.atime = tgt.mtime = tgt.ctime = 0;
+	ext2_stamp(&tgt, true, true, true);
 
 	uint8_t file_type = (type == INODE_DIR) ? EXT2_FT_DIR : EXT2_FT_REG;
 
@@ -343,10 +390,14 @@ static int ext2_create(void* fs_impl, inode_t* dir, const char* name, size_t len
 		}
 	}
 
+	ext2_stamp(&dih, false, true, true);
+
 	int added = ext2_dirent_add(fs, &dih, di->inum, inum, name, len, file_type);
 
-	if (added == 0 && type == INODE_DIR) {
-		dih.links_count++;
+	if (added == 0) {
+		if (type == INODE_DIR) {
+			dih.links_count++;
+		}
 
 		if (ext2_write_inode(fs, di->inum, &dih) != BLOCK_OK) {
 			ext2_dirent_remove(fs, &dih, name, len);
@@ -376,7 +427,10 @@ static int ext2_create(void* fs_impl, inode_t* dir, const char* name, size_t len
 
 static int ext2_unlink(void* fs_impl, inode_t* dir, const char* name, size_t len) {
 	ext2_t* fs = fs_impl;
+	
+	// dih 💔
 	ext2_inode_hdr_t dih;
+	
 	ext2_inode_hdr_t tgt;
 	uint32_t inum = 0;
 
@@ -420,8 +474,16 @@ static int ext2_unlink(void* fs_impl, inode_t* dir, const char* name, size_t len
 		return PANUTIERRNO_NOTFOUND;
 	}
 
+	uint32_t now = ext2_now();
+
 	if (tgt.dtime != 0) {
 		if (ext2_dirent_remove(fs, &dih, name, len) != 0) {
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		ext2_stamp(&dih, false, true, true);
+
+		if (ext2_write_inode(fs, di->inum, &dih) != BLOCK_OK) {
 			return PANUTIERRNO_PLAINERR;
 		}
 
@@ -457,21 +519,46 @@ static int ext2_unlink(void* fs_impl, inode_t* dir, const char* name, size_t len
 		dih.links_count--;
 	}
 
+	ext2_stamp(&dih, false, true, true);
+
 	if (tgt.links_count > drop) {
+		uint16_t orig_links = tgt.links_count;
+		uint32_t orig_ctime = tgt.ctime;
+
 		tgt.links_count -= drop;
+		tgt.ctime = now;
 
 		if (ext2_write_inode(fs, inum, &tgt) != BLOCK_OK) {
+			if (is_dir) {
+				dih.links_count++;
+			}
+
 			ext2_dirent_add(fs, &dih, di->inum, inum, name, len,
 				is_dir ? EXT2_FT_DIR : EXT2_FT_REG);
 
 			return PANUTIERRNO_PLAINERR;
 		}
 
-		if (!is_dir || ext2_write_inode(fs, di->inum, &dih) == BLOCK_OK) {
-			return 0;
+		if (ext2_write_inode(fs, di->inum, &dih) != BLOCK_OK) {
+			tgt.links_count = orig_links;
+			tgt.ctime = orig_ctime;
+			ext2_write_inode(fs, inum, &tgt);
+
+			if (is_dir) {
+				dih.links_count++;
+			}
+
+			ext2_dirent_add(fs, &dih, di->inum, inum, name, len,
+				is_dir ? EXT2_FT_DIR : EXT2_FT_REG);
+
+			return PANUTIERRNO_PLAINERR;
 		}
-	} else if (ext2_inode_retire(fs, inum) == 0) {
-		if (!is_dir || ext2_write_inode(fs, di->inum, &dih) == BLOCK_OK) {
+
+		return 0;
+	}
+
+	if (ext2_inode_retire(fs, inum) == 0) {
+		if (ext2_write_inode(fs, di->inum, &dih) == BLOCK_OK) {
 			return 0;
 		}
 
@@ -587,6 +674,9 @@ static int ext2_rename(void* fs_impl, inode_t* old_dir, const char* old_name, si
 
 	bool is_dir = (tgt.mode & EXT2_S_IFMT) == EXT2_S_IFDIR;
 	bool crosses = odi->inum != ndi->inum;
+	uint32_t now = ext2_now();
+
+	tgt.ctime = now;
 
 	if (is_dir && crosses && ext2_in_subtree(fs, inum, ndi->inum)) {
 		return PANUTIERRNO_BUSY;
@@ -634,6 +724,8 @@ static int ext2_rename(void* fs_impl, inode_t* old_dir, const char* old_name, si
 
 	uint8_t file_type = is_dir ? EXT2_FT_DIR : EXT2_FT_REG;
 
+	ext2_stamp(&ndih, false, true, true);
+
 	int added = ext2_dirent_add(fs, &ndih, ndi->inum, inum, new_name, new_len, file_type);
 
 	if (added == EXT2_DIRENT_EXISTS) {
@@ -661,6 +753,9 @@ static int ext2_rename(void* fs_impl, inode_t* old_dir, const char* old_name, si
 	bool wrote_parents = false;
 
 	if (is_dir && crosses) {
+		ext2_stamp(&odih, false, true, true);
+		ext2_stamp(&ndih, false, true, true);
+
 		bool old_ok = ext2_write_inode(fs, odi->inum, &odih) == BLOCK_OK;
 		bool new_ok = ext2_write_inode(fs, ndi->inum, &ndih) == BLOCK_OK;
 
@@ -698,6 +793,26 @@ static int ext2_rename(void* fs_impl, inode_t* old_dir, const char* old_name, si
 			ext2_dirent_set_parent(fs, &tgt, odi->inum);
 		}
 
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	if (!wrote_parents) {
+		ext2_stamp(&odih, false, true, true);
+		ext2_stamp(&ndih, false, true, true);
+
+		if (odi->inum == ndi->inum) {
+			if (ext2_write_inode(fs, ndi->inum, &ndih) != BLOCK_OK) {
+				return PANUTIERRNO_PLAINERR;
+			}
+		} else {
+			if (ext2_write_inode(fs, odi->inum, &odih) != BLOCK_OK ||
+				ext2_write_inode(fs, ndi->inum, &ndih) != BLOCK_OK) {
+				return PANUTIERRNO_PLAINERR;
+			}
+		}
+	}
+
+	if (ext2_write_inode(fs, inum, &tgt) != BLOCK_OK) {
 		return PANUTIERRNO_PLAINERR;
 	}
 
@@ -760,6 +875,10 @@ static int ext2_link(void* fs_impl, inode_t* target, inode_t* dir,
 		return PANUTIERRNO_NOTFOUND;
 	}
 
+	uint32_t now = ext2_now();
+
+	ext2_stamp(&dih, false, true, true);
+
 	int added = ext2_dirent_add(fs, &dih, di->inum, inum, name, len, EXT2_FT_REG);
 	if (added == EXT2_DIRENT_EXISTS) {
 		return PANUTIERRNO_EXISTS;
@@ -775,9 +894,18 @@ static int ext2_link(void* fs_impl, inode_t* target, inode_t* dir,
 	}
 
 	tgt.links_count++;
+	tgt.ctime = now;
 
 	if (ext2_write_inode(fs, inum, &tgt) == BLOCK_OK) {
-		return 0;
+		if (ext2_write_inode(fs, di->inum, &dih) == BLOCK_OK) {
+			return 0;
+		}
+
+		tgt.links_count--;
+		ext2_write_inode(fs, inum, &tgt);
+		ext2_dirent_remove(fs, &dih, name, len);
+
+		return PANUTIERRNO_PLAINERR;
 	}
 
 	ext2_dirent_remove(fs, &dih, name, len);
@@ -946,6 +1074,8 @@ static int ext2_setattr(void* fs_impl, inode_t* node, const struct inode_attr* a
 		}
 	}
 
+	bool size_changed = false;
+
 	if (mask & INODE_ATTR_SIZE) {
 		if ((hdr.mode & EXT2_S_IFMT) != EXT2_S_IFREG) {
 			return PANUTIERRNO_UNSUPPORTEDOP;
@@ -955,10 +1085,29 @@ static int ext2_setattr(void* fs_impl, inode_t* node, const struct inode_attr* a
 			return PANUTIERRNO_INVALIDARG;
 		}
 
+		uint64_t old_size = 0;
+
+		if (ext2_inode_length(fs, &hdr, &old_size) != 0) {
+			return PANUTIERRNO_PLAINERR;
+		}
+
+		size_changed = (uint64_t)attr->size != old_size;
+
 		int rc = ext2_inode_resize(fs, &hdr, (uint64_t)attr->size);
 		if (rc != 0) {
 			return rc;
 		}
+	}
+
+	uint32_t now = ext2_now();
+
+	if (size_changed && !(mask & INODE_ATTR_MTIME)) {
+		mtime = now;
+	}
+
+	if ((mask & (INODE_ATTR_ATIME | INODE_ATTR_MTIME | INODE_ATTR_SIZE)) &&
+		!(mask & INODE_ATTR_CTIME)) {
+		ctime = now;
 	}
 
 	hdr.atime = atime;
@@ -1069,6 +1218,7 @@ static int ext2_read(void* file_impl, void* buf, size_t len, size_t offset) {
 	memcpy(f->block, hdr.block, sizeof(f->block));
 
 	if ((uint64_t)offset >= f->size) {
+		ext2_touch_atime(fs, f->inum, &hdr);
 		return 0;
 	}
 
@@ -1104,6 +1254,8 @@ static int ext2_read(void* file_impl, void* buf, size_t len, size_t offset) {
 		done += chunk;
 		pos += chunk;
 	}
+
+	ext2_touch_atime(fs, f->inum, &hdr);
 
 	return (int)done;
 }
@@ -1159,6 +1311,10 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 	}
 
 	uint64_t orig_size = disk_size;
+	uint32_t orig_mtime = hdr.mtime;
+	uint32_t orig_ctime = hdr.ctime;
+	uint32_t now = ext2_now();
+	bool wrote_meta = false;
 
 	f->size = disk_size;
 	memcpy(f->block, hdr.block, sizeof(f->block));
@@ -1226,9 +1382,14 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 			hdr.size_high = fs->large_files ? (uint32_t)(end >> 32) : 0;
 		}
 
+		hdr.mtime = now;
+		hdr.ctime = now;
+
 		if (ext2_write_inode(fs, f->inum, &hdr) != BLOCK_OK) {
 			goto out;
 		}
+
+		wrote_meta = true;
 	}
 
 	size_t done = 0;
@@ -1282,6 +1443,15 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 		pos += chunk;
 	}
 
+	if (!wrote_meta) {
+		hdr.mtime = now;
+		hdr.ctime = now;
+
+		if (ext2_write_inode(fs, f->inum, &hdr) != BLOCK_OK) {
+			goto out;
+		}
+	}
+
 	if (end > f->size) {
 		f->size = end;
 	}
@@ -1289,7 +1459,7 @@ static int ext2_write(void* file_impl, const void* buf, size_t len, size_t offse
 	rc_ret = (int)len;
 
 out:
-	if (rc_ret < 0 && claimed_count) {
+	if (rc_ret < 0 && (claimed_count || wrote_meta)) {
 		uint32_t freed = 0;
 
 		for (uint32_t i = 0; i < claimed_count; i++) {
@@ -1312,6 +1482,8 @@ out:
 
 		hdr.size = (uint32_t)orig_size;
 		hdr.size_high = fs->large_files ? (uint32_t)(orig_size >> 32) : 0;
+		hdr.mtime = orig_mtime;
+		hdr.ctime = orig_ctime;
 
 		ext2_write_inode(fs, f->inum, &hdr);
 	}
@@ -1352,6 +1524,8 @@ static int ext2_resize(void* file_impl, uint64_t new_size) {
 		return rc;
 	}
 
+	ext2_stamp(&hdr, false, true, true);
+
 	if (ext2_write_inode(fs, f->inum, &hdr) != BLOCK_OK) {
 		return PANUTIERRNO_PLAINERR;
 	}
@@ -1374,21 +1548,21 @@ static int ext2_readdir(void* fs_impl, inode_t* dir, dirent_entry_t* out, size_t
 		return -1;
 	}
 
-	// the directory's own block array is needed on every call, so it is read
-	// once per directory rather than once per entry
+	ext2_inode_hdr_t hdr;
+
+	if (ext2_read_inode(fs, di->inum, &hdr) != 0) {
+		return -1;
+	}
+
+	if ((hdr.mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
+		return -1;
+	}
+
+	ext2_touch_atime(fs, di->inum, &hdr);
+
 	uint64_t dsize;
 
 	if (fs->cached_dir_inode != di->inum) {
-		ext2_inode_hdr_t hdr;
-
-		if (ext2_read_inode(fs, di->inum, &hdr) != 0) {
-			return -1;
-		}
-
-		if ((hdr.mode & EXT2_S_IFMT) != EXT2_S_IFDIR) {
-			return -1;
-		}
-
 		// mke2fs gives a fresh empty directory no blocks at all, so a zero
 		// length is normal here rather than damage
 		uint64_t len = 0;
