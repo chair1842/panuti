@@ -30,6 +30,26 @@ typedef struct commandmode_state {
 	line_t command;
 } commandmode_state_t;
 
+typedef struct normalmode_state {
+	char pending_op;
+} normalmode_state_t;
+
+typedef struct motion {
+	int y;
+	int x;
+	bool linewise;
+	bool inclusive;
+} motion_t;
+
+typedef struct range {
+	int y1;
+	int y2;
+	int y2;
+	int x2;
+	
+	bool linewise;
+} range_t;
+
 typedef struct editor_global {
 	line_t* lines;
 	int nlines;
@@ -50,6 +70,7 @@ typedef struct editor_global {
 	bool show_errmsg;
 	
 	commandmode_state_t cmstate;
+	normalmode_state_t nmstate;
 	
 	bool dirty;
 
@@ -474,24 +495,6 @@ bool save(const char* path) {
 	return ok;
 }
 
-static bool hinormal_ismotion(char c) {
-	switch (c) {
-		case 'h':
-		case 'j':
-		case 'k':
-		case 'l':
-		case 'w':
-		case 'b':
-		case 'e':
-		case '0':
-		case '^':
-		case '$':
-			return true;
-		default:
-			return false;
-	}
-}
-
 static bool hinormal_isoperator(char c) {
 	switch (c) {
 		case 'd':
@@ -502,9 +505,373 @@ static bool hinormal_isoperator(char c) {
 	}
 }
 
+static bool hinormal_wordch(char c) {
+	return c != ' ' && c != '\t';
+}
+
+static bool hinormal_next_word(int* y, int* x) {
+	int cy = *y;
+	int cx = *x;
+	line_t* l = &EGG.lines[cy];
+
+	if (cx < l->len && hinormal_wordch(l->string[cx])) {
+		while (cx < l->len && hinormal_wordch(l->string[cx])) {
+			cx++;
+		}
+	}
+
+	while (cy < EGG.nlines) {
+		l = &EGG.lines[cy];
+
+		while (cx < l->len && !hinormal_wordch(l->string[cx])) {
+			cx++;
+		}
+
+		if (cx < l->len) {
+			*y = cy;
+			*x = cx;
+			return true;
+		}
+
+		cy++;
+		cx = 0;
+	}
+
+	return false;
+}
+
+static bool hinormal_prev_word(int* y, int* x) {
+	int cy = *y;
+	int cx = *x;
+
+	while (cy >= 0) {
+		line_t* l = &EGG.lines[cy];
+
+		if (cx == 0) {
+			if (cy == 0) {
+				return false;
+			}
+
+			cy--;
+			cx = EGG.lines[cy].len;
+			continue;
+		}
+
+		cx--;
+
+		if (cx < l->len && hinormal_wordch(l->string[cx])) {
+			while (cx > 0 && hinormal_wordch(l->string[cx - 1])) {
+				cx--;
+			}
+
+			*y = cy;
+			*x = cx;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+static bool hinormal_word_end(int* y, int* x) {
+	int cy = *y;
+	int cx = *x;
+
+	if (cy < EGG.nlines && cx < EGG.lines[cy].len && hinormal_wordch(EGG.lines[cy].string[cx])) {
+		line_t* l = &EGG.lines[cy];
+
+		if (cx + 1 < l->len && hinormal_wordch(l->string[cx + 1])) {
+			while (cx + 1 < l->len && hinormal_wordch(l->string[cx + 1])) {
+				cx++;
+			}
+
+			*y = cy;
+			*x = cx;
+			return true;
+		}
+
+		cx++;
+	}
+
+	while (cy < EGG.nlines) {
+		line_t* l = &EGG.lines[cy];
+
+		while (cx < l->len && !hinormal_wordch(l->string[cx])) {
+			cx++;
+		}
+
+		if (cx < l->len) {
+			while (cx + 1 < l->len && hinormal_wordch(l->string[cx + 1])) {
+				cx++;
+			}
+
+			*y = cy;
+			*x = cx;
+			return true;
+		}
+
+		cy++;
+		cx = 0;
+	}
+
+	return false;
+}
+
+static bool hinormal_resolve_motion(char c, motion_t* m) {
+	int y = EGG.cur_y;
+	int x = EGG.cur_x;
+	bool linewise = false;
+	bool inclusive = false;
+
+	switch (c) {
+		case 'h':
+			if (x == 0) {
+				return false;
+			}
+
+			x--;
+			break;
+		case 'l':
+			if (x >= EGG.lines[y].len) {
+				return false;
+			}
+
+			x++;
+			break;
+		case 'j':
+			if (y + 1 >= EGG.nlines) {
+				return false;
+			}
+
+			y++;
+			linewise = true;
+			break;
+		case 'k':
+			if (y == 0) {
+				return false;
+			}
+
+			y--;
+			linewise = true;
+			break;
+		case '0':
+			x = 0;
+			break;
+		case '^':
+			x = 0;
+			while (x < EGG.lines[y].len && (EGG.lines[y].string[x] == ' ' || EGG.lines[y].string[x] == '\t')) {
+				x++;
+			}
+			
+			break;
+		case '$':
+			x = EGG.lines[y].len;
+			break;
+		case 'w':
+			if (!hinormal_next_word(&y, &x)) {
+				return false;
+			}
+			
+			break;
+		case 'b':
+			if (!hinormal_prev_word(&y, &x)) {
+				return false;
+			}
+			
+			break;
+		case 'e':
+			if (!hinormal_word_end(&y, &x)) {
+				return false;
+			}
+
+			inclusive = true;
+			break;
+		default:
+			return false;
+	}
+
+	m->y = y;
+	m->x = x;
+	m->linewise = linewise;
+	m->inclusive = inclusive;
+	return true;
+}
+
+static bool hinormal_motion_range(char c, range_t* r) {
+	motion_t m;
+
+	if (!hinormal_resolve_motion(c, &m)) {
+		return false;
+	}
+
+	if (m.linewise) {
+		r->linewise = true;
+		r->y1 = EGG.cur_y < m.y ? EGG.cur_y : m.y;
+		r->x1 = 0;
+		r->y2 = EGG.cur_y < m.y ? m.y : EGG.cur_y;
+		r->x2 = 0;
+		return true;
+	}
+
+	r->linewise = false;
+
+	if (m.y < EGG.cur_y || (m.y == EGG.cur_y && m.x < EGG.cur_x)) {
+		r->y1 = m.y;
+		r->x1 = m.x;
+		r->y2 = EGG.cur_y;
+		r->x2 = EGG.cur_x;
+	} else {
+		r->y1 = EGG.cur_y;
+		r->x1 = EGG.cur_x;
+		r->y2 = m.y;
+		r->x2 = m.x + (m.inclusive ? 1 : 0);
+
+		if (r->x2 > EGG.lines[r->y2].len) {
+			r->x2 = EGG.lines[r->y2].len;
+		}
+	}
+
+	return true;
+}
+
+static int hinormal_clamp(int v, int lo, int hi) {
+	return v < lo ? lo : (v > hi ? hi : v);
+}
+
+static bool hinormal_range_delete(range_t* r) {
+	if (r->linewise) {
+		if (r->y1 == 0 && r->y2 >= EGG.nlines - 1) {
+			if (!line_set(&EGG.lines[0], "", 0)) {
+				return false;
+			}
+
+			for (int y = EGG.nlines - 1; y >= 1; y--) {
+				line_delete_at(y);
+			}
+
+			EGG.cur_y = 0;
+			EGG.cur_x = 0;
+			return true;
+		}
+
+		for (int y = r->y2; y >= r->y1; y--) {
+			line_delete_at(y);
+		}
+
+		EGG.cur_y = r->y1 < EGG.nlines ? r->y1 : EGG.nlines - 1;
+		EGG.cur_x = 0;
+		return true;
+	}
+
+	line_t* first = &EGG.lines[r->y1];
+	line_t* last = &EGG.lines[r->y2];
+	int x1 = hinormal_clamp(r->x1, 0, first->len);
+	int x2 = hinormal_clamp(r->x2, 0, last->len);
+
+	if (r->y1 == r->y2) {
+		if (x1 < x2) {
+			memmove(first->string + x1, first->string + x2, (size_t)(first->len - x2));
+			first->len -= x2 - x1;
+			first->string[first->len] = '\0';
+		}
+
+		EGG.cur_y = r->y1;
+		EGG.cur_x = x1;
+		return true;
+	}
+
+	int rem = last->len - x2;
+	if (rem > LINE_LEN_MAX - x1) {
+		return false;
+	}
+
+	if (!line_reserve(first, x1 + rem + 1)) {
+		return false;
+	}
+
+	if (rem > 0) {
+		memmove(first->string + x1, last->string + x2, (size_t)rem);
+	}
+
+	first->len = x1 + rem;
+	first->string[first->len] = '\0';
+
+	for (int y = r->y2; y > r->y1; y--) {
+		line_delete_at(y);
+	}
+
+	EGG.cur_y = r->y1;
+	EGG.cur_x = x1;
+	return true;
+}
+
+static int hinormal_operator_exec(char op, range_t* r) {
+	if (op == 'c' && r->linewise) {
+		if (!line_set(&EGG.lines[r->y1], "", 0)) {
+			set_errmsg("out of memory");
+			return 2;
+		}
+
+		for (int y = r->y2; y > r->y1; y--) {
+			line_delete_at(y);
+		}
+
+		EGG.cur_y = r->y1;
+		EGG.cur_x = 0;
+	} else if (!hinormal_range_delete(r)) {
+		set_errmsg("out of memory");
+		return 2;
+	}
+
+	EGG.dirty = true;
+
+	if (op == 'c') {
+		EGG.insert_x = EGG.cur_x;
+		EGG.mode = EM_INSERT;
+	}
+
+	return 0;
+}
+
+static int handin_normal_operator(keypacket_t kp) {
+	char c = keypacket_to_ascii(kp);
+	char op = EGG.nmstate.pending_op;
+
+	if (kp.keycode == KEYCODE_ESCAPE) {
+		EGG.nmstate.pending_op = 0;
+		return 0;
+	}
+
+	range_t r;
+	bool have_range = false;
+
+	if (c == op) {
+		r.linewise = true;
+		r.y1 = EGG.cur_y;
+		r.x1 = 0;
+		r.y2 = EGG.cur_y;
+		r.x2 = 0;
+		have_range = true;
+	} else if (hinormal_ismotion(c)) {
+		have_range = hinormal_motion_range(c, &r);
+	}
+
+	EGG.nmstate.pending_op = 0;
+
+	if (!have_range) {
+		return 0;
+	}
+
+	return hinormal_operator_exec(op, &r);
+}
+
 int handin_normal(keypacket_t kp) {
 	char ascc = keypacket_to_ascii(kp);
 	
+	if (EGG.nmstate.pending_op) {
+		return handin_normal_operator(kp);
+	}
+
 	if (ascc == ':') {
 		EGG.mode = EM_COMMAND;
 		return 0;
@@ -552,31 +919,23 @@ int handin_normal(keypacket_t kp) {
 		return 0;
 	}
 
+	if (hinormal_isoperator(ascc)) {
+		EGG.nmstate.pending_op = ascc;
+		return 0;
+	}
+
+	if (hinormal_ismotion(ascc)) {
+		motion_t m;
+
+		if (hinormal_resolve_motion(ascc, &m)) {
+			EGG.cur_y = m.y;
+			EGG.cur_x = m.x;
+		}
+
+		return 0;
+	}
+
 	switch (ascc) {
-		case 'h':
-			if (EGG.cur_x > 0) {
-				EGG.cur_x--;
-			}
-			
-			break;
-		case 'l':
-			if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
-				EGG.cur_x++;
-			}
-			
-			break;
-		case 'j':
-			if (EGG.cur_y + 1 < EGG.nlines) {
-				EGG.cur_y++;
-			}
-			
-			break;
-		case 'k':
-			if (EGG.cur_y > 0) {
-				EGG.cur_y--;
-			}
-			
-			break;
 		case 'i':
 			EGG.insert_x = EGG.cur_x;
 			EGG.mode = EM_INSERT;

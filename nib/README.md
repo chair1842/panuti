@@ -11,6 +11,8 @@ Nib is Panuti's very own vim/vi clone
 As with all of the projects in panuti, nib is not in it's planned full state and might not have all of
 vim/vi's functional features and quality of life features.
 
-- Operations are not supported yet.
+- Only the `d` and `c` operators are supported so far.
+- Supported motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`.
+- No counts or undo yet.
 - No visual mode.
 - Arrow keys are not used
