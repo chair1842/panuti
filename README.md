@@ -56,7 +56,7 @@ make sure to unmount before shutting down
 - ~~add support for the [PC Speaker](https://en.wikipedia.org/wiki/PC_speaker) (`/dvc/beepr`)~~
 - ~~add formatting ext2~~
 - ~~add sleep functionality to the kernel + syscall~~
-- add motions and operators to nib
+- ~~add motions and operators to nib~~
 
 ## Current limitations
 
