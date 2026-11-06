@@ -172,10 +172,41 @@ static void line_free(line_t* l) {
 	line_init(l);
 }
 
+static void editor_free(void) {
+	for (int i = 0; i < EGG.nlines; i++) {
+		line_free(&EGG.lines[i]);
+	}
+
+	free(EGG.lines);
+	EGG.lines = NULL;
+	EGG.nlines = 0;
+	EGG.capl = 0;
+
+	line_free(&EGG.errormsg);
+	line_free(&EGG.cmstate.command);
+}
+
 static line_t* line_new_at(int at) {
 	if (EGG.nlines == EGG.capl) {
-		int ncap = EGG.capl ? EGG.capl * 2 : 64;
-		line_t* nl = realloc(EGG.lines, ncap * sizeof(line_t));
+		int ncap;
+
+		if (EGG.capl == 0) {
+			ncap = 64;
+		} else if (EGG.capl > INT_MAX / 2) {
+			if (EGG.capl == INT_MAX) {
+				return NULL;
+			}
+
+			ncap = INT_MAX;
+		} else {
+			ncap = EGG.capl * 2;
+		}
+
+		if (ncap > INT_MAX / (int)sizeof(line_t)) {
+			return NULL;
+		}
+
+		line_t* nl = realloc(EGG.lines, (size_t)ncap * sizeof(line_t));
 		if (!nl) {
 			return NULL;
 		}
@@ -283,6 +314,10 @@ static load_status_t load(const char* path) {
 	}
 
 	size_t size = dr.size;
+	if (size == (size_t)-1) {
+		return LOAD_EOOM;
+	}
+
 	char* data = malloc(size + 1);
 	if (!data) {
 		return LOAD_EOOM;
@@ -320,6 +355,11 @@ static load_status_t load(const char* path) {
 	size_t start = 0;
 	for (size_t i = 0; i < b; i++) {
 		if (data[i] == '\n') {
+			if (i - start > (size_t)LINE_LEN_MAX) {
+				free(data);
+				return LOAD_EOOM;
+			}
+
 			if (!add_line(data + start, (int)(i - start))) {
 				free(data);
 				return LOAD_EOOM;
@@ -330,6 +370,11 @@ static load_status_t load(const char* path) {
 	}
 
 	if (start < b) {
+		if (b - start > (size_t)LINE_LEN_MAX) {
+			free(data);
+			return LOAD_EOOM;
+		}
+
 		if (!add_line(data + start, (int)(b - start))) {
 			free(data);
 			return LOAD_EOOM;
@@ -429,6 +474,34 @@ bool save(const char* path) {
 	return ok;
 }
 
+static bool hinormal_ismotion(char c) {
+	switch (c) {
+		case 'h':
+		case 'j':
+		case 'k':
+		case 'l':
+		case 'w':
+		case 'b':
+		case 'e':
+		case '0':
+		case '^':
+		case '$':
+			return true;
+		default:
+			return false;
+	}
+}
+
+static bool hinormal_isoperator(char c) {
+	switch (c) {
+		case 'd':
+		case 'c':
+			return true;
+		default:
+			return false;
+	}
+}
+
 int handin_normal(keypacket_t kp) {
 	char ascc = keypacket_to_ascii(kp);
 	
@@ -505,19 +578,21 @@ int handin_normal(keypacket_t kp) {
 			
 			break;
 		case 'i':
-			if (!kp.shift) {
-				EGG.insert_x = EGG.cur_x;
-				EGG.mode = EM_INSERT;
-			}
+			EGG.insert_x = EGG.cur_x;
+			EGG.mode = EM_INSERT;
 			
 			break;
 		case 'a':
-			if (kp.shift) {
-				EGG.cur_x = EGG.lines[EGG.cur_y].len;
-			} else if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
+			if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
 				EGG.cur_x++;
 			}
 			
+			EGG.insert_x = EGG.cur_x;
+			EGG.mode = EM_INSERT;
+			
+			break;
+		case 'A':
+			EGG.cur_x = EGG.lines[EGG.cur_y].len;
 			EGG.insert_x = EGG.cur_x;
 			EGG.mode = EM_INSERT;
 			
@@ -665,14 +740,22 @@ int handin_insert(keypacket_t kp) {
 				line_t* cur = &EGG.lines[EGG.cur_y];
 				int at = prev->len;
 
+				if (cur->len > LINE_LEN_MAX - prev->len) {
+					set_errmsg("line too long");
+					return 0;
+				}
+
 				if (!line_reserve(prev, prev->len + cur->len + 1)) {
 					set_errmsg("out of memory");
 					return 0;
 				}
 
-				for (int i = 0; i < cur->len; i++) {
-					line_append(prev, cur->string[i]);
+				if (cur->len > 0) {
+					memcpy(prev->string + prev->len, cur->string, (size_t)cur->len);
 				}
+
+				prev->len += cur->len;
+				prev->string[prev->len] = '\0';
 
 				line_delete_at(EGG.cur_y);
 				EGG.cur_y--;
@@ -911,19 +994,23 @@ int main(int argc, char** argv) {
 			break;
 		case LOAD_EOOM:
 			printf("nib: out of memory loading \"%s\"\n", argv[1]);
+			editor_free();
 			return -1;
 		case LOAD_ENOTDIR:
 			printf("nib: \"%s\" is a directory\n", argv[1]);
+			editor_free();
 			return -1;
 		case LOAD_EIO:
 		default:
 			printf("nib: could not read \"%s\"\n", argv[1]);
+			editor_free();
 			return -1;
 	}
 
 	int kbd = handle_open("/dvc/kbd/raw");
 	if (kbd < 0) {
 		printf("nib: keyboard cannot be opened\n");
+		editor_free();
 		return -1;
 	}
 
@@ -1004,6 +1091,7 @@ int main(int argc, char** argv) {
 	stream_write(0, (char[]){ 0x1B, 'R' }, 2);
 	printf("\f");
 	handle_close(kbd);
+	editor_free();
 	
 	return 0;
 }
