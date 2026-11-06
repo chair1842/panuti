@@ -430,7 +430,9 @@ bool save(const char* path) {
 }
 
 int handin_normal(keypacket_t kp) {
-	if (kp.keycode == KEYCODE_SEMICOLON && kp.shift == true) {
+	char ascc = keypacket_to_ascii(kp);
+	
+	if (ascc == ':') {
 		EGG.mode = EM_COMMAND;
 		return 0;
 	} else if (kp.keycode == KEYCODE_ESCAPE) {
@@ -448,7 +450,7 @@ int handin_normal(keypacket_t kp) {
 		EGG.cur_x = 0;
 
 		return 0;
-	} else if (kp.keycode == KEYCODE_O && !kp.shift) {
+	} else if (ascc == 'o') {
 		line_t* l = line_new_at(EGG.cur_y + 1);
 		if (!l) {
 			set_errmsg("out of memory");
@@ -462,7 +464,7 @@ int handin_normal(keypacket_t kp) {
 		EGG.mode = EM_INSERT;
 
 		return 0;
-	} else if (kp.keycode == KEYCODE_O) {
+	} else if (ascc == 'O') {
 		line_t* l = line_new_at(EGG.cur_y);
 		if (!l) {
 			set_errmsg("out of memory");
@@ -477,39 +479,39 @@ int handin_normal(keypacket_t kp) {
 		return 0;
 	}
 
-	switch (kp.keycode) {
-		case KEYCODE_H:
+	switch (ascc) {
+		case 'h':
 			if (EGG.cur_x > 0) {
 				EGG.cur_x--;
 			}
 			
 			break;
-		case KEYCODE_L:
+		case 'l':
 			if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
 				EGG.cur_x++;
 			}
 			
 			break;
-		case KEYCODE_J:
+		case 'j':
 			if (EGG.cur_y + 1 < EGG.nlines) {
 				EGG.cur_y++;
 			}
 			
 			break;
-		case KEYCODE_K:
+		case 'k':
 			if (EGG.cur_y > 0) {
 				EGG.cur_y--;
 			}
 			
 			break;
-		case KEYCODE_I:
+		case 'i':
 			if (!kp.shift) {
 				EGG.insert_x = EGG.cur_x;
 				EGG.mode = EM_INSERT;
 			}
 			
 			break;
-		case KEYCODE_A:
+		case 'a':
 			if (kp.shift) {
 				EGG.cur_x = EGG.lines[EGG.cur_y].len;
 			} else if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
