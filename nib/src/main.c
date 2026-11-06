@@ -44,8 +44,8 @@ typedef struct motion {
 typedef struct range {
 	int y1;
 	int y2;
-	int y2;
 	int x2;
+	int x1;
 	
 	bool linewise;
 } range_t;
@@ -493,6 +493,24 @@ bool save(const char* path) {
 	}
 
 	return ok;
+}
+
+static bool hinormal_ismotion(char c) {
+	switch (c) {
+		case 'h':
+		case 'j':
+		case 'k':
+		case 'l':
+		case 'w':
+		case 'b':
+		case 'e':
+		case '0':
+		case '^':
+		case '$':
+			return true;
+		default:
+			return false;
+	}
 }
 
 static bool hinormal_isoperator(char c) {
