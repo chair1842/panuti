@@ -34,12 +34,6 @@ $(ARCH_FREEOBJS) \
 stdio/printf.o \
 stdio/putchar.o \
 stdio/puts.o \
-stdlib/abort.o \
-stdlib/malloc.o \
-stdlib/calloc.o \
-stdlib/free.o \
-stdlib/realloc.o \
-stdlib/malloc_util.o \
 string/memcmp.o \
 string/memcpy.o \
 string/memmove.o \
@@ -54,6 +48,15 @@ string/strcmp.o \
 string/strncmp.o \
 string/memchr.o \
 string/strcpy.o \
+panuti/kbd/kpktasc.o
+
+HOSTEDOBJS=\
+$(ARCH_HOSTEDOBJS) \
+stdlib/malloc.o \
+stdlib/calloc.o \
+stdlib/free.o \
+stdlib/realloc.o \
+stdlib/malloc_util.o \
 panuti/process/procreate.o \
 panuti/mount/mount.o \
 panuti/registry/mkdir.o \
@@ -73,12 +76,9 @@ panuti/stream/nstream.o \
 panuti/mmap/mmapan.o \
 panuti/mmap/munmap.o \
 panuti/registry/mkfile.o \
-panuti/kbd/kpktasc.o \
 panuti/handle/seek.o \
-panuti/process/sleep.o
-
-HOSTEDOBJS=\
-$(ARCH_HOSTEDOBJS) \
+panuti/process/sleep.o \
+stdlib/abort.o \
 
 OBJS=\
 $(FREEOBJS) \
