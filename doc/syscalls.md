@@ -1109,15 +1109,43 @@ in `libc/panuti/stat/settmsp.c`.
 
 ---
 
+### 32 -- SYNC
+
+```c
+int32_t panutisysf_sync(void);
+```
+
+Flush every mounted filesystem's buffered metadata to its block device.
+
+**Parameters:** none.
+
+The kernel walks the mount table and calls each filesystem's `sync` op. Mounts
+that do not implement one are skipped. A failure from one mount does not stop
+the others from being synced; the first error encountered is returned after
+every mount has been visited.
+
+For ext2 this flushes pending block frees first, then writes any dirty block or
+inode bitmaps, the group descriptor table, and the superblock. ext2 also syncs
+on file close and after metadata-only operations such as create, unlink,
+rename, link, and setattr.
+
+**Returns:** 0 on success, or the first error reported by a filesystem.
+
+**Errors:**
+- `PANUTIERRNO_PLAINERR` -- a filesystem could not write its metadata
+- `PANUTIERRNO_INVALIDARG` -- a filesystem was handed an invalid mount state
+
+---
+
 ## Quick Reference
 
-All 31 syscalls listed here are registered in the kernel dispatch table and
+All 32 syscalls listed here are registered in the kernel dispatch table and
 documented in detail above. Numbers are defined in
 `libc/include/panuti/syscall/syscallno.h`.
 
 The dispatch table has 256 slots. Any number at or above `256` returns
 `PANUTIERRNO_INVALIDSYSCALL`, as does any number below `256` that is not
-registered -- today that is `32` through `255`, so they are reserved rather
+registered -- today that is `33` through `255`, so they are reserved rather
 than permanently invalid.
 
 | # | Name | # | Name |
@@ -1138,6 +1166,7 @@ than permanently invalid.
 | 13 | `RENAME` | 27 | `MUNMAP` |
 | 28 | `RESIZE` | 29 | `MKFILE` |
 | 30 | `SLEEP` | 31 | `SETTMSP` |
+| 32 | `SYNC` | | |
 
 ## Limits
 

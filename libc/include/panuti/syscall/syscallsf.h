@@ -166,6 +166,10 @@ static inline int32_t panutisysf_settmsp(const char* path, inode_timestamp_t* ti
 	return panuti_syscall(SYSHANDLER_SETTMSP, (uint32_t)path, (uint32_t)timestamp, mask, 0);
 }
 
+static inline int32_t panutisysf_sync(void) {
+	return panuti_syscall(SYSHANDLER_SYNC, 0, 0, 0, 0);
+}
+
 #if defined(__cplusplus)
 }
 #endif

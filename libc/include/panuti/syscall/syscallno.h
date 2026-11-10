@@ -39,6 +39,7 @@ extern "C" {
 #define SYSHANDLER_MKFILE 29
 #define SYSHANDLER_SLEEP 30
 #define SYSHANDLER_SETTMSP 31
+#define SYSHANDLER_SYNC 32
 
 #if defined(__cplusplus)
 }

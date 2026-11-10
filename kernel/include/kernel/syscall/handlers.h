@@ -102,4 +102,7 @@ int32_t syshandler_sleep(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // set timestamps on the entry at a path
 int32_t syshandler_settmsp(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// flush all mounted filesystems
+int32_t syshandler_sync(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif
