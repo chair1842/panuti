@@ -2,15 +2,16 @@
 
 #include <kernel/handle/handle.h>
 #include <kernel/handle/registry.h>
-#include <stdio.h>
 #include "console.h"
+#include <kernel/tty.h>
 
 static int console_write(void* impl, const void* buf, size_t len) {
 	(void)impl;
 	const char* p = (const char*)buf;
 	for (size_t i = 0; i < len; i++) {
-		putchar(p[i]);
+		terminal_putchar(p[i]);
 	}
+	
 	return (int)len;
 }
 
