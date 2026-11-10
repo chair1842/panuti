@@ -27,6 +27,7 @@ typedef struct mount {
 void mount_init(void);
 int mount_attach(struct inode* mountpoint, const fs_ops_t* fs_ops, void* fs_impl, struct inode* root);
 int mount_detach(struct inode* mountpoint);
+int mount_sync_all(void);
 mount_t* mount_find(struct inode* mountpoint);
 
 #endif

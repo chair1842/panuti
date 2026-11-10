@@ -3,6 +3,7 @@
 #include <kernel/handle/mount.h>
 #include <kernel/handle/registry.h>
 #include <kernel/klog.h>
+#include <panuti/errno.h>
 
 static mount_t mounts[REG_MAX_MOUNTS];
 static uint32_t next_mount_id = 1;
@@ -69,6 +70,26 @@ int mount_attach(struct inode* mountpoint, const fs_ops_t* fs_ops, void* fs_impl
 	inode_ref(root);
 	klog(KLOG_INFO, "mount: id=%u mp=%p root=%p\n", m->id, mountpoint, root);
 	return 0;
+}
+
+int mount_sync_all(void) {
+	int result = PANUTIERRNO_PLAINSUCCESS;
+
+	for (int i = 0; i < REG_MAX_MOUNTS; i++) {
+		mount_t* m = &mounts[i];
+
+		if (!m->in_use || !m->fs_ops || !m->fs_ops->sync) {
+			continue;
+		}
+
+		int rc = m->fs_ops->sync(m->fs_impl);
+
+		if (rc != PANUTIERRNO_PLAINSUCCESS && result == PANUTIERRNO_PLAINSUCCESS) {
+			result = rc;
+		}
+	}
+
+	return result;
 }
 
 int mount_detach(struct inode* mountpoint) {

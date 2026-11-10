@@ -71,6 +71,36 @@ static void ext2_touch_atime(ext2_t* fs, uint32_t inum, ext2_inode_hdr_t* hdr) {
 	ext2_write_inode(fs, inum, hdr);
 }
 
+static int ext2_sync(void* fs_impl) {
+	ext2_t* fs = fs_impl;
+
+	if (!fs || !fs->block_device || !fs->superblock) {
+		return PANUTIERRNO_INVALIDARG;
+	}
+
+	if (fs->read_only) {
+		return PANUTIERRNO_PLAINSUCCESS;
+	}
+
+	if (ext2_pending_free_flush(fs) != BLOCK_OK) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	if (ext2_sync_metadata(fs) != BLOCK_OK) {
+		return PANUTIERRNO_PLAINERR;
+	}
+
+	return PANUTIERRNO_PLAINSUCCESS;
+}
+
+static int ext2_sync_result(ext2_t* fs, int rc) {
+	if (rc != 0) {
+		return rc;
+	}
+
+	return ext2_sync(fs);
+}
+
 static int ext2_validate_gdt(ext2_t* fs) {
     uint32_t itables_in_group = div_ceil_u32(fs->inode_size * fs->superblock->inodes_per_group, fs->block_size);
 
@@ -422,7 +452,7 @@ static int ext2_create(void* fs_impl, inode_t* dir, const char* name, size_t len
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	return 0;
+	return ext2_sync_result(fs, 0);
 }
 
 static int ext2_unlink(void* fs_impl, inode_t* dir, const char* name, size_t len) {
@@ -487,7 +517,7 @@ static int ext2_unlink(void* fs_impl, inode_t* dir, const char* name, size_t len
 			return PANUTIERRNO_PLAINERR;
 		}
 
-		return 0;
+		return ext2_sync_result(fs, 0);
 	}
 
 	if ((tgt.mode & EXT2_S_IFMT) == EXT2_S_IFDIR) {
@@ -554,12 +584,12 @@ static int ext2_unlink(void* fs_impl, inode_t* dir, const char* name, size_t len
 			return PANUTIERRNO_PLAINERR;
 		}
 
-		return 0;
+		return ext2_sync_result(fs, 0);
 	}
 
 	if (ext2_inode_retire(fs, inum) == 0) {
 		if (ext2_write_inode(fs, di->inum, &dih) == BLOCK_OK) {
-			return 0;
+			return ext2_sync_result(fs, 0);
 		}
 
 		return PANUTIERRNO_PLAINERR;
@@ -816,7 +846,7 @@ static int ext2_rename(void* fs_impl, inode_t* old_dir, const char* old_name, si
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	return 0;
+	return ext2_sync_result(fs, 0);
 }
 
 static int ext2_link(void* fs_impl, inode_t* target, inode_t* dir,
@@ -898,7 +928,7 @@ static int ext2_link(void* fs_impl, inode_t* target, inode_t* dir,
 
 	if (ext2_write_inode(fs, inum, &tgt) == BLOCK_OK) {
 		if (ext2_write_inode(fs, di->inum, &dih) == BLOCK_OK) {
-			return 0;
+			return ext2_sync_result(fs, 0);
 		}
 
 		tgt.links_count--;
@@ -1118,7 +1148,7 @@ static int ext2_setattr(void* fs_impl, inode_t* node, const struct inode_attr* a
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	return 0;
+	return ext2_sync_result(fs, 0);
 }
 
 static void* ext2_open(void* fs_impl, inode_t* node) {
@@ -1667,7 +1697,17 @@ static int ext2_readdir(void* fs_impl, inode_t* dir, dirent_entry_t* out, size_t
 }
 
 static void ext2_close(void* file_impl) {
-	kfree(file_impl);
+	ext2_file_t* f = file_impl;
+
+	if (!f) {
+		return;
+	}
+
+	// closing a file is the point at which its data is expected to be durable,
+	// so push the metadata it left behind (bitmaps, gdt, superblock)
+	ext2_sync(f->fs);
+
+	kfree(f);
 }
 
 static void ext2_finish(void* fs_impl) {
@@ -1677,9 +1717,7 @@ static void ext2_finish(void* fs_impl) {
 	}
 
 	if (!fs->read_only) {
-		ext2_pending_free_flush(fs);
-
-		if (ext2_sync_metadata(fs) == BLOCK_OK) {
+		if (ext2_sync(fs) == PANUTIERRNO_PLAINSUCCESS) {
 			fs->superblock->state = EXT2_STATE_CLEAN;
 			block_write_bytes(fs->block_device, 1024, sizeof(ext2_superblock_t), fs->superblock);
 		}
@@ -1741,6 +1779,7 @@ static const fs_ops_t ext2_ops = {
 	.resize = ext2_resize,
 	.getattr = ext2_getattr,
 	.setattr = ext2_setattr,
+	.sync = ext2_sync,
 };
 
 int ext2_mount(const char* mountp, const char* blkdev) {

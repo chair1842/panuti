@@ -27,6 +27,7 @@ typedef struct fs_ops {
 	int (*resize)(void* file_impl, uint64_t new_size);
 	int (*getattr)(void* fs_impl, struct inode* node, struct inode_attr* attr);
 	int (*setattr)(void* fs_impl, struct inode* node, const struct inode_attr*, uint32_t mask);
+	int (*sync)(void* fs_impl);
 } fs_ops_t;
 
 extern const handle_ops_t fs_file_ops;
