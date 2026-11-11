@@ -48,6 +48,15 @@ mount mnt ext2 /dvc/pata/0
 
 make sure to unmount before shutting down
 
+## 0.3 Progress
+
+- Free/used memory info exposed (`/proc/meminfo`)
+- `/proc`
+- kill (terminate) syscall
+- PCI enumeration (`/dvc/pci`)
+- ACPI poweroff & reboot
+- ~~`sync` syscall and pcrutils~~
+
 ## Current limitations
 
 - Pur and Pint both assume unconditionally that the OS is being booted from a cd:
