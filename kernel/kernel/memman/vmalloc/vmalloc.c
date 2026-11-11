@@ -28,6 +28,7 @@ typedef struct {
 } vm_free_t;
 
 extern uint32_t _kernel_end;
+static uint32_t heap_start;
 static uint32_t vmalloc_next;
 static vm_free_t vmfree[VM_FREE_MAX];
 static uint32_t vmfree_count;
@@ -37,7 +38,26 @@ void vmalloc_init(void) {
 	if (vmalloc_next == 0) {
 		vmalloc_next = 4096;
 	}
+	
+	heap_start = vmalloc_next;
 	vmfree_count = 0;
+}
+
+void vmalloc_get_stats(vmalloc_stats_t* s) {
+	uint32_t f = irq_save_disable();
+	
+	s->capacity = (VMALLOC_END - heap_start) / 4096;
+	s->high_water = (vmalloc_next - heap_start) / 4096;
+	
+	uint32_t freed = 0;
+	for (uint32_t i = 0; i < vmfree_count; i++) {
+		freed += vmfree[i].npages;
+	}
+	
+	s->in_use = s->high_water - freed;
+	s->free_ranges = vmfree_count;
+	
+	irq_restore(f);
 }
 
 // Inserts a freed virtual range into the free list, coalescing it with every

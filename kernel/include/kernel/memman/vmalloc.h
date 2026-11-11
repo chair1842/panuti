@@ -5,6 +5,13 @@
 #include <stdint.h>
 #include <stddef.h>
 
+typedef struct {
+	uint32_t capacity;
+	uint32_t high_water;
+	uint32_t in_use;
+	uint32_t free_ranges;
+} vmalloc_stats_t;
+
 void vmalloc_init(void);
 void* vmalloc_pg(void);
 
@@ -16,5 +23,7 @@ void* vmalloc_pages(uint32_t npages);
 void vmalloc_free_pages(void* addr, uint32_t npages);
 
 void vmalloc_free(void* addr);
+
+void vmalloc_get_stats(vmalloc_stats_t* s);
 
 #endif

@@ -108,6 +108,10 @@ static uint32_t bitmap_frames;   // capacity, in frames
 static uint32_t next_free_page;  // allocation cursor, may wrap
 static uint32_t rejected_ops;    // ignored out-of-range calls, for diagnosis
 
+static uint32_t free_frames;
+static uint32_t managed_frames;
+static uint32_t double_frees;
+
 uint32_t init_module_phys_start = 0;
 uint32_t init_module_phys_end = 0;
 
@@ -134,7 +138,14 @@ void pmm_clrp(uint32_t page) {
 		pmm_reject("pmm_clrp", page);
 		return;
 	}
+	
+	if (bitmap[page / 8] & (1 << (page % 8))) {
+		double_frees++;
+		return;
+	}
+	
 	bitmap[page / 8] |= (1 << (page % 8));
+	free_frames++;
 }
 
 // set the bit for a page in the bitmap to 0, marking it used.
@@ -143,7 +154,13 @@ void pmm_setp(uint32_t page) {
 		pmm_reject("pmm_setp", page);
 		return;
 	}
+	
+	if (!(bitmap[page / 8] & (1 << (page % 8)))) {
+		return;
+	}
+	
 	bitmap[page / 8] &= ~(1 << (page % 8));
+	free_frames--;
 }
 
 uint32_t pmm_nframes(void) {
@@ -156,6 +173,18 @@ uint32_t pmm_bitmap_bytes(void) {
 
 uint32_t pmm_rejects(void) {
 	return rejected_ops;
+}
+
+uint32_t pmm_free_frames(void) {
+	return free_frames;
+}
+
+uint32_t pmm_total_frames(void) {
+	return managed_frames;
+}
+
+uint32_t pmm_double_frees(void) {
+	return double_frees;
 }
 
 // every e820 entry, in the order the bootloader laid them out. mmap_length is
@@ -335,6 +364,9 @@ void pmm_init(multiboot_info_t* mbi) {
 	map_bitmap_home(bitmap_phys);
 	bitmap = PMM_BITMAP_HOME;
 #endif
+
+	managed_frames = free_frames;
+	double_frees = 0;
 
 	// one line at boot, so a machine with a different amount of ram shows its
 	// own sizing here instead of having to be re-derived. a nonzero reject

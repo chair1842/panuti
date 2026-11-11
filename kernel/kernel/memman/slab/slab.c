@@ -266,6 +266,36 @@ static void kfree_inner(void* ptr) {
 	slab->used--;
 }
 
+void slab_get_stats(slab_stats_t* s) {
+	uint32_t flags = irq_save_disable();
+
+	s->slab_used = 0;
+	s->slab_capacity = 0;
+	s->slab_pages = 0;
+	
+	for (uint32_t i = 0; i < NUM_CACHES; i++) {
+		for (slab_t* slab = caches[i].slabs; slab; slab = slab->next) {
+			s->slab_used += slab->used;
+			s->slab_capacity += slab->capacity;
+			s->slab_pages++;
+		}
+	}
+
+	s->big_allocs = 0;
+	s->big_pages = 0;
+	
+	for (uint32_t i = 0; i < MAX_BIG_ALLOCS; i++) {
+		if (big_allocs[i].vaddr != 0) {
+			s->big_allocs++;
+			s->big_pages += big_allocs[i].npages;
+		}
+	}
+	
+	s->big_alloc_max = MAX_BIG_ALLOCS;
+
+	irq_restore(flags);
+}
+
 void* kmalloc(uint32_t size, uint32_t align) {
 	uint32_t flags = irq_save_disable();
 	void* result = kmalloc_inner(size, align);

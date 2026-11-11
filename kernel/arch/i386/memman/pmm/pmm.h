@@ -23,6 +23,12 @@ uint32_t pmm_bitmap_bytes(void);
 // or reserving frames the map never described.
 uint32_t pmm_rejects(void);
 
+uint32_t pmm_free_frames(void);
+
+uint32_t pmm_total_frames(void);
+
+uint32_t pmm_double_frees(void);
+
 extern uint32_t init_module_phys_start;
 extern uint32_t init_module_phys_end;
 

@@ -6,7 +6,18 @@
 
 #include <stdint.h>
 
+typedef struct {
+	uint32_t slab_used;
+	uint32_t slab_capacity;
+	uint32_t slab_pages;
+	uint32_t big_allocs;
+	uint32_t big_pages;
+	uint32_t big_alloc_max;
+} slab_stats_t;
+
 void* kmalloc(uint32_t size, uint32_t align);
 void kfree(void* ptr);
+
+void slab_get_stats(slab_stats_t* s);
 
 #endif
