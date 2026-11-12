@@ -33,6 +33,7 @@ KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
 kernel/kernel.o \
 kernel/pardet.o \
+kernel/memman/info.o \
 kernel/memman/slab/slab.o \
 kernel/memman/vmalloc/vmalloc.o \
 kernel/log/klog.o \

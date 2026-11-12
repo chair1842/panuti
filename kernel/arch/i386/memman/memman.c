@@ -36,6 +36,22 @@ void memman_free_frame(uint32_t phys) {
 	pmm_freep(phys);
 }
 
+uint32_t memman_total_frames(void) {
+	return pmm_total_frames();
+}
+
+uint32_t memman_free_frames(void) {
+	return pmm_free_frames();
+}
+
+uint32_t memman_double_frees(void) {
+	return pmm_double_frees();
+}
+
+uint32_t memman_rejects(void) {
+	return pmm_rejects();
+}
+
 void* memman_get_kernel_addr_space(void) {
 	return vmm_get_kernel_page_dir();
 }

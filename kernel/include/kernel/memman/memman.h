@@ -22,6 +22,14 @@ void memman_unmap_in(addr_space_t addr_space, uint32_t virt);
 uint32_t memman_get_phys(uint32_t virt);
 uint32_t memman_alloc_frame(void);
 void memman_free_frame(uint32_t phys);
+
+// Physical frame accounting. total is the post-init managed baseline, so
+// total - free is the number of frames allocated since boot.
+uint32_t memman_total_frames(void);
+uint32_t memman_free_frames(void);
+uint32_t memman_double_frees(void);
+uint32_t memman_rejects(void);
+
 addr_space_t memman_create_addr_space(void);
 /* Frees every user frame, page table, and the page directory of an address space. */
 void memman_destroy_addr_space(addr_space_t addr_space);
