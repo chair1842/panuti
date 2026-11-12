@@ -50,8 +50,8 @@ make sure to unmount before shutting down
 
 ## 0.3 Progress
 
-- Free/used memory info exposed (`/proc/meminfo`)
-- `/proc`
+- ~~Free/used memory info exposed (`/sys/meminfo`)~~
+- Processes exposed (`/sys/pid`)
 - kill (terminate) syscall
 - PCI enumeration (`/dvc/pci`)
 - ACPI poweroff & reboot
