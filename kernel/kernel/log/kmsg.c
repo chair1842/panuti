@@ -230,9 +230,9 @@ static const handle_ops_t kmsg_ops = {
 };
 
 void kmsg_init() {
-	registry_mkdir("/dvc/kmsg");
+	registry_mkdir("/sys/kmsg");
 
-	registry_add("/dvc/kmsg/all", INODE_DVC, (void*)&kmsg_all_stream, &kmsg_ops);
-	registry_add("/dvc/kmsg/log", INODE_DVC, (void*)&kmsg_log_stream, &kmsg_ops);
-	registry_add("/dvc/kmsg/warn", INODE_DVC, (void*)&kmsg_warn_stream, &kmsg_ops);
+	registry_add("/sys/kmsg/all", INODE_DVC, (void*)&kmsg_all_stream, &kmsg_ops);
+	registry_add("/sys/kmsg/log", INODE_DVC, (void*)&kmsg_log_stream, &kmsg_ops);
+	registry_add("/sys/kmsg/warn", INODE_DVC, (void*)&kmsg_warn_stream, &kmsg_ops);
 }
