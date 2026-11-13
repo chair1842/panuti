@@ -43,7 +43,7 @@ typedef struct task {
 	task_state_t state;
 	
 	pid_t pid;
-	pid_t creatorpid;
+	pid_t creator_pid;
 
 	char name[TASK_NAME_MAX];
 	char cmdline[TASK_CMDLINE_MAX];

@@ -103,7 +103,7 @@ static size_t proc_render(char* buf, size_t cap, proc_kind_t kind, const task_in
 		case PROC_NAME:
 			return proc_format(buf, cap, "%s\n", info->name);
 		case PROC_CPID:
-			return proc_format(buf, cap, "%u\n", info->creatorpid);
+			return proc_format(buf, cap, "%u\n", info->creator_pid);
 		case PROC_CMDLINE:
 			return proc_format(buf, cap, "%s\n", info->cmdline);
 		case PROC_VM:

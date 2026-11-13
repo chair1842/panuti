@@ -34,7 +34,7 @@ LIBDEPS=$(LIBOBJS:.o=.d)
 UTILS:=$(patsubst src/%.c,%,$(wildcard src/*.c))
 BINARIES=$(UTILS:%=$(BUILDDIR)/%)
 
-.PHONY: all clean install install-pcrutils install-libs install-headers
+.PHONY: all clean install install-pcrutils
 
 all: $(LIB) $(BINARIES)
 
