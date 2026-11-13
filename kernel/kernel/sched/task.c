@@ -9,6 +9,7 @@
 #include <kernel/memman/vmalloc.h>
 #include <kernel/memman/memman.h>
 #include <kernel/memman/slab.h>
+#include <kernel/mem/usr.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <string.h>
@@ -130,6 +131,23 @@ void task_set_cwd(task_t* t, inode_t* cwd) {
 	inode_unref(old);
 }
 
+void task_set_name(task_t* t, const char* name) {
+	if (!t) {
+		return;
+	}
+
+	size_t len = name ? strlen(name) : 0;
+	if (len >= TASK_NAME_MAX) {
+		len = TASK_NAME_MAX - 1;
+	}
+
+	if (len) {
+		memcpy(t->name, name, len);
+	}
+	
+	t->name[len] = '\0';
+}
+
 static task_t* task_alloc_common(void) {
 	uint32_t flags = irq_save_disable();
 
@@ -149,6 +167,7 @@ static task_t* task_alloc_common(void) {
 
 	t->state = TASK_READY;
 	t->wake_at = 0;
+	t->name[0] = '\0';
 
 	irq_restore(flags);
 
@@ -584,6 +603,19 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 		return PANUTIERRNO_PLAINERR;
 	}
 
+	size_t name_len = kernel_user_strlen(real_argv[0]);
+	if (name_len == (size_t)-1) {
+		procreate_cleanup(t);
+		return PANUTIERRNO_INVALIDADDR;
+	}
+
+	if (name_len >= TASK_NAME_MAX) {
+		name_len = TASK_NAME_MAX - 1;
+	}
+
+	memcpy(t->name, real_argv[0], name_len);
+	t->name[name_len] = '\0';
+
 	for (int i = 0; i < args->no_in_streams; i++) {
 		if (install_stream(caller, args->in_streams[i], &t->in_streams[i]) != 0) {
 			procreate_cleanup(t);
@@ -690,6 +722,7 @@ int task_get_info(pid_t pid, task_info_t* out) {
 		out->no_in_streams = t->no_in_streams;
 		out->no_out_streams = t->no_out_streams;
 		out->open_fds = task_count_open_fds(t);
+		memcpy(out->name, t->name, TASK_NAME_MAX);
 
 		irq_restore(flags);
 		return 0;

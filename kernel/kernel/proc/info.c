@@ -21,10 +21,11 @@ typedef enum {
 	PROC_IN_STREAMS,
 	PROC_OUT_STREAMS,
 	PROC_FDS,
+	PROC_NAME,
 } proc_kind_t;
 
 typedef struct {
-	char text[32];
+	char text[TASK_NAME_MAX + 8];
 	size_t len;
 	size_t pos;
 } proc_handle_t;
@@ -93,6 +94,8 @@ static size_t proc_render(char* buf, size_t cap, proc_kind_t kind, const task_in
 			return proc_format(buf, cap, "%d\n", info->no_out_streams);
 		case PROC_FDS:
 			return proc_format(buf, cap, "%u\n", info->open_fds);
+		case PROC_NAME:
+			return proc_format(buf, cap, "%s\n", info->name);
 	}
 
 	return 0;
@@ -160,6 +163,7 @@ PROC_OPS(proc_wake_at, PROC_WAKE_AT);
 PROC_OPS(proc_in_streams, PROC_IN_STREAMS);
 PROC_OPS(proc_out_streams, PROC_OUT_STREAMS);
 PROC_OPS(proc_fds, PROC_FDS);
+PROC_OPS(proc_name, PROC_NAME);
 
 typedef struct {
 	const char* name;
@@ -167,17 +171,17 @@ typedef struct {
 } proc_file_t;
 
 static const proc_file_t proc_files[] = {
-	{ "state", &proc_state_ops },
-	{ "exit_code", &proc_exit_code_ops },
-	{ "waiting_on", &proc_waiting_on_ops },
-	{ "wake_at", &proc_wake_at_ops },
-	{ "in_streams", &proc_in_streams_ops },
-	{ "out_streams", &proc_out_streams_ops },
-	{ "fds", &proc_fds_ops },
+	{"state", &proc_state_ops},
+	{"exit_code", &proc_exit_code_ops},
+	{"waiting_on", &proc_waiting_on_ops},
+	{"wake_at", &proc_wake_at_ops},
+	{"in_streams", &proc_in_streams_ops},
+	{"out_streams", &proc_out_streams_ops},
+	{"fds", &proc_fds_ops},
+	{"name", &proc_name_ops},
 };
 
 void proc_init(void) {
-	registry_mkdir("/sys");
 	registry_mkdir("/sys/pid");
 }
 

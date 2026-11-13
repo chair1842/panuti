@@ -15,6 +15,7 @@
 #define TASK_USER_STACK_SIZE (TASK_USER_STACK_PAGES * 4096)
 #define TASK_USER_CONTEXT_BYTES 32
 #define MAX_STREAMS 16
+#define TASK_NAME_MAX 64
 
 typedef uint32_t pid_t;
 
@@ -41,6 +42,8 @@ typedef struct task {
 	task_state_t state;
 	
 	pid_t pid;
+
+	char name[TASK_NAME_MAX];
 	
 	struct task* next;
 	
@@ -70,6 +73,7 @@ typedef struct task_info {
 	int no_in_streams;
 	int no_out_streams;
 	uint32_t open_fds;
+	char name[TASK_NAME_MAX];
 } task_info_t;
 
 task_t* task_create(void (*entry)(void));
@@ -96,6 +100,8 @@ void task_wake_waiters(pid_t exited_pid);
 void task_wake_sleepers(int64_t now);
 handle_t* task_return_hslot(uint32_t slot, task_t* task);
 void task_set_cwd(task_t* task, inode_t* cwd);
+
+void task_set_name(task_t* task, const char* name);
 
 // Takes a consistent snapshot of a live task's reporting fields. Returns 0 on
 // success, or -1 if no task with that pid is in the task list.

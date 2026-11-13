@@ -78,6 +78,7 @@ void kernel_main(void) {
 	if (!pint_task) {
 		kpanic("failed to create pint task from ELF\n");
 	} else {
+		task_set_name(pint_task, "pint");
 		klog(KLOG_INFO, "pint task created, pid=%d\n", pint_task->pid);
 	}
 	
@@ -85,6 +86,8 @@ void kernel_main(void) {
 	if (!idle_task) {
 		kpanic("failed to create idle task\n");
 	}
+
+	task_set_name(idle_task, "idle");
 
 	sched_init();
 }
