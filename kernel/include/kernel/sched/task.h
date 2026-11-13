@@ -16,6 +16,7 @@
 #define TASK_USER_CONTEXT_BYTES 32
 #define MAX_STREAMS 16
 #define TASK_NAME_MAX 64
+#define TASK_CMDLINE_MAX 512
 
 typedef uint32_t pid_t;
 
@@ -45,6 +46,7 @@ typedef struct task {
 	pid_t creatorpid;
 
 	char name[TASK_NAME_MAX];
+	char cmdline[TASK_CMDLINE_MAX];
 	
 	struct task* next;
 	
@@ -76,6 +78,7 @@ typedef struct task_info {
 	uint32_t open_fds;
 	char name[TASK_NAME_MAX];
 	pid_t creator_pid;
+	char cmdline[TASK_CMDLINE_MAX];
 } task_info_t;
 
 task_t* task_create(void (*entry)(void));

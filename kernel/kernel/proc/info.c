@@ -23,10 +23,11 @@ typedef enum {
 	PROC_FDS,
 	PROC_NAME,
 	PROC_CPID,
+	PROC_CMDLINE,
 } proc_kind_t;
 
 typedef struct {
-	char text[TASK_NAME_MAX + 8];
+	char text[TASK_CMDLINE_MAX + 8];
 	size_t len;
 	size_t pos;
 } proc_handle_t;
@@ -98,7 +99,9 @@ static size_t proc_render(char* buf, size_t cap, proc_kind_t kind, const task_in
 		case PROC_NAME:
 			return proc_format(buf, cap, "%s\n", info->name);
 		case PROC_CPID:
-			return proc_format(buf, cap, "%u\n", info->creator_pid);
+			return proc_format(buf, cap, "%u\n", info->creatorpid);
+		case PROC_CMDLINE:
+			return proc_format(buf, cap, "%s\n", info->cmdline);
 	}
 
 	return 0;
@@ -168,6 +171,7 @@ PROC_OPS(proc_out_streams, PROC_OUT_STREAMS);
 PROC_OPS(proc_fds, PROC_FDS);
 PROC_OPS(proc_name, PROC_NAME);
 PROC_OPS(proc_cpid, PROC_CPID);
+PROC_OPS(proc_cmdline, PROC_CMDLINE);
 
 typedef struct {
 	const char* name;
@@ -183,7 +187,8 @@ static const proc_file_t proc_files[] = {
 	{"out_streams", &proc_out_streams_ops},
 	{"fds", &proc_fds_ops},
 	{"name", &proc_name_ops},
-	{"cpid", &proc_creator_pid_ops},
+	{"cpid", &proc_cpid_ops},
+	{"cmdline", &proc_cmdline_ops},
 };
 
 void proc_init(void) {

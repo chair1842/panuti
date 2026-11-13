@@ -148,6 +148,38 @@ void task_set_name(task_t* t, const char* name) {
 	t->name[len] = '\0';
 }
 
+static int task_set_cmdline(task_t* t, char** argv, int argc) {
+	size_t pos = 0;
+
+	t->cmdline[0] = '\0';
+
+	for (int i = 0; i < argc; i++) {
+		size_t len = kernel_user_strlen(argv[i]);
+		if (len == (size_t)-1) {
+			return -1;
+		}
+
+		if (i > 0 && pos < TASK_CMDLINE_MAX - 1) {
+			t->cmdline[pos++] = ' ';
+		}
+
+		size_t room = TASK_CMDLINE_MAX - 1 - pos;
+		size_t copy = (len < room) ? len : room;
+		if (copy) {
+			memcpy(t->cmdline + pos, argv[i], copy);
+			pos += copy;
+		}
+
+		t->cmdline[pos] = '\0';
+
+		if (pos == TASK_CMDLINE_MAX - 1) {
+			break;
+		}
+	}
+
+	return 0;
+}
+
 static task_t* task_alloc_common(void) {
 	uint32_t flags = irq_save_disable();
 
@@ -169,6 +201,7 @@ static task_t* task_alloc_common(void) {
 	t->wake_at = 0;
 	t->creator_pid = 0;
 	t->name[0] = '\0';
+	t->cmdline[0] = '\0';
 
 	irq_restore(flags);
 
@@ -618,6 +651,11 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 	memcpy(t->name, real_argv[0], name_len);
 	t->name[name_len] = '\0';
 
+	if (task_set_cmdline(t, real_argv, real_argc) != 0) {
+		procreate_cleanup(t);
+		return PANUTIERRNO_INVALIDADDR;
+	}
+
 	for (int i = 0; i < args->no_in_streams; i++) {
 		if (install_stream(caller, args->in_streams[i], &t->in_streams[i]) != 0) {
 			procreate_cleanup(t);
@@ -725,8 +763,9 @@ int task_get_info(pid_t pid, task_info_t* out) {
 		out->no_out_streams = t->no_out_streams;
 		out->open_fds = task_count_open_fds(t);
 		out->creator_pid = t->creator_pid;
-		
+
 		memcpy(out->name, t->name, TASK_NAME_MAX);
+		memcpy(out->cmdline, t->cmdline, TASK_CMDLINE_MAX);
 
 		irq_restore(flags);
 		return 0;
