@@ -167,6 +167,7 @@ static task_t* task_alloc_common(void) {
 
 	t->state = TASK_READY;
 	t->wake_at = 0;
+	t->creator_pid = 0;
 	t->name[0] = '\0';
 
 	irq_restore(flags);
@@ -573,6 +574,7 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 	}
 
 	task_set_cwd(t, caller->cwd);
+	t->creator_pid = caller->pid;
 
 	if (elf_load_segments(t->addr_space, elf_data, segs, nsegs) != 0) {
 		kfree(elf_data);
@@ -722,6 +724,8 @@ int task_get_info(pid_t pid, task_info_t* out) {
 		out->no_in_streams = t->no_in_streams;
 		out->no_out_streams = t->no_out_streams;
 		out->open_fds = task_count_open_fds(t);
+		out->creator_pid = t->creator_pid;
+		
 		memcpy(out->name, t->name, TASK_NAME_MAX);
 
 		irq_restore(flags);

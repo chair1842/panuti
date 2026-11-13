@@ -42,6 +42,7 @@ typedef struct task {
 	task_state_t state;
 	
 	pid_t pid;
+	pid_t creatorpid;
 
 	char name[TASK_NAME_MAX];
 	
@@ -74,6 +75,7 @@ typedef struct task_info {
 	int no_out_streams;
 	uint32_t open_fds;
 	char name[TASK_NAME_MAX];
+	pid_t creator_pid;
 } task_info_t;
 
 task_t* task_create(void (*entry)(void));
