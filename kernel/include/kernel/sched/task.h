@@ -62,6 +62,16 @@ typedef struct task {
 	int64_t wake_at;
 } task_t;
 
+typedef struct task_info {
+	task_state_t state;
+	uint32_t exit_code;
+	pid_t pid_waiting_on;
+	int64_t wake_at;
+	int no_in_streams;
+	int no_out_streams;
+	uint32_t open_fds;
+} task_info_t;
+
 task_t* task_create(void (*entry)(void));
 task_t* task_create_user(void (*entry)(void));
 task_t* task_create_frelf_user(const void* elf_data, size_t elf_size);
@@ -86,5 +96,9 @@ void task_wake_waiters(pid_t exited_pid);
 void task_wake_sleepers(int64_t now);
 handle_t* task_return_hslot(uint32_t slot, task_t* task);
 void task_set_cwd(task_t* task, inode_t* cwd);
+
+// Takes a consistent snapshot of a live task's reporting fields. Returns 0 on
+// success, or -1 if no task with that pid is in the task list.
+int task_get_info(pid_t pid, task_info_t* out);
 
 #endif

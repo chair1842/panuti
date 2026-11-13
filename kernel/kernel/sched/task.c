@@ -3,6 +3,7 @@
 #include "kernel/handle/registry.h"
 #include <kernel/handle/fs.h>
 #include <kernel/handle/pipe.h>
+#include <kernel/proc/proc.h>
 #include <kernel/sched/task.h>
 #include <kernel/klog.h>
 #include <kernel/memman/vmalloc.h>
@@ -26,6 +27,7 @@ static task_t* task_list = nullptr;
 static void task_list_push(task_t* t) {
 	t->task_next = task_list;
 	task_list = t;
+	proc_task_add(t);
 }
 
 static void task_list_unlink(task_t* t) {
@@ -38,7 +40,8 @@ static void task_list_unlink(task_t* t) {
 		
 		pp = &(*pp)->task_next;
 	}
-	
+
+	proc_task_remove(t->pid);
 	t->task_next = nullptr;
 }
 
@@ -649,4 +652,49 @@ void task_wake_sleepers(int64_t now) {
 
 		t = next;
 	}
+}
+
+static uint32_t task_count_open_fds(const task_t* t) {
+	const fdtable_t* fdt = &t->fdtable;
+	uint32_t count = 0;
+
+	if (!fdt->table || !fdt->openb) {
+		return 0;
+	}
+
+	for (uint32_t i = 0; i < fdt->cap; i++) {
+		if (fdt->openb[i / 8] & (1u << (i % 8))) {
+			count++;
+		}
+	}
+
+	return count;
+}
+
+int task_get_info(pid_t pid, task_info_t* out) {
+	if (!out) {
+		return -1;
+	}
+
+	uint32_t flags = irq_save_disable();
+
+	for (task_t* t = task_list; t; t = t->task_next) {
+		if (t->pid != pid || t->state == TASK_NONE) {
+			continue;
+		}
+
+		out->state = t->state;
+		out->exit_code = t->exit_code;
+		out->pid_waiting_on = t->pid_waiting_on;
+		out->wake_at = t->wake_at;
+		out->no_in_streams = t->no_in_streams;
+		out->no_out_streams = t->no_out_streams;
+		out->open_fds = task_count_open_fds(t);
+
+		irq_restore(flags);
+		return 0;
+	}
+
+	irq_restore(flags);
+	return -1;
 }

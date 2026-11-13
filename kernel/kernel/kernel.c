@@ -8,6 +8,7 @@
 #include <kernel/klog.h>
 #include <kernel/kmsg.h>
 #include <kernel/memman/info.h>
+#include <kernel/proc/proc.h>
 #include <kernel/boot_mod.h>
 #include <kernel/kpanic.h>
 #include <kernel/ata/atapi.h>
@@ -40,6 +41,7 @@ void kernel_main(void) {
 	registry_mkdir("/sys");
 
 	meminfo_init();
+	proc_init();
 	
 	console_register();
 	
