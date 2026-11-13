@@ -204,6 +204,50 @@ void* vmm_get_kernel_page_dir(void) {
 	return (void*)((uint32_t)boot_page_dir - KERNEL_VIRT_OFFSET);
 }
 
+void vmm_get_user_usage(void* addr_space, vmm_usage_t* out) {
+	if (!out) {
+		return;
+	}
+
+	out->rss_pages = 0;
+	out->pt_pages = 0;
+
+	uint32_t dir_phys = (uint32_t)addr_space;
+	if (!dir_phys) {
+		return;
+	}
+
+	uint32_t saved_flags = irq_save_disable();
+	uint32_t saved_cr3 = read_cr3();
+	if (dir_phys != saved_cr3) {
+		write_cr3(dir_phys);
+	}
+
+	uint32_t* page_dir = current_page_dir();
+
+	out->pt_pages = 1;
+
+	for (uint32_t i = 0; i < KERNEL_PDE_START; i++) {
+		if (!(page_dir[i] & PAGE_PRESENT)) {
+			continue;
+		}
+
+		out->pt_pages++;
+
+		uint32_t* table = pte_get_table(i);
+		for (uint32_t j = 0; j < PAGE_DIR_ENTRIES; j++) {
+			if (table[j] & PAGE_PRESENT) {
+				out->rss_pages++;
+			}
+		}
+	}
+
+	if (dir_phys != saved_cr3) {
+		write_cr3(saved_cr3);
+	}
+	irq_restore(saved_flags);
+}
+
 void vmm_destroy_page_dir(void* addr_space) {
 	uint32_t dir_phys = (uint32_t)addr_space;
 	if (!dir_phys || dir_phys == (uint32_t)vmm_get_kernel_page_dir()) {

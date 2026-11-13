@@ -5,6 +5,11 @@
 
 #include <stdint.h>
 
+typedef struct {
+	uint32_t rss_pages;
+	uint32_t pt_pages;
+} vmm_usage_t;
+
 void vmm_init(void);
 void vmm_map(uint32_t virt_addr, uint32_t phys_addr, uint32_t flags);
 void vmm_unmap(uint32_t virt_addr);
@@ -22,6 +27,7 @@ void* vmm_create_page_dir(void);
 /* Frees every user frame, page table, and the page directory of a created address space. */
 void vmm_destroy_page_dir(void* addr_space);
 void* vmm_get_kernel_page_dir(void);
+void vmm_get_user_usage(void* addr_space, vmm_usage_t* out);
 
 /*
  * Mapping primitives backing the userspace anonymous page allocator

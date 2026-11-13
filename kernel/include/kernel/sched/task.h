@@ -73,12 +73,20 @@ typedef struct task_info {
 	uint32_t exit_code;
 	pid_t pid_waiting_on;
 	int64_t wake_at;
+	
 	int no_in_streams;
 	int no_out_streams;
+	
 	uint32_t open_fds;
+	
 	char name[TASK_NAME_MAX];
 	pid_t creator_pid;
 	char cmdline[TASK_CMDLINE_MAX];
+	
+	uint32_t vm_pages;
+	uint32_t rss_pages;
+	uint32_t pt_pages;
+	uint32_t kstack_pages;
 } task_info_t;
 
 task_t* task_create(void (*entry)(void));

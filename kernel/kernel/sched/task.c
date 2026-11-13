@@ -764,6 +764,20 @@ int task_get_info(pid_t pid, task_info_t* out) {
 		out->open_fds = task_count_open_fds(t);
 		out->creator_pid = t->creator_pid;
 
+		if (t->addr_space) {
+			memman_usage_t usage;
+			memman_get_addr_space_usage(t->addr_space, &usage);
+			out->vm_pages = usage.rss_pages;
+			out->rss_pages = usage.rss_pages;
+			out->pt_pages = usage.pt_pages;
+		} else {
+			out->vm_pages = 0;
+			out->rss_pages = 0;
+			out->pt_pages = 0;
+		}
+
+		out->kstack_pages = t->kernel_stack ? TASK_KERNEL_STACK_PAGES : 0;
+
 		memcpy(out->name, t->name, TASK_NAME_MAX);
 		memcpy(out->cmdline, t->cmdline, TASK_CMDLINE_MAX);
 

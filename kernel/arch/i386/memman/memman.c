@@ -56,6 +56,18 @@ void* memman_get_kernel_addr_space(void) {
 	return vmm_get_kernel_page_dir();
 }
 
+void memman_get_addr_space_usage(addr_space_t addr_space, memman_usage_t* out) {
+	vmm_usage_t usage;
+
+	if (!out) {
+		return;
+	}
+
+	vmm_get_user_usage(addr_space, &usage);
+	out->rss_pages = usage.rss_pages;
+	out->pt_pages = usage.pt_pages;
+}
+
 void* memman_create_addr_space(void) {
 	return vmm_create_page_dir();
 }

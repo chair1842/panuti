@@ -11,6 +11,11 @@
 
 typedef void* addr_space_t;
 
+typedef struct {
+	uint32_t rss_pages;
+	uint32_t pt_pages;
+} memman_usage_t;
+
 void memman_map(uint32_t virt, uint32_t phys, uint32_t flags);
 void memman_unmap(uint32_t virt);
 void memman_map_in(addr_space_t addr_space, uint32_t virt, uint32_t phys, uint32_t flags);
@@ -34,6 +39,7 @@ addr_space_t memman_create_addr_space(void);
 /* Frees every user frame, page table, and the page directory of an address space. */
 void memman_destroy_addr_space(addr_space_t addr_space);
 addr_space_t memman_get_kernel_addr_space(void);
+void memman_get_addr_space_usage(addr_space_t addr_space, memman_usage_t* out);
 
 // Anonymous page mapping primitives for the userspace allocator. See the
 // matching comments in vmm.h for the contracts.

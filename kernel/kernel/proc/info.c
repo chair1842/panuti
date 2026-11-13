@@ -24,6 +24,10 @@ typedef enum {
 	PROC_NAME,
 	PROC_CPID,
 	PROC_CMDLINE,
+	PROC_VM,
+	PROC_RSS,
+	PROC_PT,
+	PROC_KSTACK,
 } proc_kind_t;
 
 typedef struct {
@@ -102,6 +106,14 @@ static size_t proc_render(char* buf, size_t cap, proc_kind_t kind, const task_in
 			return proc_format(buf, cap, "%u\n", info->creatorpid);
 		case PROC_CMDLINE:
 			return proc_format(buf, cap, "%s\n", info->cmdline);
+		case PROC_VM:
+			return proc_format(buf, cap, "%u\n", info->vm_pages);
+		case PROC_RSS:
+			return proc_format(buf, cap, "%u\n", info->rss_pages);
+		case PROC_PT:
+			return proc_format(buf, cap, "%u\n", info->pt_pages);
+		case PROC_KSTACK:
+			return proc_format(buf, cap, "%u\n", info->kstack_pages);
 	}
 
 	return 0;
@@ -172,6 +184,10 @@ PROC_OPS(proc_fds, PROC_FDS);
 PROC_OPS(proc_name, PROC_NAME);
 PROC_OPS(proc_cpid, PROC_CPID);
 PROC_OPS(proc_cmdline, PROC_CMDLINE);
+PROC_OPS(proc_vm, PROC_VM);
+PROC_OPS(proc_rss, PROC_RSS);
+PROC_OPS(proc_pt, PROC_PT);
+PROC_OPS(proc_kstack, PROC_KSTACK);
 
 typedef struct {
 	const char* name;
@@ -189,6 +205,10 @@ static const proc_file_t proc_files[] = {
 	{"name", &proc_name_ops},
 	{"cpid", &proc_cpid_ops},
 	{"cmdline", &proc_cmdline_ops},
+	{"vm", &proc_vm_ops},
+	{"rss", &proc_rss_ops},
+	{"pt", &proc_pt_ops},
+	{"kstack", &proc_kstack_ops},
 };
 
 void proc_init(void) {
