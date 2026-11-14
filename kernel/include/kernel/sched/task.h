@@ -18,7 +18,7 @@
 #define TASK_NAME_MAX 64
 #define TASK_CMDLINE_MAX 512
 
-#define TASK_KILL_EXIT_CODE (128 + 15)
+#define TASK_KILL_EXIT_CODE 256
 
 typedef uint32_t pid_t;
 
@@ -113,7 +113,6 @@ int task_build_user_argv_stack(
     size_t max_bytes,
     uint32_t* out_esp
 ); 
-
 pid_t task_procreate(task_t* caller, const procreate_args_t* args);
 int task_wait_pid(pid_t target, int* exit_code_out);
 void task_wake_waiters(pid_t exited_pid);
