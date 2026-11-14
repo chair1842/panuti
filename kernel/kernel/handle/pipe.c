@@ -47,6 +47,27 @@ static void pipe_wake_all(task_t** list, int* count) {
 	*count = 0;
 }
 
+static void pipe_register_waiter(task_t** list, int* count, task_t* t) {
+	for (int i = 0; i < *count; i++) {
+		if (list[i] == t) {
+			return;
+		}
+	}
+
+	if (*count < PIPE_MAX_WAITERS) {
+		list[(*count)++] = t;
+	}
+}
+
+static void pipe_unregister_waiter(task_t** list, int* count, task_t* t) {
+	for (int i = 0; i < *count; i++) {
+		if (list[i] == t) {
+			list[i] = list[--*count];
+			return;
+		}
+	}
+}
+
 int pipe_read(void* impl, void* buf, size_t len) {
 	pipe_end_t* end = impl;
 	if (end->is_write_end) {
@@ -67,13 +88,23 @@ int pipe_read(void* impl, void* buf, size_t len) {
 			break;
 		}
 
-		if (p->no_readers_waiting < PIPE_MAX_WAITERS) {
-			p->readers_waiting[p->no_readers_waiting++] = sched_current();
+		task_t* self = sched_current();
+		if (self->kill_pending) {
+			irq_restore(flags);
+			return -1;
 		}
 
-		task_block(sched_current());
+		pipe_register_waiter(p->readers_waiting, &p->no_readers_waiting, self);
+
+		task_block(self);
 
 		// resumes here once task_wake() is called on us
+		if (self->kill_pending) {
+			pipe_unregister_waiter(p->readers_waiting, &p->no_readers_waiting, self);
+			irq_restore(flags);
+			return -1;
+		}
+
 		irq_restore(flags);
 	}
 
@@ -107,13 +138,23 @@ int pipe_write(void* impl, const void* buf, size_t len) {
 			break;
 		}
 
-		if (p->no_writers_waiting < PIPE_MAX_WAITERS) {
-			p->writers_waiting[p->no_writers_waiting++] = sched_current();
+		task_t* self = sched_current();
+		if (self->kill_pending) {
+			irq_restore(flags);
+			return -1;
 		}
 
-		task_block(sched_current());
+		pipe_register_waiter(p->writers_waiting, &p->no_writers_waiting, self);
+
+		task_block(self);
 
 		// resumes here once task_wake() is called on us
+		if (self->kill_pending) {
+			pipe_unregister_waiter(p->writers_waiting, &p->no_writers_waiting, self);
+			irq_restore(flags);
+			return -1;
+		}
+
 		irq_restore(flags);
 	}
 

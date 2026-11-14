@@ -18,6 +18,8 @@
 #define TASK_NAME_MAX 64
 #define TASK_CMDLINE_MAX 512
 
+#define TASK_KILL_EXIT_CODE (128 + 15)
+
 typedef uint32_t pid_t;
 
 typedef enum task_state {
@@ -66,6 +68,9 @@ typedef struct task {
 	pid_t pid_waiting_on;
 	
 	int64_t wake_at;
+	
+	bool kill_pending;
+	bool killable;
 } task_t;
 
 typedef struct task_info {
@@ -87,6 +92,8 @@ typedef struct task_info {
 	uint32_t rss_pages;
 	uint32_t pt_pages;
 	uint32_t kstack_pages;
+	
+	bool kill_pending;
 } task_info_t;
 
 task_t* task_create(void (*entry)(void));
@@ -110,6 +117,8 @@ int task_build_user_argv_stack(
 pid_t task_procreate(task_t* caller, const procreate_args_t* args);
 int task_wait_pid(pid_t target, int* exit_code_out);
 void task_wake_waiters(pid_t exited_pid);
+void task_do_exit(uint32_t exit_code);
+task_t* task_find(pid_t pid);
 void task_wake_sleepers(int64_t now);
 handle_t* task_return_hslot(uint32_t slot, task_t* task);
 void task_set_cwd(task_t* task, inode_t* cwd);

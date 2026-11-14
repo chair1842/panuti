@@ -238,6 +238,27 @@ static int serial_data_open(void* impl, void** out_impl) {
 	return 0;
 }
 
+static void serial_register_rx_waiter(uart_t* u, task_t* t) {
+	for (int i = 0; i < u->rx_n_waiters; i++) {
+		if ((task_t*)u->rx_waiters[i] == t) {
+			return;
+		}
+	}
+
+	if (u->rx_n_waiters < SERIAL_MAX_WAITERS) {
+		u->rx_waiters[u->rx_n_waiters++] = t;
+	}
+}
+
+static void serial_unregister_rx_waiter(uart_t* u, task_t* t) {
+	for (int i = 0; i < u->rx_n_waiters; i++) {
+		if ((task_t*)u->rx_waiters[i] == t) {
+			u->rx_waiters[i] = u->rx_waiters[--u->rx_n_waiters];
+			return;
+		}
+	}
+}
+
 static int serial_data_read(void* impl, void* buf, size_t len) {
 	uart_t* u = (uart_t*)impl;
 	uint8_t* out = (uint8_t*)buf;
@@ -261,11 +282,21 @@ static int serial_data_read(void* impl, void* buf, size_t len) {
 			break;
 		}
 
-		if (u->rx_n_waiters < SERIAL_MAX_WAITERS) {
-			u->rx_waiters[u->rx_n_waiters++] = sched_current();
+		task_t* self = sched_current();
+		if (self->kill_pending) {
+			irq_restore(flags);
+			return (int)n;
 		}
-		
-		task_block(sched_current());
+
+		serial_register_rx_waiter(u, self);
+
+		task_block(self);
+
+		if (self->kill_pending) {
+			serial_unregister_rx_waiter(u, self);
+			irq_restore(flags);
+			return (int)n;
+		}
 
 		irq_restore(flags);
 		flags = irq_save_disable();

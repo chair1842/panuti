@@ -79,6 +79,7 @@ void kernel_main(void) {
 		kpanic("failed to create pint task from ELF\n");
 	} else {
 		task_set_name(pint_task, "pint");
+		pint_task->killable = false;
 		klog(KLOG_INFO, "pint task created, pid=%d\n", pint_task->pid);
 	}
 	

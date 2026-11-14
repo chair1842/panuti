@@ -46,9 +46,16 @@ uint64_t pit_get_ticks(void) {
 }
 
 void pit_handler(registers_t *reg) {
-	(void)reg;
 	ticks++;
 	sleep_tick();
 	beepr_tick();
+
+	if ((reg->cs & 3) == 3) {
+		task_t* current = sched_current();
+		if (current && current->kill_pending) {
+			task_do_exit(TASK_KILL_EXIT_CODE);
+		}
+	}
+
 	sched_schedule();
 }

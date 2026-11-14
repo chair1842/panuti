@@ -4,6 +4,8 @@
 #include <panuti/errno.h>
 #include <panuti/syscall/syscallno.h>
 #include <kernel/syscall/handlers.h>
+#include <kernel/sched/sched.h>
+#include <kernel/sched/task.h>
 
 syscall_handler_t syscall_handlers[256] = {
 	[SYSHANDLER_WRITE] = syshandler_write,
@@ -39,6 +41,7 @@ syscall_handler_t syscall_handlers[256] = {
 	[SYSHANDLER_SLEEP] = syshandler_sleep,
 	[SYSHANDLER_SETTMSP] = syshandler_settmsp,
 	[SYSHANDLER_SYNC] = syshandler_sync,
+	[SYSHANDLER_KILL] = syshandler_kill,
 };
 
 int32_t syscall_dispatch(uint32_t num, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
@@ -46,5 +49,12 @@ int32_t syscall_dispatch(uint32_t num, uint32_t a1, uint32_t a2, uint32_t a3, ui
 		return PANUTIERRNO_INVALIDSYSCALL;
 	}
 
-	return syscall_handlers[num](a1, a2, a3, a4);
+	int32_t ret = syscall_handlers[num](a1, a2, a3, a4);
+
+	task_t* current = sched_current();
+	if (current && current->kill_pending) {
+		task_do_exit(TASK_KILL_EXIT_CODE);
+	}
+
+	return ret;
 }

@@ -170,6 +170,10 @@ static inline int32_t panutisysf_sync(void) {
 	return panuti_syscall(SYSHANDLER_SYNC, 0, 0, 0, 0);
 }
 
+static inline int32_t panutisysf_kill(pid_t pid) {
+	return panuti_syscall(SYSHANDLER_KILL, (uint32_t)pid, 0, 0, 0);
+}
+
 #if defined(__cplusplus)
 }
 #endif

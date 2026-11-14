@@ -29,6 +29,13 @@ int32_t syshandler_wait(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		// waiter *before* the check so a child that already exited is reaped,
 		// and one that exits after this point finds us blocked.
 		uint32_t flags = irq_save_disable();
+
+		if (caller->kill_pending) {
+			caller->pid_waiting_on = 0;
+			irq_restore(flags);
+			return PANUTIERRNO_PLAINERR;
+		}
+
 		caller->pid_waiting_on = target;
 
 		int rc = task_wait_pid(target, &exit_code);
@@ -49,6 +56,13 @@ int32_t syshandler_wait(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		// with interrupts disabled; each task resumes with its own saved
 		// EFLAGS, so irq_restore() re-enables them once we're back.
 		task_block(caller);
+
+		if (caller->kill_pending) {
+			caller->pid_waiting_on = 0;
+			irq_restore(flags);
+			return PANUTIERRNO_PLAINERR;
+		}
+
 		irq_restore(flags);
 	}
 }

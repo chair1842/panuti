@@ -40,6 +40,7 @@ extern "C" {
 #define SYSHANDLER_SLEEP 30
 #define SYSHANDLER_SETTMSP 31
 #define SYSHANDLER_SYNC 32
+#define SYSHANDLER_KILL 33
 
 #if defined(__cplusplus)
 }

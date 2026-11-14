@@ -78,6 +78,7 @@ panuti/mmap/munmap.o \
 panuti/registry/mkfile.o \
 panuti/handle/seek.o \
 panuti/process/sleep.o \
+panuti/process/kill.o \
 stdlib/abort.o \
 
 OBJS=\

@@ -105,7 +105,8 @@ kernel/drivers/time/clock.o \
 kernel/ksleep.o \
 kernel/syscall/handlers/sleep.o \
 kernel/syscall/handlers/settmsp.o \
-kernel/syscall/handlers/sync.o
+kernel/syscall/handlers/sync.o \
+kernel/syscall/handlers/kill.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

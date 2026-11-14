@@ -105,4 +105,7 @@ int32_t syshandler_settmsp(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // flush all mounted filesystems
 int32_t syshandler_sync(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// request that a process terminate
+int32_t syshandler_kill(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

@@ -202,6 +202,8 @@ static task_t* task_alloc_common(void) {
 	t->creator_pid = 0;
 	t->name[0] = '\0';
 	t->cmdline[0] = '\0';
+	t->kill_pending = false;
+	t->killable = true;
 
 	irq_restore(flags);
 
@@ -235,6 +237,8 @@ task_t* task_create(void (*entry)(void)) {
 	if (!t) {
 		return nullptr;
 	}
+
+	t->killable = false;
 
 	task_init_stack(t, entry);
 	task_list_push(t);
@@ -679,6 +683,16 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 	return t->pid;
 }
 
+task_t* task_find(pid_t pid) {
+	for (task_t* t = task_list; t; t = t->task_next) {
+		if (t->state != TASK_NONE && t->pid == pid) {
+			return t;
+		}
+	}
+
+	return nullptr;
+}
+
 int task_wait_pid(pid_t target, int* exit_code_out) {
 	for (task_t* t = task_list; t; ) {
 		task_t* next = t->task_next;
@@ -711,6 +725,24 @@ void task_wake_waiters(pid_t exited_pid) {
 
 		t = next;
 	}
+}
+
+void task_do_exit(uint32_t exit_code) {
+	task_t* current = sched_current();
+	uint32_t flags = irq_save_disable();
+
+	if (current->kill_pending) {
+		exit_code = TASK_KILL_EXIT_CODE;
+	}
+
+	current->exit_code = exit_code;
+	current->kill_pending = false;
+	current->state = TASK_TERMINATED;
+	
+	task_wake_waiters(current->pid);
+	sched_schedule();
+
+	irq_restore(flags);
 }
 
 void task_wake_sleepers(int64_t now) {
@@ -755,6 +787,7 @@ int task_get_info(pid_t pid, task_info_t* out) {
 			continue;
 		}
 
+		// gen this is turning real dense ngl
 		out->state = t->state;
 		out->exit_code = t->exit_code;
 		out->pid_waiting_on = t->pid_waiting_on;
@@ -763,6 +796,7 @@ int task_get_info(pid_t pid, task_info_t* out) {
 		out->no_out_streams = t->no_out_streams;
 		out->open_fds = task_count_open_fds(t);
 		out->creator_pid = t->creator_pid;
+		out->kill_pending = t->kill_pending;
 
 		if (t->addr_space) {
 			memman_usage_t usage;

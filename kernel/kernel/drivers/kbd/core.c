@@ -20,6 +20,27 @@ typedef struct {
 static kbd_queue_t line_queue;
 static kbd_queue_t raw_queue;
 
+static void queue_register(kbd_queue_t* q, task_t* t) {
+	for (int i = 0; i < q->n_waiting; i++) {
+		if (q->waiting[i] == t) {
+			return;
+		}
+	}
+
+	if (q->n_waiting < KBD_MAX_WAITERS) {
+		q->waiting[q->n_waiting++] = t;
+	}
+}
+
+static void queue_unregister(kbd_queue_t* q, task_t* t) {
+	for (int i = 0; i < q->n_waiting; i++) {
+		if (q->waiting[i] == t) {
+			q->waiting[i] = q->waiting[--q->n_waiting];
+			return;
+		}
+	}
+}
+
 static void queue_push(kbd_queue_t* q, keypacket_t pkt) {
 	if (q->count == KBD_QUEUE_SIZE) {
 		// drop oldest packet
@@ -41,10 +62,21 @@ static int queue_read(kbd_queue_t* q, keypacket_t* out) {
 	uint32_t flags = irq_save_disable();
 
 	while (q->count == 0) {
-		if (q->n_waiting < KBD_MAX_WAITERS) {
-			q->waiting[q->n_waiting++] = sched_current();
+		task_t* self = sched_current();
+
+		if (self->kill_pending) {
+			irq_restore(flags);
+			return -1;
 		}
-		task_block(sched_current());
+
+		queue_register(q, self);
+		task_block(self);
+
+		if (self->kill_pending) {
+			queue_unregister(q, self);
+			irq_restore(flags);
+			return -1;
+		}
 	}
 
 	*out = q->buffer[q->head];

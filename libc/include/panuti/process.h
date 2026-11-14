@@ -24,6 +24,9 @@ int wait(pid_t pid, int* ec_out);
 // sleep for cs amount of centiseconds
 int sleep(int cs);
 
+// request that the process with pid terminate; 0 on success
+int kill(pid_t pid);
+
 #if defined(__cplusplus)
 }
 #endif
