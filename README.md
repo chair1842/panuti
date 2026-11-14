@@ -52,7 +52,7 @@ make sure to unmount before shutting down
 
 - ~~Free/used memory info exposed (`/sys/meminfo`)~~
 - ~~Processes exposed (`/sys/pid`)~~
-- kill (terminate) syscall
+- ~~kill (terminate) syscall~~
 - PCI enumeration (`/dvc/pci`)
 - ACPI poweroff & reboot
 - ~~`sync` syscall and pcrutils~~
