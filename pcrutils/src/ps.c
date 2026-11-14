@@ -22,7 +22,9 @@
 #define KIB_PER_MIB 1024UL
 #define KIB_PER_GIB (1024UL * 1024UL)
 
-#define PS_HEADER_COLOR "\x1b" "A" "\x07"
+// Header: black foreground on a light grey background (VGA attribute 0x70).
+// ESC 'A' <attribute-byte> sets the console attribute; ESC 'R' resets it.
+#define PS_HEADER_COLOR "\x1b" "A" "\x70"
 #define PS_COLOR_RESET "\x1b" "R"
 
 typedef struct {
