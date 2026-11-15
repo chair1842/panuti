@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+// uwu contants : 3
+
 #define ATA_REG_DATA 0x00
 #define ATA_REG_ERROR 0x01
 #define ATA_REG_FEATURES 0x01
@@ -39,14 +41,9 @@
 #define ATA_ER_BBK 0x80 // bad block
 
 #define ATA_CMD_READ_SECTORS 0x20
-// 0x25/0x35 are the ACS-4 READ/WRITE SECTORS EXT opcodes real drives expect.
-// note qemu 11.1 is unusable for exercising them: hw/ide/ide-internal.h names
-// 0x24 WIN_READ_EXT and 0x34 WIN_WRITE_EXT, so its ide_cmd_table hands our 0x25
-// to cmd_read_dma and a pio data phase never happens. patch qemu or test the
-// 48 bit path on hardware.
-#define ATA_CMD_READ_SECTORS_EXT 0x25
+#define ATA_CMD_READ_SECTORS_EXT 0x24
 #define ATA_CMD_WRITE_SECTORS 0x30
-#define ATA_CMD_WRITE_SECTORS_EXT 0x35
+#define ATA_CMD_WRITE_SECTORS_EXT 0x34
 #define ATA_CMD_PACKET 0xA0
 #define ATA_CMD_IDENTIFY_PACKET 0xA1
 #define ATA_CMD_IDENTIFY 0xEC
