@@ -11,6 +11,8 @@
 
 #define ATAPI_SECTOR_SIZE 2048
 
+#define ATAPI_DMA_MAX_SECTORS 256
+
 #define SCSI_READ_CAPACITY 0x25
 #define SCSI_READ10 0x28
 
@@ -98,6 +100,106 @@ static int ide_send_packet(ide_drive_t* drv, const uint8_t cdb[12], void* buf, s
 	return rc;
 }
 
+static int ide_send_packet_dma_locked(ide_drive_t* drv, const uint8_t cdb[12], void* buf, size_t transfer_bytes) {
+	ide_channel_t* ch = drv->channel;
+
+	if ((transfer_bytes % ATAPI_SECTOR_SIZE) != 0 || ((uintptr_t)buf & (ATAPI_SECTOR_SIZE - 1)) != 0) {
+		klog(
+			KLOG_WARN,
+			"atapi: DMA transfer of %zu bytes at %p is not sector aligned\n",
+			transfer_bytes,
+			buf
+		);
+		
+		return BLOCK_ERR_IO;
+	}
+
+	if (ide_poll(ch) < 0) {
+		return BLOCK_ERR_IO;
+	}
+
+	if (ide_dma_prepare(ch, buf, transfer_bytes) != 0) {
+		klog(
+			KLOG_WARN,
+			"atapi: cannot describe %zu bytes for DMA on 0x%x\n",
+			transfer_bytes,
+			ch->io_base
+		);
+		
+		return BLOCK_ERR_IO;
+	}
+
+	ide_write_reg(ch, ATA_REG_FEATURES, ATA_FEATURE_PACKET_DMA);
+
+	uint16_t byte_count = (uint16_t)transfer_bytes;
+	ide_write_reg(ch, ATA_REG_LBA_MID, byte_count & 0xFF);
+	ide_write_reg(ch, ATA_REG_LBA_HI, byte_count >> 8);
+
+	ide_write_reg(ch, ATA_REG_DRIVE_HEAD, drv->index ? ATA_HEAD_SLAVE : ATA_HEAD_MASTER);
+	ide_write_reg(ch, ATA_REG_COMMAND, ATA_CMD_PACKET);
+
+	int status = ide_wait_drq(ch, IDE_TIMEOUT_TICKS);
+	if (status < 0) {
+		return BLOCK_ERR_IO;
+	}
+
+	if (status & ATA_SR_ERR) {
+		klog(
+			KLOG_WARN,
+			"atapi: PACKET aborted on 0x%x %s: %s\n",
+			ch->io_base,
+			drv->index ? "slave" : "master",
+			ide_error_string(ide_read_reg(ch, ATA_REG_ERROR))
+		);
+		
+		return BLOCK_ERR_IO;
+	}
+
+	outsw(ch->io_base + ATA_REG_DATA, cdb, 6);
+
+	ide_dma_start(ch, false);
+
+	if (ide_dma_wait(ch, ATA_TIMEOUT_TICKS) < 0) {
+		ide_dma_stop(ch);
+		klog(
+			KLOG_WARN,
+			"atapi: DMA read stalled on 0x%x %s\n",
+			ch->io_base,
+			drv->index ? "slave" : "master"
+		);
+		
+		return BLOCK_ERR_IO;
+	}
+
+	ide_dma_stop(ch);
+
+	status = ide_wait_ready(ch, ATA_TIMEOUT_TICKS);
+	if (status < 0) {
+		klog(
+			KLOG_WARN,
+			"atapi: DMA transfer never finished on 0x%x %s\n",
+			ch->io_base,
+			drv->index ? "slave" : "master"
+		);
+		
+		return BLOCK_ERR_IO;
+	}
+
+	if (status & ATA_SR_ERR) {
+		klog(
+			KLOG_WARN,
+			"atapi: DMA transfer failed on 0x%x %s: %s\n",
+			ch->io_base,
+			drv->index ? "slave" : "master",
+			ide_error_string(ide_read_reg(ch, ATA_REG_ERROR))
+		);
+		
+		return BLOCK_ERR_IO;
+	}
+
+	return BLOCK_OK;
+}
+
 static inline uint32_t read_be32(const uint8_t* p) {
 	return ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) | ((uint32_t)p[2] << 8) | ((uint32_t)p[3]);
 }
@@ -116,26 +218,73 @@ static void atapi_read_capacity(ide_drive_t* drv, uint32_t* sectors) {
 
 static int atapi_read(void* impl, uint64_t block, void* buf, size_t count) {
 	ide_drive_t* drv = (ide_drive_t*)impl;
+	ide_channel_t* ch = drv->channel;
 	uint8_t* out = (uint8_t*)buf;
 
-	for (size_t i = 0; i < count; i++) {
-		uint8_t cdb[12] = { 0 };
-		cdb[0] = SCSI_READ10;
-		cdb[2] = (block >> 24) & 0xFF;
-		cdb[3] = (block >> 16) & 0xFF;
-		cdb[4] = (block >> 8) & 0xFF;
-		cdb[5] = block & 0xFF;
-		cdb[8] = 1; // 1 sector per packet
+	bool dma = drv->dma_ok && ch->dma_ok && ch->bounce && ch->bounce_size >= ATAPI_SECTOR_SIZE;
 
-		if (ide_send_packet(drv, cdb, out, ATAPI_SECTOR_SIZE) != BLOCK_OK) {
-			return BLOCK_ERR_IO;
+	size_t max_chunk = 1;
+
+	if (dma) {
+		max_chunk = ch->bounce_size / ATAPI_SECTOR_SIZE;
+
+		if (max_chunk > ATAPI_DMA_MAX_SECTORS) {
+			max_chunk = ATAPI_DMA_MAX_SECTORS;
 		}
 
-		out += ATAPI_SECTOR_SIZE;
-		block++;
+		if (max_chunk == 0) {
+			dma = false;
+			max_chunk = 1;
+		}
 	}
 
-	return BLOCK_OK;
+	ide_channel_acquire(ch);
+
+	int rc = BLOCK_OK;
+	size_t done = 0;
+
+	while (done < count) {
+		size_t chunk = count - done;
+		if (chunk > max_chunk) {
+			chunk = max_chunk;
+		}
+
+		uint32_t lba = (uint32_t)(block + done);
+
+		uint8_t cdb[12] = { 0 };
+		cdb[0] = SCSI_READ10;
+		cdb[2] = (lba >> 24) & 0xFF;
+		cdb[3] = (lba >> 16) & 0xFF;
+		cdb[4] = (lba >> 8) & 0xFF;
+		cdb[5] = lba & 0xFF;
+		cdb[7] = (chunk >> 8) & 0xFF;
+		cdb[8] = chunk & 0xFF;
+
+		if (dma) {
+			size_t bytes = chunk * ATAPI_SECTOR_SIZE;
+
+			rc = ide_send_packet_dma_locked(drv, cdb, ch->bounce, bytes);
+			if (rc == BLOCK_OK) {
+				memcpy(out + done * ATAPI_SECTOR_SIZE, ch->bounce, bytes);
+			}
+		} else {
+			rc = ide_send_packet_locked(drv, cdb, out + done * ATAPI_SECTOR_SIZE, ATAPI_SECTOR_SIZE);
+		}
+
+		if (rc != BLOCK_OK) {
+			if (dma) {
+				ide_dma_stop(ch);
+				ide_soft_reset(ch);
+			}
+			
+			break;
+		}
+
+		done += chunk;
+	}
+
+	ide_channel_release(ch);
+	return rc;
 }
 
 static int atapi_write(void* impl, uint64_t block, const void* buf, size_t count) {
