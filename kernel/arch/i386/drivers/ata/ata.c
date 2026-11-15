@@ -302,7 +302,7 @@ static int ata_xfer_chunk_dma(ide_drive_t* drv, uint64_t lba, void* buf, size_t 
 			KLOG_WARN,
 			"ata: DMA transfer never finished on 0x%x %s\n",
 			ch->io_base,
-			drv->index ? "slave" : "master
+			drv->index ? "slave" : "master"
 		);
 		
 		return BLOCK_ERR_IO;
