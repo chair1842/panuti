@@ -22,6 +22,16 @@ uint16_t inw(uint16_t port) {
 	return ret;
 }
 
+void outl(uint16_t port, uint32_t value) {
+	__asm__ volatile ("outl %0, %1" : : "a"(value), "Nd"(port));
+}
+
+uint32_t inl(uint16_t port) {
+	uint32_t ret;
+	__asm__ volatile ("inl %1, %0" : "=a"(ret) : "Nd"(port));
+	return ret;
+}
+
 void outsw(uint16_t port, const void* buffer, size_t count) {
 	__asm__ volatile ("rep outsw" : "+S"(buffer), "+c"(count) : "d"(port) : "memory");
 }
