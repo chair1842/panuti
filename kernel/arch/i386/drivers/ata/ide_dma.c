@@ -6,7 +6,9 @@
 #include <kernel/klog.h>
 #include <kernel/memman/memman.h>
 #include <kernel/memman/vmalloc.h>
+#include <kernel/mem/usr.h>
 #include <kernel/pci.h>
+#include <kernel/timer.h>
 
 #define IDE_BM_BOUNCE_PAGES 32
 
@@ -59,6 +61,131 @@ static int ide_dma_channel_init(ide_channel_t* ch, uint16_t bm_base, int bus) {
 	return 0;
 }
 
+static int build_prd(ide_channel_t* ch, void* buf, size_t bytes) {
+	size_t left = bytes;
+	uintptr_t virt = (uintptr_t)buf;
+	size_t entries = 0;
+
+	if (bytes == 0) {
+		return -1;
+	}
+
+	while (left > 0) {
+		if (entries >= IDE_PRD_ENTRIES) {
+			return -1;
+		}
+
+		uint32_t page = (uint32_t)(virt & ~(uintptr_t)0xFFF);
+		uint32_t offset = (uint32_t)(virt & 0xFFF);
+		size_t len = 4096 - offset;
+
+		if (len > left) {
+			len = left;
+		}
+
+		uint32_t phys = memman_get_phys(page);
+		if (!phys) {
+			return -1;
+		}
+
+		ch->prd[entries].addr = phys + offset;
+		ch->prd[entries].count = (uint16_t)len;
+		ch->prd[entries].flags = 0;
+		entries++;
+
+		virt += len;
+		left -= len;
+	}
+
+	ch->prd[entries - 1].flags = IDE_PRD_EOT;
+	return (int)entries;
+}
+
+bool ide_dma_needs_bounce(const void* buf, size_t bytes) {
+	uintptr_t start = (uintptr_t)buf;
+
+	if (start < USER_SPACE_END) {
+		return true;
+	}
+
+	return bytes > 0 && start > (uintptr_t)-1 - (bytes - 1);
+}
+
+int ide_dma_prepare(ide_channel_t* ch, void* buf, size_t bytes) {
+	if (!ch->dma_ok || !ch->prd) {
+		return -1;
+	}
+
+	if (build_prd(ch, buf, bytes) < 0) {
+		return -1;
+	}
+
+	outl(ch->bm_base + IDE_BM_PRDT, ch->prd_phys);
+
+	uint8_t status = inb(ch->bm_base + IDE_BM_STATUS);
+	outb(
+		ch->bm_base + IDE_BM_STATUS, 
+		(uint8_t)((status & IDE_BM_STATUS_TIMING) | IDE_BM_STATUS_ERROR | IDE_BM_STATUS_IRQ)
+	);
+
+	outb(ch->ctrl_base + ATA_REG_DEV_CTRL, ATA_DCR_NIEN);
+
+	return 0;
+}
+
+void ide_dma_start(ide_channel_t* ch, bool write) {
+	if (!ch->dma_ok) {
+		return;
+	}
+
+	uint8_t command = IDE_BM_CMD_START;
+	if (!write) {
+		command |= IDE_BM_CMD_READ;
+	}
+
+	outb(ch->bm_base + IDE_BM_CMD, command);
+}
+
+int ide_dma_wait(ide_channel_t* ch, uint32_t ticks) {
+	if (!ch->dma_ok) {
+		return -1;
+	}
+
+	uint32_t timeout = timer_get_ticks() + ticks;
+
+	while (true) {
+		uint8_t status = inb(ch->bm_base + IDE_BM_STATUS);
+
+		if (status & IDE_BM_STATUS_ERROR) {
+			return -1;
+		}
+
+		if (!(status & IDE_BM_STATUS_ACTIVE)) {
+			return 0;
+		}
+
+		if (timer_get_ticks() > timeout) {
+			return -1;
+		}
+
+		__asm__ __volatile__("hlt");
+	}
+}
+
+void ide_dma_stop(ide_channel_t* ch) {
+	if (!ch->dma_ok) {
+		return;
+	}
+
+	outb(ch->bm_base + IDE_BM_CMD, 0);
+
+	uint8_t status = inb(ch->bm_base + IDE_BM_STATUS);
+	outb(
+		ch->bm_base + IDE_BM_STATUS,
+		(uint8_t)((status & IDE_BM_STATUS_TIMING) | IDE_BM_STATUS_ERROR | IDE_BM_STATUS_IRQ)
+	);
+}
+
 int ide_dma_init(void) {
 	pci_device_info_t dev;
 
@@ -73,6 +200,7 @@ int ide_dma_init(void) {
 			"ide: %02x:%02x.%x is not a type-0 device, bus master DMA unavailable\n",
 			dev.bus, dev.device, dev.function
 		);
+		
 		return -1;
 	}
 
@@ -82,6 +210,7 @@ int ide_dma_init(void) {
 			"ide: %02x:%02x.%x is not bus master capable (prog-if 0x%02x), DMA unavailable\n",
 			dev.bus, dev.device, dev.function, dev.prog_if
 		);
+		
 		return -1;
 	}
 

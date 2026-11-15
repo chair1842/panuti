@@ -18,6 +18,8 @@
 // but 128 keeps the chunks a power of two and comfortably under the limit
 #define ATA_CHUNK_SECTORS 128
 
+#define ATA_DMA_CHUNK_SECTORS 256
+
 // rep insw/outsw take their counter in cx, so a single rep is capped at 65535
 // words. 32768 leaves headroom and lands on a tidy 64 KiB
 #define ATA_MAX_TRANSFER_WORDS 32768
@@ -107,6 +109,22 @@ static void ata_hob(ide_channel_t* ch, bool enable) {
 	outb(ch->ctrl_base + ATA_REG_DEV_CTRL, v);
 }
 
+static bool ata_use_lba48(ide_drive_t* drv, uint64_t lba, size_t sectors) {
+	if (!drv->lba48) {
+		return false;
+	}
+
+	if (lba > ATA_MAX_LBA28) {
+		return true;
+	}
+
+	if (sectors == 0) {
+		return false;
+	}
+
+	return lba + sectors - 1 > ATA_MAX_LBA28;
+}
+
 // report whatever the drive put in the error register, then swallow it
 static void ata_report(ide_drive_t* drv, const char* what) {
 	ide_channel_t* ch = drv->channel;
@@ -146,7 +164,7 @@ static void ata_issue(ide_drive_t* drv, uint8_t command) {
 // one chunk, one command. read pulls sectors in, write pushes them out
 static int ata_xfer_chunk(ide_drive_t* drv, uint64_t lba, void* buf, size_t sectors, bool write) {
 	ide_channel_t* ch = drv->channel;
-	bool use_lba48 = drv->lba48 && lba > ATA_MAX_LBA28;
+	bool use_lba48 = ata_use_lba48(drv, lba, sectors);
 	size_t words = drv->sector_size / 2;
 
 	if (ide_wait_ready(ch, ATA_TIMEOUT_TICKS) < 0) {
@@ -228,6 +246,87 @@ static int ata_xfer_chunk(ide_drive_t* drv, uint64_t lba, void* buf, size_t sect
 	return BLOCK_OK;
 }
 
+static int ata_xfer_chunk_dma(ide_drive_t* drv, uint64_t lba, void* buf, size_t sectors, bool write) {
+	ide_channel_t* ch = drv->channel;
+	bool use_lba48 = ata_use_lba48(drv, lba, sectors);
+	size_t bytes = sectors * drv->sector_size;
+
+	if (ide_wait_ready(ch, ATA_TIMEOUT_TICKS) < 0) {
+		klog(KLOG_WARN, "ata: drive stuck busy on 0x%x %s\n", ch->io_base, drv->index ? "slave" : "master");
+		return BLOCK_ERR_IO;
+	}
+
+	ata_setup_taskfile(drv, lba, sectors, use_lba48);
+
+	if (ide_dma_prepare(ch, buf, bytes) != 0) {
+		klog(
+			KLOG_WARN,
+			"ata: cannot describe %zu bytes for DMA on 0x%x %s\n",
+			bytes,
+			ch->io_base,
+			drv->index ? "slave" : "master"
+		);
+		
+		return BLOCK_ERR_IO;
+	}
+
+	uint8_t command;
+	if (write) {
+		command = use_lba48 ? ATA_CMD_WRITE_DMA_EXT : ATA_CMD_WRITE_DMA;
+	} else {
+		command = use_lba48 ? ATA_CMD_READ_DMA_EXT : ATA_CMD_READ_DMA;
+	}
+
+	ata_issue(drv, command);
+	ide_dma_start(ch, write);
+
+	if (ide_dma_wait(ch, ATA_TIMEOUT_TICKS) < 0) {
+		ide_dma_stop(ch);
+		klog(
+			KLOG_WARN,
+			"ata: DMA %s stalled on 0x%x %s, lba %llu\n",
+			write ? "write" : "read",
+			ch->io_base,
+			drv->index ? "slave" : "master",
+			(unsigned long long)lba
+		);
+		
+		return BLOCK_ERR_IO;
+	}
+
+	ide_dma_stop(ch);
+
+	int status = ide_wait_ready(ch, ATA_TIMEOUT_TICKS);
+	if (status < 0) {
+		klog(
+			KLOG_WARN,
+			"ata: DMA transfer never finished on 0x%x %s\n",
+			ch->io_base,
+			drv->index ? "slave" : "master
+		);
+		
+		return BLOCK_ERR_IO;
+	}
+
+	if (status & ATA_SR_ERR) {
+		uint8_t error = ide_read_reg(ch, ATA_REG_ERROR);
+		if (error & ATA_ER_MC) {
+			klog(
+				KLOG_WARN,
+				"ata: media changed mid-transfer on 0x%x %s, results are garbage\n",
+				ch->io_base,
+				drv->index ? "slave" : "master"
+			);
+		} else {
+			ata_report(drv, write ? "WRITE DMA" : "READ DMA");
+		}
+		
+		return BLOCK_ERR_IO;
+	}
+
+	return BLOCK_OK;
+}
+
 // tell the drive to push its write cache out to the platters. a drive that
 // admits it has a volatile write cache is telling us our data is still in
 // ram, so this is not optional after a write
@@ -283,15 +382,38 @@ static int ata_rw(ide_drive_t* drv, uint64_t lba, void* buf, size_t count, bool 
 		return BLOCK_ERR_INVAL;
 	}
 
-	// a chunk has to fit both the taskfile's 8 bit sector count and cx in
-	// the rep insw that moves the data. on a 4096 byte advanced format drive
-	// the rep is the tighter of the two
-	size_t max_chunk = ((size_t)ATA_MAX_TRANSFER_WORDS * 2) / drv->sector_size;
+	bool dma = drv->dma_ok;
+	bool bounce = false;
+
+	if (dma) {
+		bounce = ide_dma_needs_bounce(buf, count * drv->sector_size);
+
+		if (bounce && (!ch->bounce || ch->bounce_size < drv->sector_size)) {
+			dma = false;
+			bounce = false;
+		}
+	}
+
+	size_t max_chunk;
+
+	if (dma) {
+		max_chunk = ATA_DMA_CHUNK_SECTORS;
+
+		if (bounce) {
+			size_t fit = ch->bounce_size / drv->sector_size;
+			if (fit < max_chunk) {
+				max_chunk = fit;
+			}
+		}
+	} else {
+		max_chunk = ((size_t)ATA_MAX_TRANSFER_WORDS * 2) / drv->sector_size;
+		if (max_chunk > ATA_CHUNK_SECTORS) {
+			max_chunk = ATA_CHUNK_SECTORS;
+		}
+	}
+
 	if (max_chunk == 0) {
 		max_chunk = 1;
-	}
-	if (max_chunk > ATA_CHUNK_SECTORS) {
-		max_chunk = ATA_CHUNK_SECTORS;
 	}
 
 	ide_channel_acquire(ch);
@@ -305,13 +427,27 @@ static int ata_rw(ide_drive_t* drv, uint64_t lba, void* buf, size_t count, bool 
 			chunk = max_chunk;
 		}
 
-		rc = ata_xfer_chunk(drv, lba + done, (uint8_t*)buf + done * drv->sector_size, chunk, write);
+		void* chunk_buf = (uint8_t*)buf + done * drv->sector_size;
+		void* xfer_buf = bounce ? ch->bounce : chunk_buf;
+
+		if (bounce && write) {
+			memcpy(xfer_buf, chunk_buf, chunk * drv->sector_size);
+		}
+
+		if (dma) {
+			rc = ata_xfer_chunk_dma(drv, lba + done, xfer_buf, chunk, write);
+		} else {
+			rc = ata_xfer_chunk(drv, lba + done, xfer_buf, chunk, write);
+		}
+
 		if (rc != BLOCK_OK) {
-			// the drive is in an unknown state after a failed command and
-			// the next one may read garbage off it. reset it so the retry
-			// starts from a known-good state
+			ide_dma_stop(ch);
 			ide_soft_reset(ch);
 			break;
+		}
+
+		if (bounce && !write) {
+			memcpy(chunk_buf, xfer_buf, chunk * drv->sector_size);
 		}
 
 		done += chunk;

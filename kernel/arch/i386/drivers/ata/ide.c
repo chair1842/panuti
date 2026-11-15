@@ -122,6 +122,8 @@ void ide_channel_release(ide_channel_t* ch) {
 }
 
 void ide_soft_reset(ide_channel_t* ch) {
+	ide_dma_stop(ch);
+
 	outb(ch->ctrl_base + ATA_REG_DEV_CTRL, ATA_DCR_SRST | ATA_DCR_NIEN);
 
 	for (volatile int i = 0; i < 1000000; i++) {

@@ -141,6 +141,12 @@ void ide_soft_reset(ide_channel_t* ch);
 
 int ide_dma_init(void);
 
+bool ide_dma_needs_bounce(const void* buf, size_t bytes);
+int ide_dma_prepare(ide_channel_t* ch, void* buf, size_t bytes);
+void ide_dma_start(ide_channel_t* ch, bool write);
+int ide_dma_wait(ide_channel_t* ch, uint32_t ticks);
+void ide_dma_stop(ide_channel_t* ch);
+
 int ide_wait_ready(ide_channel_t* ch, uint32_t ticks);
 
 int ide_wait_drq(ide_channel_t* ch, uint32_t ticks);
