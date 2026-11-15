@@ -5,6 +5,7 @@
 #include <kernel/tty.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <kernel/serial/uart.h>
 
 #define KLOG_MSG_MAX 256
 

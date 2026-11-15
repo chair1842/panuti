@@ -157,21 +157,41 @@ static int ide_send_packet_dma_locked(ide_drive_t* drv, const uint8_t cdb[12], v
 
 	outsw(ch->io_base + ATA_REG_DATA, cdb, 6);
 
+	ide_read_reg(ch, ATA_REG_STATUS);
+
+	uint8_t prev_control = ch->control;
+	ide_dma_arm(ch);
+	ide_control_update(ch, 0, ATA_DCR_NIEN);
+
 	ide_dma_start(ch, false);
 
-	if (ide_dma_wait(ch, ATA_TIMEOUT_TICKS) < 0) {
-		ide_dma_stop(ch);
+	int wait = ide_dma_wait(ch, ATA_TIMEOUT_TICKS);
+
+	ide_dma_stop(ch);
+	ide_control_write(ch, prev_control);
+
+	if (wait < 0) {
 		klog(
 			KLOG_WARN,
-			"atapi: DMA read stalled on 0x%x %s\n",
+			"atapi: DMA read %s on 0x%x %s\n",
+			wait == IDE_DMA_KILLED ? "interrupted" : "stalled",
 			ch->io_base,
 			drv->index ? "slave" : "master"
 		);
-		
+
 		return BLOCK_ERR_IO;
 	}
 
-	ide_dma_stop(ch);
+	if (ch->dma_status & IDE_BM_STATUS_ERROR) {
+		klog(
+			KLOG_WARN,
+			"atapi: bus master DMA error on 0x%x %s\n",
+			ch->io_base,
+			drv->index ? "slave" : "master"
+		);
+
+		return BLOCK_ERR_IO;
+	}
 
 	status = ide_wait_ready(ch, ATA_TIMEOUT_TICKS);
 	if (status < 0) {
@@ -193,7 +213,7 @@ static int ide_send_packet_dma_locked(ide_drive_t* drv, const uint8_t cdb[12], v
 			drv->index ? "slave" : "master",
 			ide_error_string(ide_read_reg(ch, ATA_REG_ERROR))
 		);
-		
+
 		return BLOCK_ERR_IO;
 	}
 

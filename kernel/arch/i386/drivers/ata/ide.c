@@ -6,6 +6,7 @@
 #include "../../intpt/handlers/main.h"
 #include <kernel/timer.h>
 #include <kernel/klog.h>
+#include <kernel/sched/sched.h>
 
 #define ATA_IRQ14_VECTOR 46
 #define ATA_IRQ15_VECTOR 47
@@ -13,21 +14,56 @@
 static ide_channel_t primary = {
 	.io_base = ATA_PRIMARY_IO,
 	.ctrl_base = ATA_PRIMARY_CTRL,
+	.control = ATA_DCR_NIEN, // NIEN 💔🫩
 };
 
 static ide_channel_t secondary = {
 	.io_base = ATA_SECONDARY_IO,
 	.ctrl_base = ATA_SECONDARY_CTRL,
+	.control = ATA_DCR_NIEN,
 };
+
+static void ide_dma_irq(ide_channel_t* ch) {
+	if (!ch->dma_ok) {
+		ide_read_reg(ch, ATA_REG_STATUS);
+		return;
+	}
+
+	uint8_t bm = inb(ch->bm_base + IDE_BM_STATUS);
+
+	if (bm & IDE_BM_STATUS_IRQ) {
+		uint8_t clear = IDE_BM_STATUS_IRQ;
+		if (bm & IDE_BM_STATUS_ERROR) {
+			clear |= IDE_BM_STATUS_ERROR;
+		}
+
+		outb(ch->bm_base + IDE_BM_STATUS, clear);
+
+		uint8_t ata = ide_read_reg(ch, ATA_REG_STATUS);
+
+		ch->dma_status = bm;
+		ch->dma_ata_status = ata;
+		ch->dma_done = true;
+
+		if (ch->dma_waiter) {
+			ch->dma_waiter->wake_at = 0;
+			task_wake(ch->dma_waiter);
+		}
+	} else {
+		ide_read_reg(ch, ATA_REG_STATUS);
+	}
+}
 
 static void ata_irq14_handler(registers_t* regs) {
 	(void)regs;
+	ide_dma_irq(&primary);
 	primary.irq_fired = true;
 	ide_read_reg(&primary, ATA_REG_STATUS);
 }
 
 static void ata_irq15_handler(registers_t* regs) {
 	(void)regs;
+	ide_dma_irq(&secondary);
 	secondary.irq_fired = true;
 	ide_read_reg(&secondary, ATA_REG_STATUS);
 }
@@ -124,13 +160,13 @@ void ide_channel_release(ide_channel_t* ch) {
 void ide_soft_reset(ide_channel_t* ch) {
 	ide_dma_stop(ch);
 
-	outb(ch->ctrl_base + ATA_REG_DEV_CTRL, ATA_DCR_SRST | ATA_DCR_NIEN);
+	ide_control_write(ch, ch->control | ATA_DCR_SRST | ATA_DCR_NIEN);
 
 	for (volatile int i = 0; i < 1000000; i++) {
 		iowait();
 	}
 
-	outb(ch->ctrl_base + ATA_REG_DEV_CTRL, ATA_DCR_NIEN);
+	ide_control_write(ch, (ch->control & ~(ATA_DCR_SRST | ATA_DCR_HOB)) | ATA_DCR_NIEN);
 }
 
 const char* ide_error_string(uint8_t error) {
@@ -337,4 +373,13 @@ int ide_init(void) {
 	}
 
 	return found;
+}
+
+void ide_control_write(ide_channel_t* ch, uint8_t value) {
+	ch->control = value;
+	outb(ch->ctrl_base + ATA_REG_DEV_CTRL, value);
+}
+
+void ide_control_update(ide_channel_t* ch, uint8_t set, uint8_t clear) {
+	ide_control_write(ch, (uint8_t)((ch->control | set) & ~clear));
 }

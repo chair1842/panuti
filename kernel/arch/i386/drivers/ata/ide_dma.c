@@ -9,6 +9,9 @@
 #include <kernel/mem/usr.h>
 #include <kernel/pci.h>
 #include <kernel/timer.h>
+#include <kernel/sched/task.h>
+#include <kernel/sched/sched.h>
+#include <kernel/irq.h>
 
 #define IDE_BM_BOUNCE_PAGES 32
 
@@ -128,8 +131,6 @@ int ide_dma_prepare(ide_channel_t* ch, void* buf, size_t bytes) {
 		(uint8_t)((status & IDE_BM_STATUS_TIMING) | IDE_BM_STATUS_ERROR | IDE_BM_STATUS_IRQ)
 	);
 
-	outb(ch->ctrl_base + ATA_REG_DEV_CTRL, ATA_DCR_NIEN);
-
 	return 0;
 }
 
@@ -148,28 +149,44 @@ void ide_dma_start(ide_channel_t* ch, bool write) {
 
 int ide_dma_wait(ide_channel_t* ch, uint32_t ticks) {
 	if (!ch->dma_ok) {
+		ch->dma_waiter = NULL;
 		return -1;
 	}
 
-	uint32_t timeout = timer_get_ticks() + ticks;
+	task_t* task = sched_current();
+	uint32_t deadline = timer_get_ticks() + ticks;
+	uint32_t flags;
+	int result;
 
 	while (true) {
-		uint8_t status = inb(ch->bm_base + IDE_BM_STATUS);
+		flags = irq_save_disable();
 
-		if (status & IDE_BM_STATUS_ERROR) {
-			return -1;
+		if (ch->dma_done) {
+			result = 0;
+			break;
 		}
 
-		if (!(status & IDE_BM_STATUS_ACTIVE)) {
-			return 0;
+		if (task->kill_pending) {
+			result = IDE_DMA_KILLED;
+			break;
 		}
 
-		if (timer_get_ticks() > timeout) {
-			return -1;
+		if ((int32_t)(timer_get_ticks() - deadline) >= 0) {
+			result = IDE_DMA_TIMEOUT;
+			break;
 		}
 
-		__asm__ __volatile__("hlt");
+		task->wake_at = deadline;
+		task_block(task);
+
+		irq_restore(flags);
 	}
+
+	ch->dma_waiter = NULL;
+	task->wake_at = 0;
+	irq_restore(flags);
+
+	return result;
 }
 
 void ide_dma_stop(ide_channel_t* ch) {
@@ -259,4 +276,19 @@ int ide_dma_init(void) {
 	}
 
 	return 0;
+}
+
+void ide_dma_arm(ide_channel_t* ch) {
+	uint8_t status = inb(ch->bm_base + IDE_BM_STATUS);
+	outb(
+		ch->bm_base + IDE_BM_STATUS,
+		(uint8_t)((status & IDE_BM_STATUS_TIMING) | IDE_BM_STATUS_ERROR | IDE_BM_STATUS_IRQ)
+	);
+
+	uint32_t flags = irq_save_disable();
+	ch->dma_done = false;
+	ch->dma_status = 0;
+	ch->dma_ata_status = 0;
+	ch->dma_waiter = sched_current();
+	irq_restore(flags);
 }

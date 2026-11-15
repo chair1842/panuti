@@ -5,6 +5,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <kernel/sched/task.h>
 
 // uwu contants : 3
 
@@ -92,6 +93,9 @@
 #define IDE_PRD_EOT 0x8000
 #define IDE_PRD_ENTRIES 512
 
+#define IDE_DMA_TIMEOUT (-1)
+#define IDE_DMA_KILLED (-2)
+
 typedef struct ide_channel ide_channel_t;
 typedef struct ide_drive ide_drive_t;
 
@@ -127,6 +131,12 @@ struct ide_channel {
 	void* bounce;
 	uint32_t bounce_size;
 
+	volatile bool dma_done;
+	volatile uint8_t dma_status;
+	volatile uint8_t dma_ata_status;
+	task_t* dma_waiter;
+	uint8_t control;
+
 	volatile uint32_t busy;
 };
 
@@ -160,5 +170,10 @@ int ide_identify(ide_drive_t* drv, uint16_t* words);
 int ide_identify_packet(ide_drive_t* drv, uint16_t* words);
 
 const char* ide_error_string(uint8_t error);
+
+void ide_control_write(ide_channel_t* ch, uint8_t value);
+void ide_control_update(ide_channel_t* ch, uint8_t set, uint8_t clear);
+
+void ide_dma_arm(ide_channel_t* ch);
 
 #endif

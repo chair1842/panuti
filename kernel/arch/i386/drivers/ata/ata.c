@@ -10,6 +10,8 @@
 #include <kernel/klog.h>
 #include <kernel/pardet.h>
 #include <string.h>
+#include <kernel/sched/sched.h>
+#include <kernel/irq.h>
 
 // lba28 tops out here: 28 address bits, 512 byte sectors
 #define ATA_MAX_LBA28 0x0FFFFFFFULL
@@ -102,11 +104,11 @@ static uint8_t ata_head(ide_drive_t* drv) {
 }
 
 static void ata_hob(ide_channel_t* ch, bool enable) {
-	uint8_t v = ATA_DCR_NIEN;
 	if (enable) {
-		v |= ATA_DCR_HOB;
+		ide_control_update(ch, ATA_DCR_HOB, 0);
+	} else {
+		ide_control_update(ch, 0, ATA_DCR_HOB);
 	}
-	outb(ch->ctrl_base + ATA_REG_DEV_CTRL, v);
 }
 
 static bool ata_use_lba48(ide_drive_t* drv, uint64_t lba, size_t sectors) {
@@ -258,7 +260,10 @@ static int ata_xfer_chunk_dma(ide_drive_t* drv, uint64_t lba, void* buf, size_t 
 
 	ata_setup_taskfile(drv, lba, sectors, use_lba48);
 
+	uint8_t prev_control = ch->control;
+
 	if (ide_dma_prepare(ch, buf, bytes) != 0) {
+		ide_control_write(ch, prev_control);
 		klog(
 			KLOG_WARN,
 			"ata: cannot describe %zu bytes for DMA on 0x%x %s\n",
@@ -277,15 +282,29 @@ static int ata_xfer_chunk_dma(ide_drive_t* drv, uint64_t lba, void* buf, size_t 
 		command = use_lba48 ? ATA_CMD_READ_DMA_EXT : ATA_CMD_READ_DMA;
 	}
 
+	uint32_t flags = irq_save_disable();
+	ch->dma_done = false;
+	ch->dma_status = 0;
+	ch->dma_ata_status = 0;
+	ch->dma_waiter = sched_current();
+	irq_restore(flags);
+
+	ide_control_update(ch, 0, ATA_DCR_NIEN);
+
 	ata_issue(drv, command);
 	ide_dma_start(ch, write);
 
-	if (ide_dma_wait(ch, ATA_TIMEOUT_TICKS) < 0) {
-		ide_dma_stop(ch);
+	int wait = ide_dma_wait(ch, ATA_TIMEOUT_TICKS);
+
+	ide_dma_stop(ch);
+	ide_control_write(ch, prev_control);
+
+	if (wait < 0) {
 		klog(
 			KLOG_WARN,
-			"ata: DMA %s stalled on 0x%x %s, lba %llu\n",
+			"ata: DMA %s %s on 0x%x %s, lba %llu\n",
 			write ? "write" : "read",
+			wait == IDE_DMA_KILLED ? "interrupted" : "stalled",   // adjust to your error names
 			ch->io_base,
 			drv->index ? "slave" : "master",
 			(unsigned long long)lba
@@ -294,7 +313,17 @@ static int ata_xfer_chunk_dma(ide_drive_t* drv, uint64_t lba, void* buf, size_t 
 		return BLOCK_ERR_IO;
 	}
 
-	ide_dma_stop(ch);
+	if (ch->dma_status & IDE_BM_STATUS_ERROR) {
+		klog(
+			KLOG_WARN,
+			"ata: bus master DMA error on 0x%x %s, lba %llu\n",
+			ch->io_base,
+			drv->index ? "slave" : "master",
+			(unsigned long long)lba
+		);
+		
+		return BLOCK_ERR_IO;
+	}
 
 	int status = ide_wait_ready(ch, ATA_TIMEOUT_TICKS);
 	if (status < 0) {
