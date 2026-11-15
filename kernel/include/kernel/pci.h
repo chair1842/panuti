@@ -8,5 +8,6 @@
 uint32_t pci_cfg_read32(uint8_t bus, uint8_t device, uint8_t function, uint8_t offset);
 uint16_t pci_cfg_read16(uint8_t bus, uint8_t device, uint8_t function, uint8_t offset);
 uint8_t pci_cfg_read8(uint8_t bus, uint8_t device, uint8_t function, uint8_t offset);
+void pci_init();
 
 #endif
