@@ -51,6 +51,11 @@
 #define ATA_CMD_FLUSH_CACHE_EXT 0xEA
 #define ATA_CMD_SET_FEATURES 0xEF
 
+#define ATA_CMD_READ_DMA 0xC8
+#define ATA_CMD_READ_DMA_EXT 0x25
+#define ATA_CMD_WRITE_DMA 0xCA
+#define ATA_CMD_WRITE_DMA_EXT 0x35
+
 #define ATA_PRIMARY_IO 0x1F0
 #define ATA_PRIMARY_CTRL 0x3F6
 #define ATA_SECONDARY_IO 0x170
@@ -70,8 +75,29 @@
 #define IDE_TIMEOUT_TICKS 500
 #define ATA_TIMEOUT_TICKS 3000
 
+#define IDE_BM_CMD 0x00
+#define IDE_BM_STATUS 0x02
+#define IDE_BM_PRDT 0x04
+
+#define IDE_BM_CMD_START 0x01
+#define IDE_BM_CMD_READ 0x08
+
+#define IDE_BM_STATUS_ACTIVE 0x01
+#define IDE_BM_STATUS_ERROR 0x02
+#define IDE_BM_STATUS_IRQ 0x04
+#define IDE_BM_STATUS_TIMING 0x60
+
+#define IDE_PRD_EOT 0x8000
+#define IDE_PRD_ENTRIES 512
+
 typedef struct ide_channel ide_channel_t;
 typedef struct ide_drive ide_drive_t;
+
+typedef struct ide_prd {
+	uint32_t addr;
+	uint16_t count;
+	uint16_t flags;
+} __attribute__((packed)) ide_prd_t;
 
 struct ide_drive {
 	ide_channel_t* channel;
@@ -83,6 +109,7 @@ struct ide_drive {
 	bool volatile_write_cache;
 	uint32_t sector_size;
 	uint64_t block_count;
+	bool dma_ok;
 };
 
 struct ide_channel {
@@ -91,7 +118,13 @@ struct ide_channel {
 	ide_drive_t drives[IDE_SLAVES_PER_CHANNEL];
 	volatile bool irq_fired;
 
-	// set while a task owns the channel's registers; see ide_channel_acquire
+	uint16_t bm_base;
+	bool dma_ok;
+	ide_prd_t* prd;
+	uint32_t prd_phys;
+	void* bounce;
+	uint32_t bounce_size;
+
 	volatile uint32_t busy;
 };
 
@@ -106,6 +139,8 @@ ide_channel_t* ide_channel_get(int bus);
 int ide_probe_channel(ide_channel_t* ch);
 void ide_soft_reset(ide_channel_t* ch);
 
+int ide_dma_init(void);
+
 int ide_wait_ready(ide_channel_t* ch, uint32_t ticks);
 
 int ide_wait_drq(ide_channel_t* ch, uint32_t ticks);
@@ -114,6 +149,7 @@ void ide_channel_acquire(ide_channel_t* ch);
 void ide_channel_release(ide_channel_t* ch);
 
 int ide_identify(ide_drive_t* drv, uint16_t* words);
+int ide_identify_packet(ide_drive_t* drv, uint16_t* words);
 
 const char* ide_error_string(uint8_t error);
 

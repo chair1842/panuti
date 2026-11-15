@@ -15,24 +15,6 @@
 
 #define PCI_MAX_DEVICES 64
 
-typedef struct pci_device {
-	uint8_t bus;
-	uint8_t device;
-	uint8_t function;
-
-	uint16_t vendor_id;
-	uint16_t device_id;
-
-	uint8_t revision;
-	uint8_t prog_if;
-	uint8_t subclass;
-	uint8_t class_code;
-	uint8_t header_type;
-
-	uint8_t irq_line;
-	uint8_t irq_pin;
-} pci_device_t;
-
 typedef enum pci_field {
 	PCI_FIELD_VENDOR,
 	PCI_FIELD_DEVICE,
@@ -52,7 +34,7 @@ typedef struct pci_handle {
 	size_t pos;
 } pci_handle_t;
 
-static pci_device_t pci_devices[PCI_MAX_DEVICES];
+static pci_device_info_t pci_devices[PCI_MAX_DEVICES];
 static size_t pci_device_count;
 static bool pci_cap_warned;
 
@@ -101,28 +83,28 @@ static size_t pci_format(char* buf, size_t cap, const char* fmt, ...) {
 	return s.len;
 }
 
-static size_t pci_render(char* buf, size_t cap, const pci_device_t* d, pci_field_t field) {
+static size_t pci_render(char* buf, size_t cap, const pci_device_info_t* d, pci_field_t field) {
 	switch (field) {
-	case PCI_FIELD_VENDOR:
-		return pci_format(buf, cap, "0x%04x\n", d->vendor_id);
-	case PCI_FIELD_DEVICE:
-		return pci_format(buf, cap, "0x%04x\n", d->device_id);
-	case PCI_FIELD_CLASS:
-		return pci_format(buf, cap, "0x%02x\n", d->class_code);
-	case PCI_FIELD_SUBCLASS:
-		return pci_format(buf, cap, "0x%02x\n", d->subclass);
-	case PCI_FIELD_PROG_IF:
-		return pci_format(buf, cap, "0x%02x\n", d->prog_if);
-	case PCI_FIELD_REVISION:
-		return pci_format(buf, cap, "0x%02x\n", d->revision);
-	case PCI_FIELD_HEADER_TYPE:
-		return pci_format(buf, cap, "0x%02x\n", d->header_type);
-	case PCI_FIELD_IRQ_LINE:
-		return pci_format(buf, cap, "0x%02x\n", d->irq_line);
-	case PCI_FIELD_IRQ_PIN:
-		return pci_format(buf, cap, "0x%02x\n", d->irq_pin);
-	case PCI_FIELD_COUNT:
-		break;
+		case PCI_FIELD_VENDOR:
+			return pci_format(buf, cap, "0x%04x\n", d->vendor_id);
+		case PCI_FIELD_DEVICE:
+			return pci_format(buf, cap, "0x%04x\n", d->device_id);
+		case PCI_FIELD_CLASS:
+			return pci_format(buf, cap, "0x%02x\n", d->class_code);
+		case PCI_FIELD_SUBCLASS:
+			return pci_format(buf, cap, "0x%02x\n", d->subclass);
+		case PCI_FIELD_PROG_IF:
+			return pci_format(buf, cap, "0x%02x\n", d->prog_if);
+		case PCI_FIELD_REVISION:
+			return pci_format(buf, cap, "0x%02x\n", d->revision);
+		case PCI_FIELD_HEADER_TYPE:
+			return pci_format(buf, cap, "0x%02x\n", d->header_type);
+		case PCI_FIELD_IRQ_LINE:
+			return pci_format(buf, cap, "0x%02x\n", d->irq_line);
+		case PCI_FIELD_IRQ_PIN:
+			return pci_format(buf, cap, "0x%02x\n", d->irq_pin);
+		case PCI_FIELD_COUNT:
+			break;
 	}
 
 	return 0;
@@ -190,7 +172,7 @@ static void pci_record(uint8_t bus, uint8_t device, uint8_t function, uint16_t v
 		return;
 	}
 
-	pci_device_t* d = &pci_devices[pci_device_count++];
+	pci_device_info_t* d = &pci_devices[pci_device_count++];
 
 	d->bus = bus;
 	d->device = device;
@@ -230,8 +212,7 @@ static void pci_scan(void) {
 			}
 
 			for (unsigned function = 1; function < 8; function++) {
-				uint16_t fn_vendor =
-					pci_cfg_read16((uint8_t)bus, (uint8_t)device, (uint8_t)function, 0x00);
+				uint16_t fn_vendor = pci_cfg_read16((uint8_t)bus, (uint8_t)device, (uint8_t)function, 0x00);
 
 				if (fn_vendor == 0xFFFF) {
 					continue;
@@ -244,7 +225,7 @@ static void pci_scan(void) {
 }
 
 static void pci_add_node(size_t index) {
-	const pci_device_t* d = &pci_devices[index];
+	const pci_device_info_t* d = &pci_devices[index];
 
 	char dir[24];
 	pci_format(dir, sizeof(dir), "/dvc/pci/%02x:%02x.%x", d->bus, d->device, d->function);
@@ -263,6 +244,24 @@ static void pci_add_node(size_t index) {
 			klog(KLOG_WARN, "pci: cannot create %s\n", path);
 		}
 	}
+}
+
+bool pci_find_class(uint8_t class_code, uint8_t subclass, pci_device_info_t* out) {
+	for (size_t i = 0; i < pci_device_count; i++) {
+		const pci_device_info_t* d = &pci_devices[i];
+
+		if (d->class_code != class_code || d->subclass != subclass) {
+			continue;
+		}
+
+		if (out) {
+			*out = *d;
+		}
+
+		return true;
+	}
+
+	return false;
 }
 
 void pci_init(void) {

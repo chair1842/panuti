@@ -189,6 +189,7 @@ int ide_probe_channel(ide_channel_t* ch) {
 		drv->index = (uint8_t)slot;
 		drv->present = false;
 		drv->is_atapi = false;
+		drv->dma_ok = false;
 
 		ide_write_reg(ch, ATA_REG_DRIVE_HEAD, slot ? ATA_HEAD_SLAVE : ATA_HEAD_MASTER);
 
@@ -227,11 +228,7 @@ int ide_probe_channel(ide_channel_t* ch) {
 	return found;
 }
 
-int ide_identify(ide_drive_t* drv, uint16_t* words) {
-	if (!drv || !words || drv->is_atapi) {
-		return -1; // atapi devices speak identify packet (0xa1), not this
-	}
-
+static int ide_identify_cmd(ide_drive_t* drv, uint16_t* words, uint8_t command, const char* what) {
 	ide_channel_t* ch = drv->channel;
 	ide_channel_acquire(ch);
 
@@ -240,7 +237,8 @@ int ide_identify(ide_drive_t* drv, uint16_t* words) {
 	if (ide_poll(ch) < 0) {
 		klog(
 			KLOG_WARN,
-			"ide: drive stuck busy before IDENTIFY on 0x%x %s\n",
+			"ide: drive stuck busy before %s on 0x%x %s\n",
+			 what,
 			 ch->io_base,
 			drv->index ? "slave" : "master"
 		);
@@ -254,13 +252,14 @@ int ide_identify(ide_drive_t* drv, uint16_t* words) {
 	ide_write_reg(ch, ATA_REG_LBA_MID, 0x00);
 	ide_write_reg(ch, ATA_REG_LBA_HI, 0x00);
 	ide_write_reg(ch, ATA_REG_DRIVE_HEAD, (drv->index ? ATA_HEAD_SLAVE : ATA_HEAD_MASTER) | ATA_HEAD_LBA);
-	ide_write_reg(ch, ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
+	ide_write_reg(ch, ATA_REG_COMMAND, command);
 
 	int status = ide_wait_drq(ch, IDE_TIMEOUT_TICKS);
 	if (status < 0) {
 		klog(
 			KLOG_WARN,
-			"ide: IDENTIFY never opened its data phase on 0x%x %s\n",
+			"ide: %s never opened its data phase on 0x%x %s\n",
+			 what,
 			 ch->io_base,
 			drv->index ? "slave" : "master"
 		);
@@ -271,7 +270,8 @@ int ide_identify(ide_drive_t* drv, uint16_t* words) {
 	if (status & ATA_SR_ERR) {
 		klog(
 			KLOG_WARN,
-			"ide: IDENTIFY rejected on 0x%x %s: %s\n",
+			"ide: %s rejected on 0x%x %s: %s\n",
+			what,
 			ch->io_base,
 			drv->index ? "slave" : "master",
 			ide_error_string(ide_read_reg(ch, ATA_REG_ERROR))
@@ -285,7 +285,8 @@ int ide_identify(ide_drive_t* drv, uint16_t* words) {
 	if (ide_wait_ready(ch, IDE_TIMEOUT_TICKS) < 0) {
 		klog(
 			KLOG_WARN,
-			"ide: IDENTIFY never finished on 0x%x %s\n",
+			"ide: %s never finished on 0x%x %s\n",
+			what,
 			ch->io_base,
 			drv->index ? "slave" : "master"
 		);
@@ -300,6 +301,22 @@ out:
 	return rc;
 }
 
+int ide_identify(ide_drive_t* drv, uint16_t* words) {
+	if (!drv || !words || drv->is_atapi) {
+		return -1;
+	}
+
+	return ide_identify_cmd(drv, words, ATA_CMD_IDENTIFY, "IDENTIFY");
+}
+
+int ide_identify_packet(ide_drive_t* drv, uint16_t* words) {
+	if (!drv || !words || !drv->is_atapi) {
+		return -1;
+	}
+
+	return ide_identify_cmd(drv, words, ATA_CMD_IDENTIFY_PACKET, "IDENTIFY PACKET");
+}
+
 int ide_init(void) {
 	register_handler(ATA_IRQ14_VECTOR, ata_irq14_handler);
 	register_handler(ATA_IRQ15_VECTOR, ata_irq15_handler);
@@ -311,6 +328,10 @@ int ide_init(void) {
 		if (ch) {
 			found += ide_probe_channel(ch);
 		}
+	}
+
+	if (found > 0) {
+		ide_dma_init();
 	}
 
 	return found;

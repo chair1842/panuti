@@ -53,6 +53,8 @@ static void ata_apply_identify(ide_drive_t* drv, const uint16_t* words) {
 	// word 49 bit 9: does this drive do 48 bit addressing?
 	drv->lba48 = (words[49] & 0x0200) != 0;
 
+	drv->dma_ok = drv->channel->dma_ok && (words[49] & 0x0100) != 0;
+
 	// word 83 bit 10: writes land in a cache the drive may not have flushed
 	drv->volatile_write_cache = (words[83] & 0x0400) != 0;
 	drv->has_flush = (words[83] & 0x1000) != 0;
@@ -365,9 +367,10 @@ static void ata_attach(ide_drive_t* drv) {
 	char model[41];
 	ata_string(words, 27, 20, model, sizeof(model));
 
-	klog(KLOG_INFO, "ata: %s, %u sectors x %u bytes, lba48=%s flush=%s\n",
+	klog(KLOG_INFO, "ata: %s, %u sectors x %u bytes, lba48=%s flush=%s dma=%s\n",
 		 model, (uint32_t)drv->block_count, drv->sector_size,
-		 drv->lba48 ? "yes" : "no", drv->has_flush ? "yes" : "no");
+		 drv->lba48 ? "yes" : "no", drv->has_flush ? "yes" : "no",
+		 drv->dma_ok ? "yes" : "no");
 
 	int num = next_disk_number++;
 	if (num > 9) {

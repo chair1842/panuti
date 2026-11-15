@@ -30,3 +30,18 @@ uint8_t pci_cfg_read8(uint8_t bus, uint8_t device, uint8_t function, uint8_t off
 	uint32_t dword = pci_cfg_read32(bus, device, function, offset);
 	return (uint8_t)(dword >> ((offset & 3) * 8));
 }
+
+void pci_cfg_write32(uint8_t bus, uint8_t device, uint8_t function, uint8_t offset, uint32_t value) {
+	outl(PCI_CONFIG_ADDRESS, pci_config_address(bus, device, function, offset));
+	outl(PCI_CONFIG_DATA, value);
+}
+
+void pci_cfg_write16(uint8_t bus, uint8_t device, uint8_t function, uint8_t offset, uint16_t value) {
+	outl(PCI_CONFIG_ADDRESS, pci_config_address(bus, device, function, offset));
+	outw(PCI_CONFIG_DATA + (offset & 2), value);
+}
+
+void pci_cfg_write8(uint8_t bus, uint8_t device, uint8_t function, uint8_t offset, uint8_t value) {
+	outl(PCI_CONFIG_ADDRESS, pci_config_address(bus, device, function, offset));
+	outb(PCI_CONFIG_DATA + (offset & 3), value);
+}

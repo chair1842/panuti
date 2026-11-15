@@ -156,6 +156,19 @@ static const block_ops_t atapi_ops = {
 };
 
 static void atapi_attach(ide_drive_t* drv) {
+	uint16_t words[256];
+
+	if (ide_identify_packet(drv, words) == 0) {
+		drv->dma_ok = drv->channel->dma_ok && (words[49] & 0x0100) != 0;
+	} else {
+		klog(KLOG_WARN, "atapi: IDENTIFY PACKET failed on 0x%x %s, DMA disabled\n",
+			drv->channel->io_base,
+			drv->index ? "slave" : "master"
+		);
+		
+		drv->dma_ok = false;
+	}
+
 	uint32_t sectors;
 	atapi_read_capacity(drv, &sectors);
 	drv->block_count = sectors;
@@ -174,7 +187,7 @@ static void atapi_attach(ide_drive_t* drv) {
 	path[plen] = '0' + num;
 	path[plen + 1] = '\0';
 	block_register(path, &atapi_ops, drv, ATAPI_SECTOR_SIZE, sectors);
-	klog(KLOG_INFO, "atapi: %s registered (%u sectors)\n", path, sectors);
+	klog(KLOG_INFO, "atapi: %s registered (%u sectors, dma=%s)\n", path, sectors, drv->dma_ok ? "yes" : "no");
 }
 
 void atapi_init(void) {
