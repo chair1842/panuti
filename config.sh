@@ -21,10 +21,3 @@ export CPPFLAGS=''
 # Configure the cross-compiler to use the desired system root.
 export SYSROOT="$(pwd)/sysroot"
 export CC="$CC --sysroot=$SYSROOT"
-
-# disable because we are now working with -panuti targets. 
-# Work around that the -elf gcc targets doesn't have a system include directory
-# because it was configured with --without-headers rather than --with-sysroot.
-#if echo "$HOST" | grep -Eq -- '-elf($|-)'; then
-#  export CC="$CC -isystem=$INCLUDEDIR"
-#fi
