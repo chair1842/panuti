@@ -18,6 +18,8 @@
 #define TASK_NAME_MAX 64
 #define TASK_CMDLINE_MAX 512
 
+#define TASK_WAIT_MAX 64
+
 #define TASK_KILL_EXIT_CODE 256
 
 typedef uint32_t pid_t;
@@ -65,7 +67,8 @@ typedef struct task {
 	int no_out_streams;
 	
 	uint32_t exit_code;
-	pid_t pid_waiting_on;
+	pid_t wait_pids[TASK_WAIT_MAX];
+	uint32_t wait_pid_count;
 	
 	int64_t wake_at;
 	
@@ -114,18 +117,14 @@ int task_build_user_argv_stack(
     uint32_t* out_esp
 ); 
 pid_t task_procreate(task_t* caller, const procreate_args_t* args);
-int task_wait_pid(pid_t target, int* exit_code_out);
 void task_wake_waiters(pid_t exited_pid);
 void task_do_exit(uint32_t exit_code);
 task_t* task_find(pid_t pid);
 void task_wake_sleepers(int64_t now);
 handle_t* task_return_hslot(uint32_t slot, task_t* task);
 void task_set_cwd(task_t* task, inode_t* cwd);
-
 void task_set_name(task_t* task, const char* name);
-
-// Takes a consistent snapshot of a live task's reporting fields. Returns 0 on
-// success, or -1 if no task with that pid is in the task list.
 int task_get_info(pid_t pid, task_info_t* out);
+int task_wait_any(const pid_t* pids, uint32_t count, int* exit_code_out, pid_t* exit_pid_out);
 
 #endif

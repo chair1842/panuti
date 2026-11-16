@@ -42,6 +42,7 @@ syscall_handler_t syscall_handlers[256] = {
 	[SYSHANDLER_SETTMSP] = syshandler_settmsp,
 	[SYSHANDLER_SYNC] = syshandler_sync,
 	[SYSHANDLER_KILL] = syshandler_kill,
+	[SYSHANDLER_WAITP] = syshandler_waitp,
 };
 
 int32_t syscall_dispatch(uint32_t num, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {

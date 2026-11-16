@@ -72,14 +72,19 @@ static void task_init_default_streams(task_t* t) {
 	}
 }
 
-// true if some live task has published that it is blocked waiting on `pid`.
-// syshandler_wait() registers pid_waiting_on *before* it calls
-// task_wait_pid(), so this is the authoritative test for "somebody is about
-// to collect this task's exit code", and it holds from the moment a waiter
-// commits until it clears the field on the way out.
+static bool task_waits_on(const task_t* t, pid_t pid) {
+	for (uint32_t i = 0; i < t->wait_pid_count; i++) {
+		if (t->wait_pids[i] == pid) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 static bool task_has_waiter(pid_t pid) {
 	for (task_t* t = task_list; t; t = t->task_next) {
-		if (t->state != TASK_NONE && t->pid_waiting_on == pid) {
+		if (t->state != TASK_NONE && task_waits_on(t, pid)) {
 			return true;
 		}
 	}
@@ -199,6 +204,7 @@ static task_t* task_alloc_common(void) {
 
 	t->state = TASK_READY;
 	t->wake_at = 0;
+	t->wait_pid_count = 0;
 	t->creator_pid = 0;
 	t->name[0] = '\0';
 	t->cmdline[0] = '\0';
@@ -693,33 +699,43 @@ task_t* task_find(pid_t pid) {
 	return nullptr;
 }
 
-int task_wait_pid(pid_t target, int* exit_code_out) {
+int task_wait_any(const pid_t* pids, uint32_t count, int* exit_code_out, pid_t* exit_pid_out) {
+	bool alive = false;
+
 	for (task_t* t = task_list; t; ) {
 		task_t* next = t->task_next;
 
-		if (t->pid == target && t->state != TASK_NONE) {
+		bool wanted = false;
+		for (uint32_t i = 0; i < count; i++) {
+			if (pids[i] == t->pid) {
+				wanted = true;
+				break;
+			}
+		}
+
+		if (wanted && t->state != TASK_NONE) {
 			if (t->state == TASK_TERMINATED) {
 				*exit_code_out = t->exit_code;
+				*exit_pid_out = t->pid;
 				sched_remove(t);
 				task_destroy(t);
 				return 0;
 			}
-			
-			return 1;
+
+			alive = true;
 		}
 
 		t = next;
 	}
 	
-	return -1;
+	return alive ? 1 : -1;
 }
 
 void task_wake_waiters(pid_t exited_pid) {
 	for (task_t* t = task_list; t; ) {
 		task_t* next = t->task_next;
 
-		if (t->state == TASK_BLOCKED && t->pid_waiting_on == exited_pid) {
-			t->pid_waiting_on = 0;
+		if (t->state == TASK_BLOCKED && task_waits_on(t, exited_pid)) {
 			task_wake(t);
 		}
 
@@ -790,7 +806,7 @@ int task_get_info(pid_t pid, task_info_t* out) {
 		// gen this is turning real dense ngl
 		out->state = t->state;
 		out->exit_code = t->exit_code;
-		out->pid_waiting_on = t->pid_waiting_on;
+		out->pid_waiting_on = t->wait_pid_count ? t->wait_pids[0] : 0;
 		out->wake_at = t->wake_at;
 		out->no_in_streams = t->no_in_streams;
 		out->no_out_streams = t->no_out_streams;

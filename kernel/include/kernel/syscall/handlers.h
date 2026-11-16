@@ -69,7 +69,7 @@ int32_t syshandler_stream_write(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t 
 // create a process
 int32_t syshandler_procreate(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
-// wait for a process to exit
+// wait for any of a set of processes to exit
 int32_t syshandler_wait(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
 // read dirents from a directory
@@ -107,5 +107,8 @@ int32_t syshandler_sync(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
 // request that a process terminate
 int32_t syshandler_kill(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// same as wait but without polling
+int32_t syshandler_waitp(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
 #endif

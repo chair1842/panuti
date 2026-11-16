@@ -107,7 +107,8 @@ kernel/syscall/handlers/sleep.o \
 kernel/syscall/handlers/settmsp.o \
 kernel/syscall/handlers/sync.o \
 kernel/syscall/handlers/kill.o \
-kernel/drivers/pci/pci.o
+kernel/drivers/pci/pci.o \
+kernel/syscall/handlers/waitp.o 
 
 OBJS=\
 $(ARCHDIR)/crti.o \
