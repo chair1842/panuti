@@ -2,7 +2,6 @@
 
 There are 9 projects/components inside panuti.
 - kernel
-- ksts
 - libc
 - pint
 - pur
@@ -10,6 +9,7 @@ There are 9 projects/components inside panuti.
 - nib
 - calc
 - conway
+- fstools
 
 Each of these projects/components have their own individual licenses,
 and have a LICENSE.md at their top-level directory.
@@ -17,7 +17,6 @@ and have a LICENSE.md at their top-level directory.
 The licences for the following projects/components are stated here.
 
 - kernel - GPLv2-or-later
-- ksts - BSD 3-Clause
 - libc - BSD 3-Clause
 - pint - GPLv2-or-later
 - pur - GPLv2-or-later
@@ -25,3 +24,4 @@ The licences for the following projects/components are stated here.
 - nib - GPLv2-or-later
 - calc - BSD 3-Clause
 - conway - BSD 3-Clause
+- fstools - BSD 3-Clause
