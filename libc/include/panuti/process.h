@@ -21,6 +21,15 @@ pid_t procreate(
 // block until the waited-on process exits and then output the exit code to ec_out
 int wait(pid_t pid, int* ec_out);
 
+// block until any one of the pids exits, then output its exit code and pid
+int wait_many(const pid_t* pids, uint32_t count, int* ec_out, pid_t* exit_pid);
+
+// like wait() but return PANUTIERRNO_BUSY instead of blocking
+int waitp(pid_t pid, int* ec_out);
+
+// polling form of wait_many(); returns PANUTIERRNO_BUSY if none have exited
+int waitp_many(const pid_t* pids, uint32_t count, int* ec_out, pid_t* exit_pid);
+
 // sleep for cs amount of centiseconds
 int sleep(int cs);
 

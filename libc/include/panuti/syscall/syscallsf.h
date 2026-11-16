@@ -122,8 +122,14 @@ static inline pid_t panutisysf_procreate(const procreate_args_t* args) {
 	return (pid_t)panuti_syscall(SYSHANDLER_PROCREATE, (uint32_t)args, 0, 0, 0);
 }
 
-static inline int32_t panutisysf_wait(pid_t pid, int* ec_out) {
-	return panuti_syscall(SYSHANDLER_WAIT, (uint32_t)pid, (uint32_t)ec_out, 0, 0);
+static inline int32_t panutisysf_wait(const pid_t* pids, uint32_t count, int32_t* ec_out, pid_t* exit_pid) {
+	return panuti_syscall(
+		SYSHANDLER_WAIT,
+		(uint32_t)pids,
+		count,
+		(uint32_t)ec_out,
+		(uint32_t)exit_pid
+	);
 }
 
 static inline int32_t panutisysf_readdir(int fd, dirent_entry_t* dirent_out) {
@@ -172,6 +178,16 @@ static inline int32_t panutisysf_sync(void) {
 
 static inline int32_t panutisysf_kill(pid_t pid) {
 	return panuti_syscall(SYSHANDLER_KILL, (uint32_t)pid, 0, 0, 0);
+}
+
+static inline int32_t panutisysf_waitp(const pid_t* pids, uint32_t count, int32_t* ec_out, pid_t* exit_pid) {
+	return panuti_syscall(
+		SYSHANDLER_WAITP,
+		(uint32_t)pids,
+		count,
+		(uint32_t)ec_out,
+		(uint32_t)exit_pid
+	);
 }
 
 #if defined(__cplusplus)

@@ -62,6 +62,7 @@ panuti/mount/mount.o \
 panuti/registry/mkdir.o \
 panuti/mount/unmount.o \
 panuti/process/wait.o \
+panuti/process/waitp.o \
 panuti/handle/write.o \
 panuti/handle/read.o \
 panuti/handle/close.o \
@@ -80,6 +81,8 @@ panuti/handle/seek.o \
 panuti/process/sleep.o \
 panuti/process/kill.o \
 stdlib/abort.o \
+panuti/process/wait_many.o \
+panuti/process/waitp_many.o \
 
 OBJS=\
 $(FREEOBJS) \
