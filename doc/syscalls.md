@@ -31,7 +31,9 @@ Errors are returned with bit 31 set (i.e. negative when interpreted as signed):
 | `PANUTIERRNO_INVALIDADDR` | `0x80000006` | Invalid userspace address |
 | `PANUTIERRNO_NOTSUPPORTED` | `0x80000007` | Filesystem type not supported |
 | `PANUTIERRNO_EXISTS` | `0x80000008` | Name already exists |
-| `PANUTIERRNO_BUSY` | `0x80000009` | Resource is busy (e.g. keyboard line already claimed) |
+| `PANUTIERRNO_BUSY` | `0x80000009` | Resource is busy, or (for `WAITP`) no listed process has exited yet |
+| `PANUTIERRNO_NOMEM` | `0x8000000A` | Out of memory |
+| `PANUTIERRNO_INVALIDARG` | `0x8000000B` | Invalid argument |
 
 All user pointers are validated to lie within `0x08048000`--`0xC0000000`.
 The lower bound is inclusive and the upper bound is exclusive, so `0xC0000000`
@@ -80,6 +82,7 @@ Return values are not uniform across the API. Check the shape before comparing:
 | Status `0` | `CLOSE` (5), `MKDIR` (6), `GETCWD` (11), `PIPE_CREATE` (17), `RESIZE` (28), `MKFILE` (29) | `== 0` is success |
 | Opaque value | `GETPID` (9) | cannot fail; no error case |
 | PID | `PROCREATE` (21) | `>= 0` is a PID; `< 0` is an error |
+| Reap result | `WAIT` (22), `WAITP` (34) | `0` = a process was reaped; `PANUTIERRNO_BUSY` = still running (`WAITP` only); negative = error |
 | Multi-valued | `READDIR` (23) | `0` = entry, `1` = end of directory, negative = error |
 | Unobservable | `NSTREAM` (18) | the wrapper is `void`; see its entry |
 
@@ -132,16 +135,16 @@ void panutisysf_exit(uint32_t code);
 Terminate the current process.
 
 **Parameters:**
-- `code` -- exit code, retrievable by any task that later calls `WAIT` on this PID
+- `code` -- exit code, retrievable by any task that later calls `WAIT` or `WAITP` on this PID
 
 **Returns:** does not return (process is terminated immediately).
 
 **Errors:** none.
 
 **Note:** `code` is stored in the task and delivered via the `ec_out` argument
-of a later `WAIT` on this PID. It is *not* discarded. Panuti has no notion of a
-parent or of process ownership: `WAIT` performs no ownership check, so any task
-may wait on -- and reap -- any PID except its own.
+of a later `WAIT` or `WAITP` on this PID. It is *not* discarded. Panuti has no
+notion of a parent or of process ownership: `WAIT` performs no ownership check,
+so any task may wait on -- and reap -- any PID except its own.
 
 ---
 
@@ -687,38 +690,51 @@ and directories are refused before any bytes are read.
 ### 22 -- WAIT
 
 ```c
-int32_t panutisysf_wait(pid_t pid, int* ec_out);
+int32_t panutisysf_wait(const pid_t* pids, uint32_t count, int32_t* ec_out, pid_t* exit_pid);
 ```
 
-Block until a target process exits and retrieve its exit code.
+Block until any one of a set of processes exits, then retrieve its exit code
+and PID.
 
 **Parameters:**
-- `pid` -- PID of the process to wait for
-- `ec_out` -- userspace pointer to `int` where the exit code is written
+- `pids` -- userspace array of PIDs to wait on
+- `count` -- number of entries in `pids`, from 1 to 64
+- `ec_out` -- userspace pointer to `int32_t` where the exit code is written
+- `exit_pid` -- userspace pointer to `pid_t` where the reaped PID is written
 
-**Returns:** 0 on success, or error code.
+**Returns:** `0` after reaping one process, or a negative error code.
 
 **Errors:**
-- `PANUTIERRNO_INVALIDADDR` -- `ec_out` is not a valid userspace pointer
-- `PANUTIERRNO_PLAINERR` -- attempting to wait on the calling process itself
-- `PANUTIERRNO_NOTFOUND` -- target process does not exist, or has already been
-  reaped by an earlier `WAIT`
+- `PANUTIERRNO_INVALIDADDR` -- `pids`, `ec_out`, or `exit_pid` is not a valid userspace range
+- `PANUTIERRNO_INVALIDARG` -- `count` is `0` or greater than 64
+- `PANUTIERRNO_PLAINERR` -- `pids` contains the calling process's own PID, or the caller was killed while blocked
+- `PANUTIERRNO_NOTFOUND` -- none of the listed PIDs exist (they already exited and were reaped)
 
-**Note:** the caller blocks until the target process terminates. If the target is still running, the caller is put to sleep and retried when the target exits. The `ec_out` value is the exit code passed to `EXIT` (1).
+**Note:** the caller blocks until one of the listed processes terminates. If one
+is already terminated, it is reaped immediately. The reaped process is reported
+through `ec_out` and `exit_pid`; the remaining entries are not waited on. The
+`ec_out` value is the exit code passed to `EXIT` (1).
 
 **Note:** `WAIT` is single-shot per PID. The successful waiter reaps the task and
-its slot is recycled, so any subsequent `WAIT` on the same PID returns
+its slot is recycled, so a later `WAIT` on the same PID returns
 `PANUTIERRNO_NOTFOUND`. If several tasks wait on the same PID they are all woken
-on exit, but exactly one receives the exit code and the rest get
-`PANUTIERRNO_NOTFOUND` -- a waiter cannot tell that it lost the race. (PIDs are
-never reused, so the guarantee holds for the lifetime of the system.)
+on exit, but exactly one receives the exit code; the rest see
+`PANUTIERRNO_NOTFOUND`, or go back to waiting if their set contains another live
+PID.
 
-**Note:** Panuti exposes no dedicated exit-notification mechanism -- no
-signals, no `kill`, no process-status syscall, and `GETPID` reports only the
-caller. `WAIT` is the only kernel-provided way to observe a specific task's
+**Note:** PID values are recycled once a task is reaped. A stale PID retained
+from an old `PROCREATE` may later refer to a different process, so do not reuse
+PIDs after they have been waited on.
+
+**Note:** `WAITP` (34) is the non-blocking form. Panuti has no signal mechanism:
+`KILL` (33) requests termination, while `WAIT` and `WAITP` observe the resulting
 exit. Applications that need to notice a child's death without consuming its
-exit status must arrange their own signal, e.g. by holding a pipe's write end
-and watching for EOF.
+exit status must arrange their own notification, e.g. by holding a pipe's write
+end and watching for EOF.
+
+libc wraps this as `wait(pid_t, int*)` and
+`wait_many(const pid_t*, uint32_t, int*, pid_t*)` in
+`libc/panuti/process/wait.c` and `libc/panuti/process/wait_many.c`.
 
 ---
 
@@ -1137,15 +1153,78 @@ rename, link, and setattr.
 
 ---
 
+### 33 -- KILL
+
+```c
+int32_t panutisysf_kill(pid_t pid);
+```
+
+Request that a process terminate.
+
+**Parameters:**
+- `pid` -- PID of the target process
+
+The target is marked kill-pending and woken. It exits with `TASK_KILL_EXIT_CODE`
+(`256`) at the next syscall boundary, timer tick, or blocking I/O wakeup. If the
+target is the caller, the caller exits immediately.
+
+**Returns:** `0` on success, or a negative error code.
+
+**Errors:**
+- `PANUTIERRNO_NOTFOUND` -- no live task has that PID
+- `PANUTIERRNO_UNSUPPORTEDOP` -- the target is a kernel task and is not killable
+
+**Note:** a target that has already terminated returns `0`; its exit code is
+still collected by `WAIT`/`WAITP`. The libc wrapper is `int kill(pid_t pid)` in
+`libc/panuti/process/kill.c`.
+
+---
+
+### 34 -- WAITP
+
+```c
+int32_t panutisysf_waitp(const pid_t* pids, uint32_t count, int32_t* ec_out, pid_t* exit_pid);
+```
+
+Poll a set of processes without blocking, reaping one if it has already exited.
+
+**Parameters:** the same as `WAIT` (22):
+- `pids` -- userspace array of PIDs to poll
+- `count` -- number of entries in `pids`, from 1 to 64
+- `ec_out` -- userspace pointer to `int32_t` where the exit code is written
+- `exit_pid` -- userspace pointer to `pid_t` where the reaped PID is written
+
+**Returns:**
+- `0` -- a process was reaped; `ec_out` and `exit_pid` were written
+- `PANUTIERRNO_BUSY` -- every listed process is still running
+- `PANUTIERRNO_NOTFOUND` -- none of the listed PIDs exist
+- any other negative value -- an error
+
+**Errors:**
+- `PANUTIERRNO_INVALIDADDR` -- `pids`, `ec_out`, or `exit_pid` is not a valid userspace range
+- `PANUTIERRNO_INVALIDARG` -- `count` is `0` or greater than 64
+- `PANUTIERRNO_PLAINERR` -- `pids` contains the calling process's own PID
+
+**Note:** `PANUTIERRNO_BUSY` is a retry signal, not a permanent failure; the
+output pointers are not written in that case. Each call is independent:
+`WAITP` leaves no waiter registered, so the caller must poll again. `WAIT` (22)
+is the blocking form.
+
+libc wraps this as `waitp(pid_t, int*)` and
+`waitp_many(const pid_t*, uint32_t, int*, pid_t*)` in
+`libc/panuti/process/waitp.c` and `libc/panuti/process/waitp_many.c`.
+
+---
+
 ## Quick Reference
 
-All 32 syscalls listed here are registered in the kernel dispatch table and
+All 35 syscalls listed here are registered in the kernel dispatch table and
 documented in detail above. Numbers are defined in
 `libc/include/panuti/syscall/syscallno.h`.
 
 The dispatch table has 256 slots. Any number at or above `256` returns
 `PANUTIERRNO_INVALIDSYSCALL`, as does any number below `256` that is not
-registered -- today that is `33` through `255`, so they are reserved rather
+registered -- today that is `35` through `255`, so they are reserved rather
 than permanently invalid.
 
 | # | Name | # | Name |
@@ -1166,7 +1245,8 @@ than permanently invalid.
 | 13 | `RENAME` | 27 | `MUNMAP` |
 | 28 | `RESIZE` | 29 | `MKFILE` |
 | 30 | `SLEEP` | 31 | `SETTMSP` |
-| 32 | `SYNC` | | |
+| 32 | `SYNC` | 33 | `KILL` |
+| 34 | `WAITP` | | |
 
 ## Limits
 
@@ -1182,4 +1262,5 @@ than permanently invalid.
 | Max input streams per task | 16 |
 | Max output streams per task | 16 |
 | Max procreate argv count | 32 |
+| Max pids per WAIT/WAITP set | 64 |
 | Max single anonymous mapping | 16 MiB |
