@@ -11,8 +11,8 @@ a unix-inspired hobbyist OS
 - Multitasking I386 kernel (no multiprocessing yet)
 - N-ary standard streams
 - VGA text mode, PC Speaker, Serial UART supported
-- PATA and CD-ROM support (now faster than 0.1)
-- Shutdown and restart in the os
+- PATA and CD-ROM support (with DMA)
+- Shutdown and reboot using ACPI
 - ISO9660 and Ext2 filesystems
 - Has it's very own coreutils, vi/vim clone, and shell
 - Rename `/dev` to `/dvc` because why not
