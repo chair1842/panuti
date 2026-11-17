@@ -4,6 +4,6 @@
 #include <panuti/syscall/pwerop.h>
 #include <panuti/syscall/syscallsf.h>
 
-void pwerop_reboot() {
+void pwerop_shutdown() {
 	panutisysf_pwerop(PANUTI_PWEROP_SHUTDOWN, PANUTI_PWEROP_MAGIC);
 }
