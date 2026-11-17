@@ -165,5 +165,5 @@ void acpi_reboot(void) {
 		klog(KLOG_WARN, "acpi: reboot failed: %s\n", uacpi_status_to_string(status));
 	}
 
-	klog(KLOG_INFO, "acpi: why are you calling this rn? acpi is not ready")
+	klog(KLOG_INFO, "acpi: why are you calling this rn? acpi is not ready");
 }
