@@ -21,6 +21,7 @@
 #include <kernel/kbd/dvc.h>
 #include <kernel/serial/dvc.h>
 #include <kernel/pci.h>
+#include <kernel/acpi.h>
 
 static void idle_task_entry(void) {
     while (1) {
@@ -66,6 +67,8 @@ void kernel_main(void) {
 	serial_dvc_init();
 
 	pci_init();
+
+	acpi_init();
 
 	ide_init();
 	atapi_init();

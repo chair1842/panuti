@@ -16,7 +16,7 @@ BOOTDIR?=$(EXEC_PREFIX)/boot
 INCLUDEDIR?=$(PREFIX)/include
 
 CFLAGS:=$(CFLAGS) -ffreestanding -Wall -Wextra
-CPPFLAGS:=$(CPPFLAGS) -D__is_kernel -Iinclude
+CPPFLAGS:=$(CPPFLAGS) -D__is_kernel -Iinclude -Ithird_party/uacpi/include -DUACPI_PHYS_ADDR_IS_32BITS
 LDFLAGS:=$(LDFLAGS)
 LIBS:=$(LIBS) -nostdlib -lk -lgcc
 
@@ -29,8 +29,29 @@ CPPFLAGS:=$(CPPFLAGS) $(KERNEL_ARCH_CPPFLAGS)
 LDFLAGS:=$(LDFLAGS) $(KERNEL_ARCH_LDFLAGS)
 LIBS:=$(LIBS) $(KERNEL_ARCH_LIBS)
 
+UACPI_OBJS=\
+third_party/uacpi/source/default_handlers.o \
+third_party/uacpi/source/event.o \
+third_party/uacpi/source/interpreter.o \
+third_party/uacpi/source/io.o \
+third_party/uacpi/source/mutex.o \
+third_party/uacpi/source/namespace.o \
+third_party/uacpi/source/notify.o \
+third_party/uacpi/source/opcodes.o \
+third_party/uacpi/source/opregion.o \
+third_party/uacpi/source/osi.o \
+third_party/uacpi/source/registers.o \
+third_party/uacpi/source/resources.o \
+third_party/uacpi/source/sleep.o \
+third_party/uacpi/source/stdlib.o \
+third_party/uacpi/source/tables.o \
+third_party/uacpi/source/types.o \
+third_party/uacpi/source/uacpi.o \
+third_party/uacpi/source/utilities.o
+
 KERNEL_OBJS=\
 $(KERNEL_ARCH_OBJS) \
+$(UACPI_OBJS) \
 kernel/kernel.o \
 kernel/pardet.o \
 kernel/memman/info.o \
@@ -146,8 +167,8 @@ $(ARCHDIR)/crtbegin.o $(ARCHDIR)/crtend.o:
 
 clean:
 	rm -f panuti_kern
-	rm -f $(OBJS) *.o */*.o */*/*.o
-	rm -f $(OBJS:.o=.d) *.d */*.d */*/*.d
+	rm -f $(OBJS) $(UACPI_OBJS) *.o */*.o */*/*.o
+	rm -f $(OBJS:.o=.d) $(UACPI_OBJS:.o=.d) *.d */*.d */*/*.d
 
 install: install-headers install-kernel
 
