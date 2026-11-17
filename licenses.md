@@ -13,6 +13,7 @@ There are 9 projects/components inside panuti.
 
 There are 2 third-party components
 - uACPI (kernel)
+- eyalroz/printf (libc)
 
 Each of these projects/components have their own individual licenses,
 and have a LICENSE.md at their top-level directory. Vendored third-party
@@ -32,3 +33,4 @@ The licences for the following projects/components are stated here.
 
 Third Party
 - uACPI - MIT
+- eyalroz/printf - MIT
