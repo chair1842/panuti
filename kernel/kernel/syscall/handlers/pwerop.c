@@ -23,7 +23,7 @@ int32_t syshandler_pwerop(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 		acpi_reboot();
 		return PANUTIERRNO_PLAINERR;
 	} else if (op == PANUTI_PWEROP_SHUTDOWN) {
-		acpi_shutdown();
+		acpi_poweroff();
 		return PANUTIERRNO_PLAINERR;
 	}
 
