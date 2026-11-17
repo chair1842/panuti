@@ -11,7 +11,8 @@ a unix-inspired hobbyist OS
 - Multitasking I386 kernel (no multiprocessing yet)
 - N-ary standard streams
 - VGA text mode, PC Speaker, Serial UART supported
-- PATA and CD-ROM support
+- PATA and CD-ROM support (now faster than 0.1)
+- Shutdown and restart in the os
 - ISO9660 and Ext2 filesystems
 - Has it's very own coreutils, vi/vim clone, and shell
 - Rename `/dev` to `/dvc` because why not
@@ -46,7 +47,12 @@ mkdir mnt
 mount mnt ext2 /dvc/pata/0
 ```
 
-make sure to unmount before shutting down
+make sure to unmount before shutting down or restarting  
+pwerop doesnt unmount and kill processes and just coldy kills the system at your command :)
+
+you can shutdown or restart using pwerop:  
+restart: `pwerop -r`  
+shutdown: `pwerop -s`
 
 ## 0.3 Progress
 
@@ -56,6 +62,8 @@ make sure to unmount before shutting down
 - ~~PCI enumeration (`/dvc/pci`)~~
 - ~~ACPI poweroff & reboot~~
 - ~~`sync` syscall and pcrutils~~
+
+all done :D
 
 ## Current limitations
 
