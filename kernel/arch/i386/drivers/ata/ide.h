@@ -146,7 +146,6 @@ void ide_write_reg(ide_channel_t* ch, uint8_t offset, uint8_t val);
 int ide_poll(ide_channel_t* ch);
 void ide_wait_irq(ide_channel_t* ch);
 
-int ide_init(void);
 ide_channel_t* ide_channel_get(int bus);
 int ide_probe_channel(ide_channel_t* ch);
 void ide_soft_reset(ide_channel_t* ch);

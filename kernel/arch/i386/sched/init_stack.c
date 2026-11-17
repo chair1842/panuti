@@ -2,6 +2,7 @@
 
 #include <kernel/sched/task.h>
 #include <stdint.h>
+#include <kernel/memman/layout.h>
 #include <kernel/memman/tempmap.h>
 #include <kernel/mem/usr.h>
 #include <kernel/irq.h>
@@ -10,7 +11,6 @@
 extern void enter_usermode_trampoline(void);
 
 #define INITIAL_EFLAGS 0x202 // IF=1, bit 1 always set
-#define PAGE_SIZE 0x1000
 
 void task_init_stack(task_t* t, void (*entry)(void)) {
 	uint32_t* stack_top = (uint32_t*)(t->kernel_stack + TASK_KERNEL_STACK_SIZE);

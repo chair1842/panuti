@@ -1,15 +1,10 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include <kernel/elf.h>
+#include <kernel/memman/layout.h>
 #include <kernel/memman/memman.h>
 
-#define PAGE_SIZE 0x1000
 #define MAX_SEG_PAGES 256
-
-/* Dedicated scratch address for ELF segment loading.
- * Must not collide with TEMP_MAP_BASE (0xC0820000) used by map_physical_temp,
- * nor the vmalloc heap (capped at 0xC0800000). */
-#define ELF_LOAD_SCRATCH 0xC0A00000
 
 int elf_load_segments(addr_space_t addr_space, const void* elf_data, const elf_loadable_segment_t* segs, int nsegs) {
 	for (int s = 0; s < nsegs; s++) {

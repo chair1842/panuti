@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include <kernel/kpanic.h>
+#include <kernel/cpu.h>
 #include <kernel/tty.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -21,8 +22,5 @@ void kpanic_impl(const char *file, int line, const char *fmt, ...) {
 	vprintf(fmt, args);
 	va_end(args);
 
-	asm volatile ("cli");
-	while (1) {
-		asm volatile ("hlt");
-	}
+	cpu_halt();
 }

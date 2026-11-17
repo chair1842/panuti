@@ -5,6 +5,7 @@
 #include <kernel/irq.h>
 #include <kernel/klog.h>
 #include <kernel/ksleep.h>
+#include <kernel/memman/layout.h>
 #include <kernel/memman/memman.h>
 #include <kernel/memman/slab.h>
 #include <kernel/pci.h>
@@ -17,9 +18,7 @@
 #include <uacpi/status.h>
 #include <uacpi/types.h>
 
-#define ACPI_MAP_BASE 0xC1000000u
 #define ACPI_MAP_PAGES 4096u
-#define PAGE_SIZE 0x1000u
 
 static uint32_t acpi_map_bits[ACPI_MAP_PAGES / 32u];
 

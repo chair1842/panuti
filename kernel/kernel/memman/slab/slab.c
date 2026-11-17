@@ -3,6 +3,7 @@
 // slab.c
 #include "kernel/klog.h"
 #include <kernel/memman/slab.h>
+#include <kernel/memman/layout.h>
 #include <kernel/memman/vmalloc.h>
 #include <string.h>
 #include <kernel/kpanic.h>
@@ -39,7 +40,6 @@ static kmallocCache_t caches[] = {
 };
 
 #define NUM_CACHES (sizeof(caches) / sizeof(caches[0]))
-#define PAGE_SIZE 4096
 
 // Allocations larger than a page: vmalloc_pages() hands out the first page as
 // a header (magic + page count) and kmalloc returns base + PAGE_SIZE, which is
@@ -237,7 +237,7 @@ static void kfree_inner(void* ptr) {
 		return;
 	}
 
-	slab_t* slab = (slab_t*)((uint32_t)ptr & ~0xFFF);
+	slab_t* slab = (slab_t*)((uint32_t)ptr & ~PAGE_MASK);
 
 	if (slab->magic != SLAB_MAGIC) {
 		return;

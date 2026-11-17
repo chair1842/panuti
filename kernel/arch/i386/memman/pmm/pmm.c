@@ -4,12 +4,13 @@
 #include <kernel/kpanic.h>
 #include <kernel/klog.h>
 #include <kernel/irq.h>
+#include <kernel/memman/layout.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
-#define PMM_PAGE_SIZE 4096
-#define PMM_PAGE_MASK (PMM_PAGE_SIZE - 1)
+#define PMM_PAGE_SIZE PAGE_SIZE
+#define PMM_PAGE_MASK PAGE_MASK
 
 #define LOWMEM_START 0x0
 #define LOWMEM_END 0x100000
@@ -17,7 +18,7 @@
 #define KERNEL_START 0x100000
 #ifndef KERNEL_END
 extern uint32_t _kernel_end;
-#define KERNEL_END ((uint32_t)&_kernel_end - 0xC0000000)
+#define KERNEL_END ((uint32_t)&_kernel_end - KERNEL_VIRT_OFFSET)
 #endif
 
 // the highest physical address a uint32_t can carry. e820 regions reaching past
@@ -45,7 +46,6 @@ extern uint32_t _kernel_end;
 // scratch windows live at 0xC0800000, 0xC0820000 and 0xC0A00000, all inside
 // PDE 0x302. This is PDE 0x303, and vmm_create_page_dir() copies the kernel
 // PDEs into every task directory, so tasks inherit the mapping.
-#define PMM_BITMAP_VIRT 0xC0C00000u
 #define PMM_BITMAP_PDE (PMM_BITMAP_VIRT >> 22)
 #define RECURSIVE_TABLE_BASE 0xFFC00000u
 
@@ -61,7 +61,7 @@ extern uint8_t* pmm_test_bitmap_base;
 #define PMM_BITMAP_BOOT(phys) ((uint8_t*)pmm_test_bitmap_base)
 #define PMM_BITMAP_HOME ((uint8_t*)pmm_test_bitmap_base)
 #else
-#define PMM_BITMAP_BOOT(phys) ((uint8_t*)((phys) + 0xC0000000u))
+#define PMM_BITMAP_BOOT(phys) ((uint8_t*)((phys) + KERNEL_VIRT_OFFSET))
 #define PMM_BITMAP_HOME ((uint8_t*)PMM_BITMAP_VIRT)
 
 extern uint32_t boot_page_dir[1024];

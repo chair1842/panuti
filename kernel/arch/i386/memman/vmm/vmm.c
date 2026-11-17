@@ -6,19 +6,13 @@
 #include <kernel/klog.h>
 #include <kernel/irq.h>
 #include <kernel/mem/usr.h>
+#include <kernel/memman/layout.h>
 
-#define KERNEL_VIRT_OFFSET 0xC0000000
 #define RECURSIVE_TABLE_BASE 0xFFC00000
-#define PAGE_SIZE 0x1000
-
-#define PAGE_DIR_TEMP_MAP 0xC0800000
 
 #define KERNEL_PDE_START (KERNEL_VIRT_OFFSET >> 22)
 #define RECURSIVE_PDE_INDEX 1023
 #define PAGE_DIR_ENTRIES 1024
-
-#define KERNEL_HEAP_END 0xC0800000
-#define KERNEL_PREMAP_END 0xC2000000
 
 #define PAGE_PRESENT 0x1
 #define PAGE_RW 0x2

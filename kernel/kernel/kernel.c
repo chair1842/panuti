@@ -13,7 +13,7 @@
 #include <kernel/kpanic.h>
 #include <kernel/ata/atapi.h>
 #include <kernel/ata/ata.h>
-#include "../arch/i386/drivers/ata/ide.h"
+#include <kernel/cpu.h>
 #include "drivers/console/console.h"
 #include "drivers/ramblock/ramblock.h"
 #include "drivers/kdev/kdev.h"
@@ -25,7 +25,7 @@
 
 static void idle_task_entry(void) {
     while (1) {
-        __asm__ __volatile__("hlt");
+        cpu_idle();
     }
 }
 

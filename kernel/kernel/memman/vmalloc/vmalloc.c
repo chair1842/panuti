@@ -3,13 +3,9 @@
 #include <kernel/memman/vmalloc.h>
 #include <stdint.h>
 #include <kernel/klog.h>
+#include <kernel/memman/layout.h>
 #include <kernel/memman/memman.h>
 #include <kernel/irq.h>
-
-#define PAGE_ALIGN_UP(addr) (((addr) + 0xFFF) & ~0xFFF)
-
-#define PAGE_PRESENT 0x1
-#define PAGE_RW 0x2
 
 /*
  * The kernel heap grows upward from _kernel_end. It must never run into the
@@ -18,7 +14,6 @@
  * ELF loader uses ELF_LOAD_SCRATCH. Those live at 0xC0800000+, so the heap is
  * capped just below them.
  */
-#define VMALLOC_END 0xC0800000
 
 #define VM_FREE_MAX 256
 
@@ -36,7 +31,7 @@ static uint32_t vmfree_count;
 void vmalloc_init(void) {
 	vmalloc_next = PAGE_ALIGN_UP((uint32_t)&_kernel_end);
 	if (vmalloc_next == 0) {
-		vmalloc_next = 4096;
+		vmalloc_next = PAGE_SIZE;
 	}
 	
 	heap_start = vmalloc_next;
@@ -46,8 +41,8 @@ void vmalloc_init(void) {
 void vmalloc_get_stats(vmalloc_stats_t* s) {
 	uint32_t f = irq_save_disable();
 	
-	s->capacity = (VMALLOC_END - heap_start) / 4096;
-	s->high_water = (vmalloc_next - heap_start) / 4096;
+	s->capacity = (VMALLOC_END - heap_start) / PAGE_SIZE;
+	s->high_water = (vmalloc_next - heap_start) / PAGE_SIZE;
 	
 	uint32_t freed = 0;
 	for (uint32_t i = 0; i < vmfree_count; i++) {
@@ -71,10 +66,10 @@ static void vmfree_insert(uint32_t vaddr, uint32_t npages) {
 		return;
 	}
 	uint32_t lo = vaddr;
-	uint32_t hi = vaddr + npages * 4096;
+	uint32_t hi = vaddr + npages * PAGE_SIZE;
 	for (uint32_t i = 0; i < vmfree_count; ) {
 		uint32_t e_start = vmfree[i].vaddr;
-		uint32_t e_end = e_start + vmfree[i].npages * 4096;
+		uint32_t e_end = e_start + vmfree[i].npages * PAGE_SIZE;
 		if (e_end >= lo && e_start <= hi) {
 			if (e_start < lo) {
 				lo = e_start;
@@ -93,7 +88,7 @@ static void vmfree_insert(uint32_t vaddr, uint32_t npages) {
 		return;
 	}
 	vmfree[vmfree_count].vaddr = lo;
-	vmfree[vmfree_count].npages = (hi - lo) / 4096;
+	vmfree[vmfree_count].npages = (hi - lo) / PAGE_SIZE;
 	vmfree_count++;
 }
 
@@ -114,7 +109,7 @@ static uint32_t vmfree_take(uint32_t npages) {
 	if (vmfree[best].npages == npages) {
 		vmfree[best] = vmfree[--vmfree_count];
 	} else {
-		vmfree[best].vaddr += npages * 4096;
+		vmfree[best].vaddr += npages * PAGE_SIZE;
 		vmfree[best].npages -= npages;
 	}
 	return vaddr;
@@ -136,13 +131,13 @@ void* vmalloc_pages(uint32_t npages) {
 	uint32_t base = vmfree_take(npages);
 
 	if (base == 0) {
-		if (vmalloc_next > VMALLOC_END || npages > (VMALLOC_END - vmalloc_next) / 4096) {
+		if (vmalloc_next > VMALLOC_END || npages > (VMALLOC_END - vmalloc_next) / PAGE_SIZE) {
 			klog(KLOG_WARN, "vmalloc: heap exhausted for %u pages\n", npages);
 			irq_restore(flags);
 			return nullptr;
 		}
 		base = vmalloc_next;
-		vmalloc_next += npages * 4096;
+		vmalloc_next += npages * PAGE_SIZE;
 	}
 
 	for (uint32_t i = 0; i < npages; i++) {
@@ -151,15 +146,15 @@ void* vmalloc_pages(uint32_t npages) {
 			// Release the successfully mapped prefix back to the pool, then
 			// return the still unmapped tail so no virtual space is leaked.
 			for (uint32_t j = 0; j < i; j++) {
-				memman_unmap(base + j * 4096);
-				memman_free_frame(memman_get_phys(base + j * 4096));
+				memman_unmap(base + j * PAGE_SIZE);
+				memman_free_frame(memman_get_phys(base + j * PAGE_SIZE));
 			}
 			vmfree_insert(base, i);
-			vmfree_insert(base + i * 4096, npages - i);
+			vmfree_insert(base + i * PAGE_SIZE, npages - i);
 			irq_restore(flags);
 			return nullptr;
 		}
-		memman_map(base + i * 4096, phys, PAGE_PRESENT | PAGE_RW);
+		memman_map(base + i * PAGE_SIZE, phys, MEMMAN_PRESENT | MEMMAN_RW);
 	}
 
 	irq_restore(flags);
@@ -169,13 +164,13 @@ void* vmalloc_pages(uint32_t npages) {
 
 void vmalloc_free_pages(void* addr, uint32_t npages) {
 	for (uint32_t i = 0; i < npages; i++) {
-		vmalloc_free((void*)((uint32_t)addr + i * 4096));
+		vmalloc_free((void*)((uint32_t)addr + i * PAGE_SIZE));
 	}
 }
 
 void vmalloc_free(void* addr) {
 	uint32_t virt = (uint32_t)addr;
-	if ((virt & 0xFFF) != 0) {
+	if ((virt & PAGE_MASK) != 0) {
 		return;
 	}
 

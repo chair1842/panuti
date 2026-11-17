@@ -7,6 +7,7 @@
 #include <kernel/sched/task.h>
 #include <kernel/klog.h>
 #include <kernel/memman/vmalloc.h>
+#include <kernel/memman/layout.h>
 #include <kernel/memman/memman.h>
 #include <kernel/memman/slab.h>
 #include <kernel/mem/usr.h>
@@ -18,8 +19,6 @@
 #include <kernel/elf.h>
 #include <panuti/errno.h>
 
-#define USER_STACK_VIRT_TOP 0xB0000000
-#define PAGE_SIZE 0x1000
 #define MAX_ARGV_BYTES (TASK_USER_STACK_SIZE - TASK_USER_CONTEXT_BYTES)
 #define ELF_READ_MAX (256 * 1024)
 

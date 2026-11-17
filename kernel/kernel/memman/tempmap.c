@@ -1,11 +1,8 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include <kernel/memman/tempmap.h>
+#include <kernel/memman/layout.h>
 #include <kernel/memman/memman.h>
-
-/* Above the vmalloc heap cap (0xC0800000); room for sizable temp mappings. */
-#define TEMP_MAP_BASE  0xC0820000
-#define PAGE_SIZE      0x1000
 
 void* map_physical_temp(uint32_t phys, size_t size) {
 	uint32_t phys_page_start = phys & ~(PAGE_SIZE - 1);

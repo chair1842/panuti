@@ -1,0 +1,22 @@
+/* SPDX-License-Identifier: GPL-2.0-or-later */
+
+#ifndef _KERNEL_MEMMAN_LAYOUT_H
+#define _KERNEL_MEMMAN_LAYOUT_H
+
+#define PAGE_SIZE 0x1000u
+#define PAGE_MASK (PAGE_SIZE - 1u)
+
+#define PAGE_ALIGN_DOWN(addr) ((addr) & ~PAGE_MASK)
+#define PAGE_ALIGN_UP(addr) (((addr) + PAGE_MASK) & ~PAGE_MASK)
+
+#define KERNEL_VIRT_OFFSET 0xC0000000u
+#define USER_STACK_VIRT_TOP 0xB0000000u
+#define VMALLOC_END 0xC0800000u
+#define PAGE_DIR_TEMP_MAP 0xC0800000u
+#define TEMP_MAP_BASE 0xC0820000u
+#define ELF_LOAD_SCRATCH 0xC0A00000u
+#define PMM_BITMAP_VIRT 0xC0C00000u
+#define ACPI_MAP_BASE 0xC1000000u
+#define KERNEL_PREMAP_END 0xC2000000u
+
+#endif
