@@ -190,6 +190,10 @@ static inline int32_t panutisysf_waitp(const pid_t* pids, uint32_t count, int32_
 	);
 }
 
+static inline int32_t panutisysf_pwerop(uint32_t op, uint32_t magic) {
+	return panuti_syscall(SYSHANDLER_PWEROP, op, magic, 0, 0);
+}
+
 #if defined(__cplusplus)
 }
 #endif

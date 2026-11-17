@@ -83,6 +83,8 @@ panuti/process/kill.o \
 stdlib/abort.o \
 panuti/process/wait_many.o \
 panuti/process/waitp_many.o \
+panuti/pwerop/reboot.o \
+panuti/pwerop/shutdown.o
 
 OBJS=\
 $(FREEOBJS) \

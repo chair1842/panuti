@@ -111,4 +111,7 @@ int32_t syshandler_kill(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // same as wait but without polling
 int32_t syshandler_waitp(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// reboot or poweroff. power operations
+int32_t syshandler_pwerop(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif
