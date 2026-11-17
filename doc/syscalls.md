@@ -1216,15 +1216,50 @@ libc wraps this as `waitp(pid_t, int*)` and
 
 ---
 
+### 35 -- PWEROP
+
+```c
+int32_t panutisysf_pwerop(uint32_t op, uint32_t magic);
+```
+
+Request a power operation (reboot or shutdown) through ACPI.
+
+**Parameters:**
+- `op` -- operation selector: `PANUTI_PWEROP_REBOOT` (`256`) or `PANUTI_PWEROP_SHUTDOWN` (`257`)
+- `magic` -- magic cookie that must equal `PANUTI_PWEROP_MAGIC` (`0xAAAAFACC`) or the call is rejected
+
+**Returns:** `PANUTIERRNO_PLAINERR` once the operation has been handed to the
+ACPI layer -- the ACPI routines are not expected to return, but the handler
+reports failure through this value if the sleep-state entry does not succeed.
+An unrecognized `op` or a mismatched `magic` returns `PANUTIERRNO_INVALIDARG`.
+
+**Errors:**
+- `PANUTIERRNO_INVALIDARG` -- `magic` is not `PANUTI_PWEROP_MAGIC`, or `op` is
+  neither `PANUTI_PWEROP_REBOOT` nor `PANUTI_PWEROP_SHUTDOWN`
+- `PANUTIERRNO_NOTSUPPORTED` -- ACPI is not available
+
+**Note:** reboot and shutdown are cold operations with no user-side preparation:
+the kernel goes straight to the ACPI sleep-state entry (`acpi_reboot` /
+`acpi_poweroff`), and if that fails falls back to a keyboard-controller reset,
+chipset reset, and triple fault. If nothing works, the system halts. There is no
+in-syscall "prepare" phase; the operation is dispatched immediately.
+
+**Note:** libc wraps this as `pwerop_reboot()` and `pwerop_shutdown()` in
+`libc/include/panuti/pwerop.h` and `libc/panuti/pwerop/`, sending
+`PANUTI_PWEROP_REBOOT` / `PANUTI_PWEROP_SHUTDOWN` with `PANUTI_PWEROP_MAGIC`. The
+libc entry points do no preparation of their own.
+
+---
+
 ## Quick Reference
 
-All 35 syscalls listed here are registered in the kernel dispatch table and
+All 36 syscalls listed here are registered in the kernel dispatch table and
 documented in detail above. Numbers are defined in
 `libc/include/panuti/syscall/syscallno.h`.
 
 The dispatch table has 256 slots. Any number at or above `256` returns
 `PANUTIERRNO_INVALIDSYSCALL`, as does any number below `256` that is not
-registered -- today that is `35` through `255`, so they are reserved rather
+registered -- today that is `36` through `255`, so they are reserved rather
 than permanently invalid.
 
 | # | Name | # | Name |
@@ -1246,7 +1281,7 @@ than permanently invalid.
 | 28 | `RESIZE` | 29 | `MKFILE` |
 | 30 | `SLEEP` | 31 | `SETTMSP` |
 | 32 | `SYNC` | 33 | `KILL` |
-| 34 | `WAITP` | | |
+| 34 | `WAITP` | 35 | `PWEROP` |
 
 ## Limits
 
