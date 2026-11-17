@@ -150,13 +150,27 @@ bool acpi_available(void) {
 	return acpi_ready;
 }
 
+static void halt_forever(void) {
+	__asm__ volatile("cli");
+	for (;;) {
+		__asm__ volatile("hlt");
+	}
+}
+
 void acpi_poweroff(void) {
-	if (!acpi_ready) {
-		return;
+	if (acpi_ready) {
+		uacpi_status status = uacpi_enter_sleep_state_simple(UACPI_SLEEP_STATE_S5);
+		klog(KLOG_WARN, "acpi: poweroff failed: %s\n", uacpi_status_to_string(status));
 	}
 
-	uacpi_status status = uacpi_enter_sleep_state_simple(UACPI_SLEEP_STATE_S5);
-	klog(KLOG_WARN, "acpi: poweroff failed: %s\n", uacpi_status_to_string(status));
+	// emulator fallbacks
+	__asm__ volatile("cli");
+	outw(0x604, 0x2000); // QEMU (q35 and recent pc)
+	outw(0xB004, 0x2000); // older QEMU, Bochs
+	outw(0x4004, 0x3400); // VirtualBox
+
+	klog(KLOG_WARN, "poweroff: nothing worked, halting\n");
+	halt_forever();
 }
 
 void acpi_reboot(void) {
@@ -164,4 +178,22 @@ void acpi_reboot(void) {
 		uacpi_status status = uacpi_reboot();
 		klog(KLOG_WARN, "acpi: reboot failed: %s\n", uacpi_status_to_string(status));
 	}
+
+	__asm__ volatile("cli");
+
+	// keyboard controller
+	for (int i = 0; i < 100000; i++) {
+		if (!(inb(0x64) & 0x02)) break;
+	}
+	
+	outb(0x64, 0xFE);
+
+	// chipset reset control register
+	outb(0xCF9, 0x06);
+
+	// triple fault my beloved
+	struct { uint16_t limit; uint32_t base; } __attribute__((packed)) idt = { 0, 0 };
+	__asm__ volatile("lidt %0; int3" :: "m"(idt));
+
+	halt_forever();
 }

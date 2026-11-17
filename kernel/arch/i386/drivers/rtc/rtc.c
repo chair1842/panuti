@@ -3,6 +3,8 @@
 #include <stdint.h>
 #include <kernel/rtc.h>
 #include "../../io.h"
+#include <uacpi/tables.h>
+#include <uacpi/acpi.h>
 
 // this code here is basically from the CMOS article of the osdev wiki
 
@@ -15,6 +17,8 @@
 #define RTC_DAYR 0x07
 #define RTC_MONR 0x08
 #define RTC_YEARR 0x09
+
+// to now be the fallback
 #define RTC_CENTR 0x32
 
 #define RTC_REGB 0x0B
@@ -120,6 +124,18 @@ static rtc_datetime_t read_rtc(void) {
 
 	uint8_t regb = 0;
 
+	uint8_t cent_reg = 0;
+
+	struct acpi_fadt* fadt;
+	if (uacpi_table_fadt(&fadt) == UACPI_STATUS_OK) {
+		uint8_t cent_reg = fadt->century;
+		if (cent_reg == 0) {
+			cent_reg = RTC_CENTR;
+		}
+	} else {
+		cent_reg = RTC_CENTR;
+	}
+
 	while (getf_update_in_prog());
 
 	dt.second = get_cmos_reg(RTC_SECR);
@@ -156,7 +172,7 @@ static rtc_datetime_t read_rtc(void) {
 
 	regb = get_cmos_reg(RTC_REGB);
 
-	int century = get_cmos_reg(RTC_CENTR);
+	int century = get_cmos_reg(cent_reg);
 
 	if (!(regb & RTC_BCD_S)) {
 		dt.second = from_bcd(dt.second);
