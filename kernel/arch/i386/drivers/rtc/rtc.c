@@ -128,7 +128,7 @@ static rtc_datetime_t read_rtc(void) {
 
 	struct acpi_fadt* fadt;
 	if (uacpi_table_fadt(&fadt) == UACPI_STATUS_OK) {
-		uint8_t cent_reg = fadt->century;
+		cent_reg = fadt->century;
 		if (cent_reg == 0) {
 			cent_reg = RTC_CENTR;
 		}
