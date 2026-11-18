@@ -60,7 +60,7 @@ shutdown: `pwerop -s`
 - ~~Processes exposed (`/sys/pid`)~~
 - ~~kill (terminate) syscall~~
 - ~~PCI enumeration (`/dvc/pci`)~~
-- ~~ACPI poweroff & reboot~~
+- ~~ACPI poweroff & reboot (with fallbacks)~~
 - ~~`sync` syscall and pcrutils~~
 
 all done :D
