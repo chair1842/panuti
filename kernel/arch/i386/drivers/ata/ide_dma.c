@@ -154,6 +154,11 @@ int ide_dma_wait(ide_channel_t* ch, uint32_t ticks) {
 	}
 
 	task_t* task = sched_current();
+	if (!task) {
+		ch->dma_waiter = NULL;
+		return IDE_DMA_KILLED;
+	}
+	
 	uint32_t deadline = timer_get_ticks() + ticks;
 	uint32_t flags;
 	int result;
