@@ -1,90 +1,15 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
-#include <string.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <limits.h>
-#include <panuti/handle.h>
-#include <panuti/stat.h>
-#include <panuti/kbd.h>
-#include <panuti/stream.h>
-#include <panuti/errno.h>
-#include <panuti/syscall/syscallsf.h>
+#include "editor.h"
 
-#define ROWS 24
-#define COLS 80
-
-typedef struct line {
-	char* string;
-	int len;
-	int cap;
-} line_t;
-
-typedef enum editor_mode {
-	EM_NORMAL,
-	EM_COMMAND,
-	EM_INSERT
-} editor_mode_t;
-
-typedef struct commandmode_state {
-	line_t command;
-} commandmode_state_t;
-
-typedef struct normalmode_state {
-	char pending_op;
-	bool pending_replace;
-	bool pending_g;
-} normalmode_state_t;
-
-typedef struct motion {
-	int y;
-	int x;
-	bool linewise;
-	bool inclusive;
-} motion_t;
-
-typedef struct range {
-	int y1;
-	int y2;
-	int x2;
-	int x1;
-	
-	bool linewise;
-} range_t;
-
-typedef struct editor_global {
-	line_t* lines;
-	int nlines;
-	int capl;
-
-	const char* path;
-
-	int vup_x;
-	int vup_y;
-	
-	int cur_x;
-	int cur_y;
-	int insert_x;
-	
-	editor_mode_t mode;
-	
-	line_t errormsg;
-	bool show_errmsg;
-	
-	commandmode_state_t cmstate;
-	normalmode_state_t nmstate;
-	
-	bool dirty;
-
-	bool trailing_nl;
-} editor_global_t;
+#define LINE_LEN_MAX (INT_MAX - 8)
 
 // why is this called egg?
 // i was gonna call it eg for editor global.
 // but then the brilliant joke of EGG arrived.
 // the name is very annoying to work with.
 // but its for the sake of it
-static editor_global_t EGG;
+editor_global_t EGG;
 
 static void line_init(line_t* l) {
 	l->string = NULL;
@@ -92,9 +17,7 @@ static void line_init(line_t* l) {
 	l->cap = 0;
 }
 
-#define LINE_LEN_MAX (INT_MAX - 8)
-
-static bool line_reserve(line_t* l, int cap) {
+bool line_reserve(line_t* l, int cap) {
 	if (cap < 0) {
 		return false;
 	}
@@ -123,7 +46,7 @@ static bool line_reserve(line_t* l, int cap) {
 	return true;
 }
 
-static bool line_set(line_t* l, const char* str, int len) {
+bool line_set(line_t* l, const char* str, int len) {
 	if (len < 0 || len > LINE_LEN_MAX) {
 		return false;
 	}
@@ -138,7 +61,7 @@ static bool line_set(line_t* l, const char* str, int len) {
 	return true;
 }
 
-static bool line_append(line_t* l, char c) {
+bool line_append(line_t* l, char c) {
 	if (l->len >= LINE_LEN_MAX) {
 		return false;
 	}
@@ -152,7 +75,7 @@ static bool line_append(line_t* l, char c) {
 	return true;
 }
 
-static bool line_insert(line_t* l, int pos, char c) {
+bool line_insert(line_t* l, int pos, char c) {
 	if (pos < 0) {
 		pos = 0;
 	}
@@ -175,7 +98,7 @@ static bool line_insert(line_t* l, int pos, char c) {
 	return true;
 }
 
-static bool line_backspace_at(line_t* l, int pos) {
+bool line_backspace_at(line_t* l, int pos) {
 	if (pos < 0 || pos >= l->len) {
 		return false;
 	}
@@ -186,16 +109,16 @@ static bool line_backspace_at(line_t* l, int pos) {
 	return true;
 }
 
-static void line_backspace(line_t* l) {
+void line_backspace(line_t* l) {
 	line_backspace_at(l, l->len - 1);
 }
 
-static void line_free(line_t* l) {
+void line_free(line_t* l) {
 	free(l->string);
 	line_init(l);
 }
 
-static void editor_free(void) {
+void editor_free(void) {
 	for (int i = 0; i < EGG.nlines; i++) {
 		line_free(&EGG.lines[i]);
 	}
@@ -209,7 +132,7 @@ static void editor_free(void) {
 	line_free(&EGG.cmstate.command);
 }
 
-static line_t* line_new_at(int at) {
+line_t* line_new_at(int at) {
 	if (EGG.nlines == EGG.capl) {
 		int ncap;
 
@@ -253,7 +176,7 @@ static line_t* line_new_at(int at) {
 	return &EGG.lines[at];
 }
 
-static bool line_delete_at(int at) {
+bool line_delete_at(int at) {
 	if (at < 0 || at >= EGG.nlines) {
 		return false;
 	}
@@ -266,7 +189,7 @@ static bool line_delete_at(int at) {
 	return true;
 }
 
-static bool add_line(const char* str, int len) {
+bool add_line(const char* str, int len) {
 	line_t* l = line_new_at(EGG.nlines);
 	if (!l) {
 		return false;
@@ -280,7 +203,7 @@ static bool add_line(const char* str, int len) {
 	return true;
 }
 
-static void set_errmsg(const char* msg) {
+void set_errmsg(const char* msg) {
 	line_set(&EGG.errormsg, msg, (int)strlen(msg));
 	EGG.show_errmsg = true;
 }
@@ -297,15 +220,7 @@ static char* tmp_path(const char* path) {
 	return tmp;
 }
 
-typedef enum load_status {
-	LOAD_OK,
-	LOAD_NEW,
-	LOAD_EOOM,
-	LOAD_EIO,
-	LOAD_ENOTDIR
-} load_status_t;
-
-static load_status_t load(const char* path) {
+load_status_t load(const char* path) {
 	char* stale = tmp_path(path);
 	if (stale) {
 		if (nexist(stale)) {
@@ -507,880 +422,6 @@ void goto_line(int y) {
 	}
 }
 
-static bool hinormal_ismodifier(keycode_t kc) {
-	switch (kc) {
-		case KEYCODE_LSHIFT:
-		case KEYCODE_RSHIFT:
-		case KEYCODE_LALT:
-		case KEYCODE_RALT:
-		case KEYCODE_LCTRL:
-		case KEYCODE_RCTRL:
-		case KEYCODE_CAPS_LOCK:
-		case KEYCODE_SCROLL_LOCK:
-		case KEYCODE_NUM_LOCK:
-			return true;
-		default:
-			return false;
-	}
-}
-
-static bool hinormal_ismotion(char c) {
-	switch (c) {
-		case 'h':
-		case 'j':
-		case 'k':
-		case 'l':
-		case 'w':
-		case 'b':
-		case 'e':
-		case '0':
-		case '^':
-		case '$':
-			return true;
-		default:
-			return false;
-	}
-}
-
-static bool hinormal_isoperator(char c) {
-	switch (c) {
-		case 'd':
-		case 'c':
-			return true;
-		default:
-			return false;
-	}
-}
-
-static bool hinormal_wordch(char c) {
-	return c != ' ' && c != '\t';
-}
-
-static bool hinormal_next_word(int* y, int* x) {
-	int cy = *y;
-	int cx = *x;
-	line_t* l = &EGG.lines[cy];
-
-	if (cx < l->len && hinormal_wordch(l->string[cx])) {
-		while (cx < l->len && hinormal_wordch(l->string[cx])) {
-			cx++;
-		}
-	}
-
-	while (cy < EGG.nlines) {
-		l = &EGG.lines[cy];
-
-		while (cx < l->len && !hinormal_wordch(l->string[cx])) {
-			cx++;
-		}
-
-		if (cx < l->len) {
-			*y = cy;
-			*x = cx;
-			return true;
-		}
-
-		cy++;
-		cx = 0;
-	}
-
-	return false;
-}
-
-static bool hinormal_prev_word(int* y, int* x) {
-	int cy = *y;
-	int cx = *x;
-
-	while (cy >= 0) {
-		line_t* l = &EGG.lines[cy];
-
-		if (cx == 0) {
-			if (cy == 0) {
-				return false;
-			}
-
-			cy--;
-			cx = EGG.lines[cy].len;
-			continue;
-		}
-
-		cx--;
-
-		if (cx < l->len && hinormal_wordch(l->string[cx])) {
-			while (cx > 0 && hinormal_wordch(l->string[cx - 1])) {
-				cx--;
-			}
-
-			*y = cy;
-			*x = cx;
-			return true;
-		}
-	}
-
-	return false;
-}
-
-static bool hinormal_word_end(int* y, int* x) {
-	int cy = *y;
-	int cx = *x;
-
-	if (cy < EGG.nlines && cx < EGG.lines[cy].len && hinormal_wordch(EGG.lines[cy].string[cx])) {
-		line_t* l = &EGG.lines[cy];
-
-		if (cx + 1 < l->len && hinormal_wordch(l->string[cx + 1])) {
-			while (cx + 1 < l->len && hinormal_wordch(l->string[cx + 1])) {
-				cx++;
-			}
-
-			*y = cy;
-			*x = cx;
-			return true;
-		}
-
-		cx++;
-	}
-
-	while (cy < EGG.nlines) {
-		line_t* l = &EGG.lines[cy];
-
-		while (cx < l->len && !hinormal_wordch(l->string[cx])) {
-			cx++;
-		}
-
-		if (cx < l->len) {
-			while (cx + 1 < l->len && hinormal_wordch(l->string[cx + 1])) {
-				cx++;
-			}
-
-			*y = cy;
-			*x = cx;
-			return true;
-		}
-
-		cy++;
-		cx = 0;
-	}
-
-	return false;
-}
-
-static bool hinormal_resolve_motion(char c, motion_t* m) {
-	int y = EGG.cur_y;
-	int x = EGG.cur_x;
-	bool linewise = false;
-	bool inclusive = false;
-
-	switch (c) {
-		case 'h':
-			if (x == 0) {
-				return false;
-			}
-
-			x--;
-			break;
-		case 'l':
-			if (x >= EGG.lines[y].len) {
-				return false;
-			}
-
-			x++;
-			break;
-		case 'j':
-			if (y + 1 >= EGG.nlines) {
-				return false;
-			}
-
-			y++;
-			linewise = true;
-			break;
-		case 'k':
-			if (y == 0) {
-				return false;
-			}
-
-			y--;
-			linewise = true;
-			break;
-		case '0':
-			x = 0;
-			break;
-		case '^':
-			x = 0;
-			while (x < EGG.lines[y].len && (EGG.lines[y].string[x] == ' ' || EGG.lines[y].string[x] == '\t')) {
-				x++;
-			}
-			
-			break;
-		case '$':
-			x = EGG.lines[y].len;
-			break;
-		case 'w':
-			if (!hinormal_next_word(&y, &x)) {
-				return false;
-			}
-			
-			break;
-		case 'b':
-			if (!hinormal_prev_word(&y, &x)) {
-				return false;
-			}
-			
-			break;
-		case 'e':
-			if (!hinormal_word_end(&y, &x)) {
-				return false;
-			}
-
-			inclusive = true;
-			break;
-		default:
-			return false;
-	}
-
-	m->y = y;
-	m->x = x;
-	m->linewise = linewise;
-	m->inclusive = inclusive;
-	return true;
-}
-
-static bool hinormal_motion_range(char c, range_t* r) {
-	motion_t m;
-
-	if (!hinormal_resolve_motion(c, &m)) {
-		return false;
-	}
-
-	if (m.linewise) {
-		r->linewise = true;
-		r->y1 = EGG.cur_y < m.y ? EGG.cur_y : m.y;
-		r->x1 = 0;
-		r->y2 = EGG.cur_y < m.y ? m.y : EGG.cur_y;
-		r->x2 = 0;
-		return true;
-	}
-
-	r->linewise = false;
-
-	if (m.y < EGG.cur_y || (m.y == EGG.cur_y && m.x < EGG.cur_x)) {
-		r->y1 = m.y;
-		r->x1 = m.x;
-		r->y2 = EGG.cur_y;
-		r->x2 = EGG.cur_x;
-	} else {
-		r->y1 = EGG.cur_y;
-		r->x1 = EGG.cur_x;
-		r->y2 = m.y;
-		r->x2 = m.x + (m.inclusive ? 1 : 0);
-
-		if (r->x2 > EGG.lines[r->y2].len) {
-			r->x2 = EGG.lines[r->y2].len;
-		}
-	}
-
-	return true;
-}
-
-static int hinormal_clamp(int v, int lo, int hi) {
-	return v < lo ? lo : (v > hi ? hi : v);
-}
-
-static bool hinormal_range_delete(range_t* r) {
-	if (r->linewise) {
-		if (r->y1 == 0 && r->y2 >= EGG.nlines - 1) {
-			if (!line_set(&EGG.lines[0], "", 0)) {
-				return false;
-			}
-
-			for (int y = EGG.nlines - 1; y >= 1; y--) {
-				line_delete_at(y);
-			}
-
-			EGG.cur_y = 0;
-			EGG.cur_x = 0;
-			return true;
-		}
-
-		for (int y = r->y2; y >= r->y1; y--) {
-			line_delete_at(y);
-		}
-
-		EGG.cur_y = r->y1 < EGG.nlines ? r->y1 : EGG.nlines - 1;
-		EGG.cur_x = 0;
-		return true;
-	}
-
-	line_t* first = &EGG.lines[r->y1];
-	line_t* last = &EGG.lines[r->y2];
-	int x1 = hinormal_clamp(r->x1, 0, first->len);
-	int x2 = hinormal_clamp(r->x2, 0, last->len);
-
-	if (r->y1 == r->y2) {
-		if (x1 < x2) {
-			memmove(first->string + x1, first->string + x2, (size_t)(first->len - x2));
-			first->len -= x2 - x1;
-			first->string[first->len] = '\0';
-		}
-
-		EGG.cur_y = r->y1;
-		EGG.cur_x = x1;
-		return true;
-	}
-
-	int rem = last->len - x2;
-	if (rem > LINE_LEN_MAX - x1) {
-		return false;
-	}
-
-	if (!line_reserve(first, x1 + rem + 1)) {
-		return false;
-	}
-
-	if (rem > 0) {
-		memmove(first->string + x1, last->string + x2, (size_t)rem);
-	}
-
-	first->len = x1 + rem;
-	first->string[first->len] = '\0';
-
-	for (int y = r->y2; y > r->y1; y--) {
-		line_delete_at(y);
-	}
-
-	EGG.cur_y = r->y1;
-	EGG.cur_x = x1;
-	return true;
-}
-
-static int hinormal_operator_exec(char op, range_t* r) {
-	if (op == 'c' && r->linewise) {
-		if (!line_set(&EGG.lines[r->y1], "", 0)) {
-			set_errmsg("out of memory");
-			return 2;
-		}
-
-		for (int y = r->y2; y > r->y1; y--) {
-			line_delete_at(y);
-		}
-
-		EGG.cur_y = r->y1;
-		EGG.cur_x = 0;
-	} else if (!hinormal_range_delete(r)) {
-		set_errmsg("out of memory");
-		return 2;
-	}
-
-	EGG.dirty = true;
-
-	if (op == 'c') {
-		EGG.insert_x = EGG.cur_x;
-		EGG.mode = EM_INSERT;
-	}
-
-	return 0;
-}
-
-static int hinormal_join(void) {
-	if (EGG.cur_y + 1 >= EGG.nlines) {
-		return 0;
-	}
-
-	line_t* cur = &EGG.lines[EGG.cur_y];
-	line_t* next = &EGG.lines[EGG.cur_y + 1];
-
-	int src = 0;
-	while (src < next->len && (next->string[src] == ' ' || next->string[src] == '\t')) {
-		src++;
-	}
-
-	bool space = cur->len > 0 
-		&& src < next->len 
-		&& cur->string[cur->len - 1] != ' ' 
-		&& cur->string[cur->len - 1] != '\t';
-
-	int add = next->len - src + (space ? 1 : 0);
-	if (add > LINE_LEN_MAX - cur->len) {
-		set_errmsg("line too long");
-		return 2;
-	}
-
-	if (!line_reserve(cur, cur->len + add + 1)) {
-		set_errmsg("out of memory");
-		return 2;
-	}
-
-	int at = cur->len;
-
-	if (space) {
-		cur->string[cur->len++] = ' ';
-	}
-
-	if (src < next->len) {
-		memcpy(cur->string + cur->len, next->string + src, (size_t)(next->len - src));
-		cur->len += next->len - src;
-	}
-
-	cur->string[cur->len] = '\0';
-
-	line_delete_at(EGG.cur_y + 1);
-	EGG.cur_x = at;
-	EGG.dirty = true;
-	return 0;
-}
-
-static int hinormal_operator_to_eol(char op) {
-	range_t r = {
-		.y1 = EGG.cur_y,
-		.y2 = EGG.cur_y,
-		.x1 = EGG.cur_x,
-		.x2 = EGG.lines[EGG.cur_y].len,
-		.linewise = false,
-	};
-
-	return hinormal_operator_exec(op, &r);
-}
-
-static int hinormal_operator(keypacket_t kp) {
-	char c = keypacket_to_ascii(kp);
-	char op = EGG.nmstate.pending_op;
-
-	if (kp.keycode == KEYCODE_ESCAPE) {
-		EGG.nmstate.pending_op = 0;
-		return 0;
-	}
-
-	range_t r;
-	bool have_range = false;
-
-	if (c == 'g') {
-		EGG.nmstate.pending_g = true;
-		return 0;
-	} else if (c == 'G') {
-		r.linewise = true;
-		r.y1 = EGG.cur_y < EGG.nlines - 1 ? EGG.cur_y : EGG.nlines - 1;
-		r.y2 = EGG.nlines - 1;
-		r.x1 = 0;
-		r.x2 = 0;
-		have_range = true;
-	} else if (c == op) {
-		r.linewise = true;
-		r.y1 = EGG.cur_y;
-		r.x1 = 0;
-		r.y2 = EGG.cur_y;
-		r.x2 = 0;
-		have_range = true;
-	} else if (hinormal_ismotion(c)) {
-		have_range = hinormal_motion_range(c, &r);
-	}
-
-	EGG.nmstate.pending_op = 0;
-
-	if (!have_range) {
-		return 0;
-	}
-
-	return hinormal_operator_exec(op, &r);
-}
-
-int handin_normal(keypacket_t kp) {
-	if (hinormal_ismodifier(kp.keycode)) {
-		return 0;
-	}
-
-	char ascc = keypacket_to_ascii(kp);
-
-	if (EGG.nmstate.pending_replace) {
-		EGG.nmstate.pending_replace = false;
-
-		if (kp.keycode == KEYCODE_ESCAPE || ascc == 0) {
-			return 0;
-		}
-
-		if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
-			EGG.lines[EGG.cur_y].string[EGG.cur_x] = ascc;
-			EGG.dirty = true;
-		}
-
-		return 0;
-	}
-
-	if (EGG.nmstate.pending_g) {
-		EGG.nmstate.pending_g = false;
-
-		if (ascc != 'g') {
-			return 0;
-		}
-
-		if (EGG.nmstate.pending_op) {
-			char op = EGG.nmstate.pending_op;
-			EGG.nmstate.pending_op = 0;
-
-			range_t r = {
-				.y1 = 0,
-				.y2 = EGG.cur_y,
-				.x1 = 0,
-				.x2 = 0,
-				.linewise = true,
-			};
-
-			return hinormal_operator_exec(op, &r);
-		}
-
-		goto_line(0);
-		return 0;
-	}
-	
-	if (EGG.nmstate.pending_op) {
-		return hinormal_operator(kp);
-	}
-
-	if (ascc == ':') {
-		EGG.mode = EM_COMMAND;
-		return 0;
-	} else if (kp.keycode == KEYCODE_ESCAPE) {
-		EGG.show_errmsg = false;
-		return 0;
-	} else if (kp.keycode == KEYCODE_ENTER) {
-		line_t* l = line_new_at(EGG.cur_y + 1);
-		if (!l) {
-			set_errmsg("out of memory");
-			return 2;
-		}
-
-		EGG.dirty = true;
-		EGG.cur_y++;
-		EGG.cur_x = 0;
-
-		return 0;
-	} else if (ascc == 'o') {
-		line_t* l = line_new_at(EGG.cur_y + 1);
-		if (!l) {
-			set_errmsg("out of memory");
-			return 2;
-		}
-
-		EGG.dirty = true;
-		EGG.cur_y++;
-		EGG.cur_x = 0;
-		EGG.insert_x = 0;
-		EGG.mode = EM_INSERT;
-
-		return 0;
-	} else if (ascc == 'O') {
-		line_t* l = line_new_at(EGG.cur_y);
-		if (!l) {
-			set_errmsg("out of memory");
-			return 2;
-		}
-
-		EGG.dirty = true;
-		EGG.cur_x = 0;
-		EGG.insert_x = 0;
-		EGG.mode = EM_INSERT;
-
-		return 0;
-	}
-
-	if (hinormal_isoperator(ascc)) {
-		EGG.nmstate.pending_op = ascc;
-		return 0;
-	}
-
-	if (hinormal_ismotion(ascc)) {
-		motion_t m;
-
-		if (hinormal_resolve_motion(ascc, &m)) {
-			EGG.cur_y = m.y;
-			EGG.cur_x = m.x;
-		}
-
-		return 0;
-	}
-
-	switch (ascc) {
-		case 'g':
-			EGG.nmstate.pending_g = true;
-			return 0;
-		case 'G':
-			goto_line(EGG.nlines - 1);
-			return 0;
-		case 'i':
-			EGG.insert_x = EGG.cur_x;
-			EGG.mode = EM_INSERT;
-			
-			break;
-		case 'a':
-			if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
-				EGG.cur_x++;
-			}
-			
-			EGG.insert_x = EGG.cur_x;
-			EGG.mode = EM_INSERT;
-			
-			break;
-		case 'A':
-			EGG.cur_x = EGG.lines[EGG.cur_y].len;
-			EGG.insert_x = EGG.cur_x;
-			EGG.mode = EM_INSERT;
-			
-			break;
-		case 'x':
-		case 'X': 
-			{
-				int x1 = EGG.cur_x;
-				int x2 = EGG.cur_x + 1;
-				
-				if (ascc == 'X') {
-					if (EGG.cur_x == 0) {
-						break;
-					}
-					
-					x1 = EGG.cur_x - 1;
-					x2 = EGG.cur_x;
-				} else if (EGG.cur_x >= EGG.lines[EGG.cur_y].len) {
-					break;
-				}
-				
-				range_t r = {.y1 = EGG.cur_y, .y2 = EGG.cur_y, .x1 = x1, .x2 = x2, .linewise = false};
-
-				return hinormal_operator_exec('d', &r);
-			}
-		case 'D':
-			return hinormal_operator_to_eol('d');
-		case 'C':
-			return hinormal_operator_to_eol('c');
-		case 'J':
-			return hinormal_join();
-		case 'r':
-			EGG.nmstate.pending_replace = true;
-			return 0;
-		default:
-			break;
-	}
-
-	return 0;
-}
-
-static inline void hicommand_swnorm() {
-	line_free(&EGG.cmstate.command);
-	EGG.mode = EM_NORMAL;
-}
-
-static int hicommand_prcc(void) {
-	line_t* command = &EGG.cmstate.command;
-
-	if (command->len == 0) {
-		return 0;
-	}
-
-	if (strcmp(command->string, "q") == 0) {
-		if (EGG.dirty) {
-			set_errmsg("unsaved changes, use \":q!\" to override");
-			return 2;
-		}
-
-		return 1;
-	} else if (strcmp(command->string, "w") == 0) {
-		if (!save(EGG.path)) {
-			set_errmsg("could not save the file");
-			return 2;
-		}
-
-		return 0;
-	} else if (strcmp(command->string, "wq") == 0) {
-		if (!save(EGG.path)) {
-			set_errmsg("could not save the file");
-			return 2;
-		}
-
-		return 1;
-	} else if (strcmp(command->string, "q!") == 0) {
-		return 1;
-	}
-
-	if (EGG.nlines > 0) {
-		int target = 0;
-		bool numeric = true;
-		bool too_big = false;
-
-		for (int i = 0; i < command->len; i++) {
-			char c = command->string[i];
-
-			if (c < '0' || c > '9') {
-				numeric = false;
-				break;
-			}
-
-			if (!too_big) {
-				target = target * 10 + (c - '0');
-				if (target > EGG.nlines) {
-					too_big = true;
-				}
-			}
-		}
-
-		if (numeric) {
-			if (too_big) {
-				target = EGG.nlines;
-			} else if (target == 0) {
-				target = 1;
-			}
-
-			goto_line(target - 1);
-			return 0;
-		}
-	}
-
-	line_set(&EGG.errormsg, "command \"", 9);
-
-	for (int i = 0; i < command->len; i++) {
-		if (!line_append(&EGG.errormsg, command->string[i])) {
-			break;
-		}
-	}
-
-	const char* tail = "\" is not recognized";
-	for (const char* p = tail; *p != '\0'; p++) {
-		if (!line_append(&EGG.errormsg, *p)) {
-			break;
-		}
-	}
-
-	EGG.show_errmsg = true;
-	return 2;
-}
-
-int handin_command(keypacket_t kp) {
-	EGG.show_errmsg = false;
-	
-	if (kp.keycode == KEYCODE_ESCAPE) {
-		hicommand_swnorm();
-		
-		return 0;
-	} else if (kp.keycode == KEYCODE_ENTER) {
-		int prc = hicommand_prcc();
-		hicommand_swnorm();
-		
-		return prc;
-	} else if (kp.keycode == KEYCODE_BACKSPACE) {
-		if (EGG.cmstate.command.len == 0) {
-			hicommand_swnorm();
-			
-			return 0;
-		}
-
-		line_backspace(&EGG.cmstate.command);
-		
-		return 0;
-	}
-
-	char c = keypacket_to_ascii(kp);
-	if (c != 0) {
-		if (!line_append(&EGG.cmstate.command, c)) {
-			set_errmsg("out of memory");
-			return 2;
-		}
-	}
-	
-	return 0;
-}
-
-int handin_insert(keypacket_t kp) {
-	switch (kp.keycode) {
-		case KEYCODE_ESCAPE:
-			EGG.mode = EM_NORMAL;
-			if (EGG.cur_x > EGG.insert_x) {
-				EGG.cur_x--;
-			}
-
-			return 0;
-		case KEYCODE_ENTER:
-			int at = EGG.cur_x;
-			char* str = EGG.lines[EGG.cur_y].string;
-			int len = EGG.lines[EGG.cur_y].len;
-		
-			line_t* nl = line_new_at(EGG.cur_y + 1);
-			if (!nl) {
-				set_errmsg("out of memory");
-				return 0;
-			}
-		
-			if (!line_set(nl, str + at, len - at)) {
-				line_delete_at(EGG.cur_y + 1);
-				set_errmsg("out of memory");
-				return 0;
-			}
-		
-			EGG.lines[EGG.cur_y].len = at;
-			str[at] = '\0';
-		
-			EGG.cur_y++;
-			EGG.cur_x = 0;
-			EGG.insert_x = 0;
-			EGG.dirty = true;
-		
-			return 0;
-		case KEYCODE_BACKSPACE:
-			if (EGG.cur_x > 0) {
-				line_backspace_at(&EGG.lines[EGG.cur_y], EGG.cur_x - 1);
-				EGG.cur_x--;
-				EGG.dirty = true;
-			} else if (EGG.cur_y > 0) {
-				line_t* prev = &EGG.lines[EGG.cur_y - 1];
-				line_t* cur = &EGG.lines[EGG.cur_y];
-				int at = prev->len;
-
-				if (cur->len > LINE_LEN_MAX - prev->len) {
-					set_errmsg("line too long");
-					return 0;
-				}
-
-				if (!line_reserve(prev, prev->len + cur->len + 1)) {
-					set_errmsg("out of memory");
-					return 0;
-				}
-
-				if (cur->len > 0) {
-					memcpy(prev->string + prev->len, cur->string, (size_t)cur->len);
-				}
-
-				prev->len += cur->len;
-				prev->string[prev->len] = '\0';
-
-				line_delete_at(EGG.cur_y);
-				EGG.cur_y--;
-				EGG.cur_x = at;
-				EGG.insert_x = at;
-				EGG.dirty = true;
-			}
-
-			return 0;
-		case KEYCODE_TAB:
-			if (line_insert(&EGG.lines[EGG.cur_y], EGG.cur_x, '\t')) {
-				EGG.cur_x++;
-				EGG.dirty = true;
-			} else {
-				set_errmsg("out of memory");
-			}
-
-			return 0;
-		default:
-			break;
-	}
-
-	char c = keypacket_to_ascii(kp);
-	if (c != 0) {
-		if (line_insert(&EGG.lines[EGG.cur_y], EGG.cur_x, c)) {
-			EGG.cur_x++;
-			EGG.dirty = true;
-		} else {
-			set_errmsg("out of memory");
-		}
-	}
-	
-	return 0;
-}
-
 static int line_width(const line_t* l, int start, int x) {
 	int col = 0;
 
@@ -1398,7 +439,7 @@ static int line_width(const line_t* l, int start, int x) {
 // draw's job is to draw to the screen
 // all it must do is take in the current ui state
 // it shouldnt write anything, just display
-static void draw(void) {
+void draw(void) {
 	char buf[(ROWS + 1) * (4 + COLS) + 64];
 	size_t n = 0;
 
