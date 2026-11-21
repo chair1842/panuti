@@ -495,6 +495,23 @@ bool save(const char* path) {
 	return ok;
 }
 
+static bool hinormal_ismodifier(keycode_t kc) {
+	switch (kc) {
+		case KEYCODE_LSHIFT:
+		case KEYCODE_RSHIFT:
+		case KEYCODE_LALT:
+		case KEYCODE_RALT:
+		case KEYCODE_LCTRL:
+		case KEYCODE_RCTRL:
+		case KEYCODE_CAPS_LOCK:
+		case KEYCODE_SCROLL_LOCK:
+		case KEYCODE_NUM_LOCK:
+			return true;
+		default:
+			return false;
+	}
+}
+
 static bool hinormal_ismotion(char c) {
 	switch (c) {
 		case 'h':
@@ -884,6 +901,10 @@ static int handin_normal_operator(keypacket_t kp) {
 }
 
 int handin_normal(keypacket_t kp) {
+	if (hinormal_ismodifier(kp.keycode)) {
+		return 0;
+	}
+
 	char ascc = keypacket_to_ascii(kp);
 	
 	if (EGG.nmstate.pending_op) {
