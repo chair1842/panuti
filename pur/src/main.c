@@ -6,6 +6,7 @@
 #include "run.h"
 
 #include <panuti/errno.h>
+#include <panuti/handle.h>
 #include <panuti/stream.h>
 #include <panuti/syscall/syscallsf.h>
 
@@ -72,6 +73,121 @@ static int join_statement(int argc, char** argv, char* buf, size_t cap) {
 	return 0;
 }
 
+// parse and run one mutable line. empty lines are fine, errors are reported
+// here so both the prompt and a script share the same behaviour.
+static int run_line(char* text, int* status_out) {
+	pur_ast_reset();
+
+	int rc = pur_parse_command(text);
+	if (rc == PUR_PARSE_EMPTY) {
+		return 0;
+	}
+
+	if (rc != PUR_PARSE_OK) {
+		printf("pur: %s\n", pur_parse_strerror(rc));
+		return -1;
+	}
+
+	int status = 0;
+	if (pur_run_command(false, &status) != 0) {
+		return -1;
+	}
+
+	if (status_out) {
+		*status_out = status;
+	}
+
+	return 0;
+}
+
+// blank lines and lines whose first non-space character is '#' are comments
+static bool skip_line(const char* s) {
+	while (*s == ' ' || *s == '\t' || *s == '\r') {
+		s++;
+	}
+
+	return *s == '\0' || *s == '#';
+}
+
+// read a script a chunk at a time and run each newline-terminated line. the
+// line buffer is shared with the prompt, but a script returns before the
+// prompt is reached, so the two never overlap.
+static int run_script(const char* path) {
+	int fd = handle_open(path);
+	if (fd < 0) {
+		printf("pur: could not open script '%s'\n", path);
+		return 1;
+	}
+
+	if (line_reserve(PUR_LINE_INIT) != 0) {
+		handle_close(fd);
+		printf("pur: out of memory\n");
+		return 1;
+	}
+
+	char chunk[256];
+	size_t used = 0;
+	int status = 0;
+	int rc = 0;
+
+	while (1) {
+		int n = handle_read(fd, chunk, sizeof(chunk));
+		if (n < 0) {
+			printf("pur: could not read script '%s'\n", path);
+			rc = 1;
+			break;
+		}
+
+		if (n == 0) {
+			break;
+		}
+
+		for (int i = 0; i < n; i++) {
+			if (chunk[i] == '\n') {
+				line[used] = '\0';
+				used = 0;
+
+				if (!skip_line(line)) {
+					int s = 0;
+					if (run_line(line, &s) == 0) {
+						status = s;
+					}
+				}
+
+				continue;
+			}
+
+			if (used + 1 >= line_cap) {
+				if (line_reserve(line_cap * 2) != 0) {
+					printf("pur: out of memory\n");
+					rc = 1;
+					break;
+				}
+			}
+
+			line[used++] = chunk[i];
+		}
+
+		if (rc != 0) {
+			break;
+		}
+	}
+
+	// a final line with no newline is still a line
+	if (rc == 0 && used > 0) {
+		line[used] = '\0';
+		if (!skip_line(line)) {
+			int s = 0;
+			if (run_line(line, &s) == 0) {
+				status = s;
+			}
+		}
+	}
+
+	handle_close(fd);
+	return rc != 0 ? rc : (status & 0xff);
+}
+
 int main(int argc, char** argv) {
 	if (argc > 1) {
 		if (strcmp(argv[1], "-v") == 0) {
@@ -129,6 +245,11 @@ int main(int argc, char** argv) {
 			// back as 0xffffffff, so bring it into range
 			return dry_run ? 0 : (int)(status & 0xff);
 		}
+
+		// a non-flag argument names a script: run its lines and exit
+		if (argv[1][0] != '-') {
+			return run_script(argv[1]);
+		}
 	}
 
 	while (1) {
@@ -162,20 +283,7 @@ int main(int argc, char** argv) {
 
 		line[n] = '\0';
 
-		pur_ast_reset();
-
-		int rc = pur_parse_command(line);
-		if (rc == PUR_PARSE_EMPTY) {
-			continue;
-		}
-
-		if (rc != PUR_PARSE_OK) {
-			printf("pur: %s\n", pur_parse_strerror(rc));
-			continue;
-		}
-
-		int status = 0;
-		pur_run_command(false, &status);
+		run_line(line, NULL);
 
 		putchar(0x1B);
 		putchar('R');

@@ -281,10 +281,12 @@ int pur_builtin_help(void) {
 	printf("  used at all: pur pipes with '>'. a trailing '%%' is fine; a\n");
 	printf("  trailing '&', '&&' or '||' is an error.\n\n");
 	printf("usage:\n");
-	printf("  pur [-h] [-v] [-n <statement>] [-c <statement>]\n\n");
+	printf("  pur [-h] [-v] [-n <statement>] [-c <statement>] [<script>]\n\n");
 	printf("  -n wires <statement> and prints each command's stream counts\n");
 	printf("     without running anything\n\n");
 	printf("  -c runs <statement> and exits with the pipeline's status\n\n");
+	printf("  <script> runs each line of the file, then exits. blank lines and\n");
+	printf("     lines starting with '#' are ignored\n\n");
 	printf("  run from inside pur, quote the statement, or the '>' belongs to\n");
 	printf("  the outer pur: pur -c \"in /cd/file > cat > more\"\n\n");
 	printf("unwired commands get %s in and %s out\n", PUR_DEFAULT_IN,
