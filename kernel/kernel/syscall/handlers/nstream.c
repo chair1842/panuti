@@ -14,6 +14,9 @@ int32_t syshandler_nstream(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	}
 
 	task_t* t = sched_current();
+	if (!t) {
+		return PANUTIERRNO_PLAINERR;
+	}
 
 	out[0] = t->no_in_streams;
 	out[1] = t->no_out_streams;

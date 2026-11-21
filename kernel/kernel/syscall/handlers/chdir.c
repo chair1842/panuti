@@ -17,6 +17,9 @@ int32_t syshandler_chdir(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	}
 
 	task_t* t = sched_current();
+	if (!t) {
+		return PANUTIERRNO_PLAINERR;
+	}
 
 	inode_t* n = registry_resolve(t->cwd, path);
 	if (!n) {

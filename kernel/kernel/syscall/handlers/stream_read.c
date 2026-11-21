@@ -19,6 +19,9 @@ int32_t syshandler_stream_read(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a
 	}
 
 	task_t* t = sched_current();
+	if (!t) {
+		return PANUTIERRNO_PLAINERR;
+	}
 
 	if (stream_num < 0 || stream_num >= t->no_in_streams) {
 		return PANUTIERRNO_BADFD;

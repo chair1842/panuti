@@ -23,6 +23,9 @@ int32_t syshandler_link(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	}
 
 	task_t* t = sched_current();
+	if (!t) {
+		return PANUTIERRNO_PLAINERR;
+	}
 
 	inode_t* node = registry_resolve(t->cwd, target);
 	if (!node) {

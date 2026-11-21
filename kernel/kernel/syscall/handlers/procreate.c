@@ -63,6 +63,9 @@ int32_t syshandler_procreate(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4)
 	}
 
 	task_t* caller = sched_current();
+	if (!caller) {
+		return PANUTIERRNO_PLAINERR;
+	}
 
 	pid_t pid = task_procreate(caller, &args);
 	return (int32_t)pid;

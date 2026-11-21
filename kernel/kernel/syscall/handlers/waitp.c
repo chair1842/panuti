@@ -11,6 +11,9 @@ int32_t syshandler_waitp(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4) {
 	}
 
 	task_t* caller = sched_current();
+	if (!caller) {
+		return PANUTIERRNO_PLAINERR;
+	}
 
 	int32_t rc = wait_commit_pids(caller, (const pid_t*)a1, a2);
 	if (rc != PANUTIERRNO_PLAINSUCCESS) {

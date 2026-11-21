@@ -14,6 +14,11 @@ void ksleep(uint32_t cs) {
 	uint32_t flags = irq_save_disable();
 
 	task_t* t = sched_current();
+	if (!t) {
+		irq_restore(flags);
+		return;
+	}
+
 	t->wake_at = timer_get_ticks() + cs + 1;
 	task_block(t);
 

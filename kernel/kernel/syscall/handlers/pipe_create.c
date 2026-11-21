@@ -16,6 +16,9 @@ int32_t syshandler_pipe_create(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a
 	}
 
 	task_t* t = sched_current();
+	if (!t) {
+		return PANUTIERRNO_PLAINERR;
+	}
 
 	int r_des, w_des;
 	int rc = pipe_create_pair(t, &r_des, &w_des);
