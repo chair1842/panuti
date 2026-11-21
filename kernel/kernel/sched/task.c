@@ -746,6 +746,11 @@ void task_do_exit(uint32_t exit_code) {
 	task_t* current = sched_current();
 	uint32_t flags = irq_save_disable();
 
+	if (!current) {
+		irq_restore(flags);
+		return;
+	}
+
 	if (current->kill_pending) {
 		exit_code = TASK_KILL_EXIT_CODE;
 	}

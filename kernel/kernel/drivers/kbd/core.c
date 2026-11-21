@@ -63,6 +63,10 @@ static int queue_read(kbd_queue_t* q, keypacket_t* out) {
 
 	while (q->count == 0) {
 		task_t* self = sched_current();
+		if (!self) {
+			irq_restore(flags);
+			return -1;
+		}
 
 		if (self->kill_pending) {
 			irq_restore(flags);

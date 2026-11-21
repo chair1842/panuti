@@ -283,6 +283,11 @@ static int serial_data_read(void* impl, void* buf, size_t len) {
 		}
 
 		task_t* self = sched_current();
+		if (!self) {
+			irq_restore(flags);
+			return (int)n;
+		}
+
 		if (self->kill_pending) {
 			irq_restore(flags);
 			return (int)n;
