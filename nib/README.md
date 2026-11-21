@@ -12,7 +12,7 @@ As with all of the projects in panuti, nib is not in it's planned full state and
 vim/vi's functional features and quality of life features.
 
 - Only the `d` and `c` operators are supported so far.
-- Supported motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`.
+- Supported motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`.
 - No counts or undo yet.
 - No visual mode.
 - Arrow keys are not used
