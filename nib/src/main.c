@@ -975,6 +975,7 @@ int handin_normal(keypacket_t kp) {
 	}
 
 	switch (ascc) {
+
 		case 'i':
 			EGG.insert_x = EGG.cur_x;
 			EGG.mode = EM_INSERT;
@@ -995,6 +996,27 @@ int handin_normal(keypacket_t kp) {
 			EGG.mode = EM_INSERT;
 			
 			break;
+		case 'x':
+		case 'X': 
+			{
+				int x1 = EGG.cur_x;
+				int x2 = EGG.cur_x + 1;
+				
+				if (ascc == 'X') {
+					if (EGG.cur_x == 0) {
+						break;
+					}
+					
+					x1 = EGG.cur_x - 1;
+					x2 = EGG.cur_x;
+				} else if (EGG.cur_x >= EGG.lines[EGG.cur_y].len) {
+					break;
+				}
+				
+				range_t r = {.y1 = EGG.cur_y, .y2 = EGG.cur_y, .x1 = x1, .x2 = x2, .linewise = false};
+
+				return hinormal_operator_exec('d', &r);
+			}
 		default:
 			break;
 	}
