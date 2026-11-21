@@ -8,8 +8,8 @@
 
 // The grammar pur accepts:
 //
-//   command    := expression ( op expression )*
-//   op         := "&&" | "||" | "&"
+//   command    := expression ( op expression )* op?
+//   op         := "&&" | "||" | "&" | "%"
 //   expression := operand ( ">" operand )*
 //   operand    := word+ | "(" expression ( ";" expression )* ")"
 //
@@ -17,8 +17,9 @@
 // and are left associative. A command is validated in full before any of it
 // runs. The command operators are command level only: inside a group they are
 // a syntax error, because a group's members run together. A lone '|' is
-// rejected - pur pipes with '>' - and a trailing '&' is rejected too, so it
-// never quietly runs in the foreground while backgrounding waits to be built.
+// rejected - pur pipes with '>'. '&' runs the next expression whatever the
+// status; '%' backgrounds the expression before it. Only '%' may end a
+// command: a trailing '&', '&&' or '||' has nothing to join and is an error.
 
 #define PUR_GROUP_INIT 8
 
@@ -31,6 +32,7 @@ typedef enum {
 	PUR_T_GT,
 	PUR_T_AND,
 	PUR_T_OR,
+	PUR_T_SEQ,
 	PUR_T_BG,
 	PUR_T_PIPE,
 } pur_tok_t;
@@ -87,7 +89,7 @@ static bool is_space(char c) {
 
 static bool is_delim(char c) {
 	return is_space(c) || c == '(' || c == ')' || c == ';' || c == '>' ||
-	       c == '&' || c == '|' || c == '"';
+	       c == '&' || c == '%' || c == '|' || c == '"';
 }
 
 static int tokenize(void) {
@@ -105,7 +107,7 @@ static int tokenize(void) {
 		int len;
 
 		if (*p == '(' || *p == ')' || *p == ';' || *p == '>' || *p == '&' ||
-		    *p == '|') {
+		    *p == '%' || *p == '|') {
 			if (*p == '(') {
 				type = PUR_T_LPAREN;
 				len = 1;
@@ -119,15 +121,19 @@ static int tokenize(void) {
 				type = PUR_T_GT;
 				len = 1;
 			} else if (*p == '&') {
-				// '&&' is one token, a lone '&' the backgrounding
-				// operator that is not here yet
+				// '&&' conditions the next expression; a lone '&'
+				// runs it whatever the status
 				if (p[1] == '&') {
 					type = PUR_T_AND;
 					len = 2;
 				} else {
-					type = PUR_T_BG;
+					type = PUR_T_SEQ;
 					len = 1;
 				}
+			} else if (*p == '%') {
+				// '%' backgrounds the expression before it
+				type = PUR_T_BG;
+				len = 1;
 			} else {
 				// '||' is one token, a lone '|' is reserved
 				if (p[1] == '|') {
@@ -402,16 +408,19 @@ int pur_parse_command(char *text) {
 		}
 
 		// a leading operator, or two in a row, has nothing on one side
-		if (t == PUR_T_AND || t == PUR_T_OR || t == PUR_T_BG) {
+		if (t == PUR_T_AND || t == PUR_T_OR || t == PUR_T_SEQ ||
+		    t == PUR_T_BG) {
 			return PUR_PARSE_ERR_OPERATOR;
 		}
 
-		// a trailing operator: only reachable right after one was eaten,
-		// because the empty command was turned away above
+		// a trailing operator: only '%' may end a command, and only
+		// right after one was eaten (the empty command was turned away
+		// above)
 		if (t == PUR_T_END) {
-			return expr_op[nexprs - 1] == PUR_OP_BG
-				       ? PUR_PARSE_ERR_TRAILING_BG
-				       : PUR_PARSE_ERR_OPERATOR;
+			if (nexprs > 0 && expr_op[nexprs - 1] == PUR_OP_BG) {
+				break;
+			}
+			return PUR_PARSE_ERR_OPERATOR;
 		}
 
 		if (nexprs >= PUR_MAX_EXPRS) {
@@ -438,6 +447,8 @@ int pur_parse_command(char *text) {
 			expr_op[nexprs] = PUR_OP_AND;
 		} else if (after == PUR_T_OR) {
 			expr_op[nexprs] = PUR_OP_OR;
+		} else if (after == PUR_T_SEQ) {
+			expr_op[nexprs] = PUR_OP_SEQ;
 		} else if (after == PUR_T_BG) {
 			expr_op[nexprs] = PUR_OP_BG;
 		} else if (after == PUR_T_END) {
@@ -493,8 +504,10 @@ const char *pur_parse_op_str(pur_op_t op) {
 			return "&&";
 		case PUR_OP_OR:
 			return "||";
-		case PUR_OP_BG:
+		case PUR_OP_SEQ:
 			return "&";
+		case PUR_OP_BG:
+			return "%";
 		default:
 			return "";
 	}
@@ -506,8 +519,11 @@ bool pur_op_should_run(pur_op_t op, int status) {
 			return status == 0;
 		case PUR_OP_OR:
 			return status != 0;
+		case PUR_OP_SEQ:
+		case PUR_OP_BG:
+			return true;
 		default:
-			// '&' always runs, and PUR_OP_NONE never gates anything
+			// PUR_OP_NONE never gates anything
 			return true;
 	}
 }
@@ -550,8 +566,6 @@ const char *pur_parse_strerror(int status) {
 			return "out of memory";
 		case PUR_PARSE_ERR_OPERATOR:
 			return "syntax error: an operator joins two expressions";
-		case PUR_PARSE_ERR_TRAILING_BG:
-			return "syntax error: '&' backgrounding is not supported";
 		case PUR_PARSE_ERR_RESERVED:
 			return "syntax error: pur pipes with '>', not '|'";
 		case PUR_PARSE_ERR_EXPRS:

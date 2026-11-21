@@ -20,7 +20,6 @@ typedef enum {
 	PUR_PARSE_ERR_COMPLEX,
 	PUR_PARSE_ERR_MEMORY,
 	PUR_PARSE_ERR_OPERATOR,
-	PUR_PARSE_ERR_TRAILING_BG,
 	PUR_PARSE_ERR_RESERVED,
 	PUR_PARSE_ERR_EXPRS,
 } pur_parse_status_t;
@@ -30,13 +29,14 @@ typedef enum {
 	PUR_OP_NONE = 0,
 	PUR_OP_AND,
 	PUR_OP_OR,
+	PUR_OP_SEQ,
 	PUR_OP_BG,
 } pur_op_t;
 
-// Parse and validate a whole command: expressions chained by '&&', '||' or
-// '&'. The entire command is checked before anything runs, so a later syntax
-// error stops the earlier expressions too. On success the command is walked
-// with pur_parse_nexprs / pur_parse_load / pur_parse_op.
+// Parse and validate a whole command: expressions chained by '&&', '||', '&'
+// or '%'. The entire command is checked before anything runs, so a later
+// syntax error stops the earlier expressions too. On success the command is
+// walked with pur_parse_nexprs / pur_parse_load / pur_parse_op.
 int pur_parse_command(char *line);
 
 // how many expressions the last pur_parse_command() found

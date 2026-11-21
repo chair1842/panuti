@@ -275,10 +275,11 @@ int pur_builtin_help(void) {
 	printf("operators:\n");
 	printf("  cmd && cmd       - run the next only if the status so far is 0\n");
 	printf("  cmd || cmd       - run the next only if the status is not 0\n");
-	printf("  cmd & cmd        - run the next whatever the status\n\n");
+	printf("  cmd & cmd        - then run the next, whatever the status\n");
+	printf("  cmd %% cmd        - run cmd in the background, then the next\n\n");
 	printf("  they share one precedence and are left associative. '|' is not\n");
-	printf("  used at all: pur pipes with '>'. a trailing '&' is an error, as\n");
-	printf("  backgrounding is not here yet.\n\n");
+	printf("  used at all: pur pipes with '>'. a trailing '%%' is fine; a\n");
+	printf("  trailing '&', '&&' or '||' is an error.\n\n");
 	printf("usage:\n");
 	printf("  pur [-h] [-v] [-n <statement>] [-c <statement>]\n\n");
 	printf("  -n wires <statement> and prints each command's stream counts\n");
