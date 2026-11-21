@@ -32,6 +32,7 @@ typedef struct commandmode_state {
 
 typedef struct normalmode_state {
 	char pending_op;
+	bool pending_replace;
 } normalmode_state_t;
 
 typedef struct motion {
@@ -868,6 +869,54 @@ static int hinormal_operator_exec(char op, range_t* r) {
 	return 0;
 }
 
+static int hinormal_join(void) {
+	if (EGG.cur_y + 1 >= EGG.nlines) {
+		return 0;
+	}
+
+	line_t* cur = &EGG.lines[EGG.cur_y];
+	line_t* next = &EGG.lines[EGG.cur_y + 1];
+
+	int src = 0;
+	while (src < next->len && (next->string[src] == ' ' || next->string[src] == '\t')) {
+		src++;
+	}
+
+	bool space = cur->len > 0 
+		&& src < next->len 
+		&& cur->string[cur->len - 1] != ' ' 
+		&& cur->string[cur->len - 1] != '\t';
+
+	int add = next->len - src + (space ? 1 : 0);
+	if (add > LINE_LEN_MAX - cur->len) {
+		set_errmsg("line too long");
+		return 2;
+	}
+
+	if (!line_reserve(cur, cur->len + add + 1)) {
+		set_errmsg("out of memory");
+		return 2;
+	}
+
+	int at = cur->len;
+
+	if (space) {
+		cur->string[cur->len++] = ' ';
+	}
+
+	if (src < next->len) {
+		memcpy(cur->string + cur->len, next->string + src, (size_t)(next->len - src));
+		cur->len += next->len - src;
+	}
+
+	cur->string[cur->len] = '\0';
+
+	line_delete_at(EGG.cur_y + 1);
+	EGG.cur_x = at;
+	EGG.dirty = true;
+	return 0;
+}
+
 static int hinormal_operator_to_eol(char op) {
 	range_t r = {
 		.y1 = EGG.cur_y,
@@ -880,7 +929,7 @@ static int hinormal_operator_to_eol(char op) {
 	return hinormal_operator_exec(op, &r);
 }
 
-static int handnormal_operator(keypacket_t kp) {
+static int hinormal_operator(keypacket_t kp) {
 	char c = keypacket_to_ascii(kp);
 	char op = EGG.nmstate.pending_op;
 
@@ -918,6 +967,21 @@ int handin_normal(keypacket_t kp) {
 	}
 
 	char ascc = keypacket_to_ascii(kp);
+
+	if (EGG.nmstate.pending_replace) {
+		EGG.nmstate.pending_replace = false;
+
+		if (kp.keycode == KEYCODE_ESCAPE || ascc == 0) {
+			return 0;
+		}
+
+		if (EGG.cur_x < EGG.lines[EGG.cur_y].len) {
+			EGG.lines[EGG.cur_y].string[EGG.cur_x] = ascc;
+			EGG.dirty = true;
+		}
+
+		return 0;
+	}
 	
 	if (EGG.nmstate.pending_op) {
 		return hinormal_operator(kp);
@@ -1032,6 +1096,11 @@ int handin_normal(keypacket_t kp) {
 			return hinormal_operator_to_eol('d');
 		case 'C':
 			return hinormal_operator_to_eol('c');
+		case 'J':
+			return hinormal_join();
+		case 'r':
+			EGG.nmstate.pending_replace = true;
+			return 0;
 		default:
 			break;
 	}
