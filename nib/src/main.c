@@ -868,7 +868,19 @@ static int hinormal_operator_exec(char op, range_t* r) {
 	return 0;
 }
 
-static int handin_normal_operator(keypacket_t kp) {
+static int hinormal_operator_to_eol(char op) {
+	range_t r = {
+		.y1 = EGG.cur_y,
+		.y2 = EGG.cur_y,
+		.x1 = EGG.cur_x,
+		.x2 = EGG.lines[EGG.cur_y].len,
+		.linewise = false,
+	};
+
+	return hinormal_operator_exec(op, &r);
+}
+
+static int handnormal_operator(keypacket_t kp) {
 	char c = keypacket_to_ascii(kp);
 	char op = EGG.nmstate.pending_op;
 
@@ -908,7 +920,7 @@ int handin_normal(keypacket_t kp) {
 	char ascc = keypacket_to_ascii(kp);
 	
 	if (EGG.nmstate.pending_op) {
-		return handin_normal_operator(kp);
+		return hinormal_operator(kp);
 	}
 
 	if (ascc == ':') {
@@ -975,7 +987,6 @@ int handin_normal(keypacket_t kp) {
 	}
 
 	switch (ascc) {
-
 		case 'i':
 			EGG.insert_x = EGG.cur_x;
 			EGG.mode = EM_INSERT;
@@ -1017,6 +1028,10 @@ int handin_normal(keypacket_t kp) {
 
 				return hinormal_operator_exec('d', &r);
 			}
+		case 'D':
+			return hinormal_operator_to_eol('d');
+		case 'C':
+			return hinormal_operator_to_eol('c');
 		default:
 			break;
 	}
