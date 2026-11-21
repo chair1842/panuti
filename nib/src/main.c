@@ -33,6 +33,7 @@ typedef struct commandmode_state {
 typedef struct normalmode_state {
 	char pending_op;
 	bool pending_replace;
+	bool pending_g;
 } normalmode_state_t;
 
 typedef struct motion {
@@ -496,6 +497,16 @@ bool save(const char* path) {
 	return ok;
 }
 
+void goto_line(int y) {
+	EGG.cur_y = y;
+	EGG.cur_x = 0;
+
+	while (EGG.cur_x < EGG.lines[y].len &&
+		(EGG.lines[y].string[EGG.cur_x] == ' ' || EGG.lines[y].string[EGG.cur_x] == '\t')) {
+		EGG.cur_x++;
+	}
+}
+
 static bool hinormal_ismodifier(keycode_t kc) {
 	switch (kc) {
 		case KEYCODE_LSHIFT:
@@ -941,7 +952,17 @@ static int hinormal_operator(keypacket_t kp) {
 	range_t r;
 	bool have_range = false;
 
-	if (c == op) {
+	if (c == 'g') {
+		EGG.nmstate.pending_g = true;
+		return 0;
+	} else if (c == 'G') {
+		r.linewise = true;
+		r.y1 = EGG.cur_y < EGG.nlines - 1 ? EGG.cur_y : EGG.nlines - 1;
+		r.y2 = EGG.nlines - 1;
+		r.x1 = 0;
+		r.x2 = 0;
+		have_range = true;
+	} else if (c == op) {
 		r.linewise = true;
 		r.y1 = EGG.cur_y;
 		r.x1 = 0;
@@ -980,6 +1001,32 @@ int handin_normal(keypacket_t kp) {
 			EGG.dirty = true;
 		}
 
+		return 0;
+	}
+
+	if (EGG.nmstate.pending_g) {
+		EGG.nmstate.pending_g = false;
+
+		if (ascc != 'g') {
+			return 0;
+		}
+
+		if (EGG.nmstate.pending_op) {
+			char op = EGG.nmstate.pending_op;
+			EGG.nmstate.pending_op = 0;
+
+			range_t r = {
+				.y1 = 0,
+				.y2 = EGG.cur_y,
+				.x1 = 0,
+				.x2 = 0,
+				.linewise = true,
+			};
+
+			return hinormal_operator_exec(op, &r);
+		}
+
+		goto_line(0);
 		return 0;
 	}
 	
@@ -1051,6 +1098,12 @@ int handin_normal(keypacket_t kp) {
 	}
 
 	switch (ascc) {
+		case 'g':
+			EGG.nmstate.pending_g = true;
+			return 0;
+		case 'G':
+			goto_line(EGG.nlines - 1);
+			return 0;
 		case 'i':
 			EGG.insert_x = EGG.cur_x;
 			EGG.mode = EM_INSERT;
@@ -1143,6 +1196,39 @@ static int hicommand_prcc(void) {
 		return 1;
 	} else if (strcmp(command->string, "q!") == 0) {
 		return 1;
+	}
+
+	if (EGG.nlines > 0) {
+		int target = 0;
+		bool numeric = true;
+		bool too_big = false;
+
+		for (int i = 0; i < command->len; i++) {
+			char c = command->string[i];
+
+			if (c < '0' || c > '9') {
+				numeric = false;
+				break;
+			}
+
+			if (!too_big) {
+				target = target * 10 + (c - '0');
+				if (target > EGG.nlines) {
+					too_big = true;
+				}
+			}
+		}
+
+		if (numeric) {
+			if (too_big) {
+				target = EGG.nlines;
+			} else if (target == 0) {
+				target = 1;
+			}
+
+			goto_line(target - 1);
+			return 0;
+		}
 	}
 
 	line_set(&EGG.errormsg, "command \"", 9);
