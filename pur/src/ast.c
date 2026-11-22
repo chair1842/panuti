@@ -5,12 +5,13 @@
 #include <stdlib.h>
 
 pur_node_t* pur_nodes;
-pur_leaf_t pur_leaves[PUR_MAX_LEAVES];
+pur_leaf_t* pur_leaves;
 int* pur_argv_off;
 int* pur_member_pool;
 
 // how much each pool is holding right now
 static size_t nodes_cap;
+static size_t leaves_cap;
 static size_t argv_cap;
 static size_t members_cap;
 
@@ -71,7 +72,8 @@ int pur_node_new(pur_kind_t kind) {
 }
 
 int pur_leaf_new(int argv_first, int argc) {
-	if (pur_nleaves >= PUR_MAX_LEAVES) {
+	if (pool_reserve((void**)&pur_leaves, &leaves_cap, (size_t)pur_nleaves + 1,
+			 sizeof(pur_leaf_t)) != 0) {
 		return -1;
 	}
 

@@ -4,16 +4,42 @@
 
 #include <panuti/errno.h>
 #include <panuti/process.h>
+#include <stdlib.h>
 
-static pid_t job_pids[PUR_JOB_MAX];
+static pid_t* job_pids;
+static size_t job_cap;
 static int job_count;
+
+static bool job_reserve(size_t need) {
+	if (need <= job_cap) {
+		return true;
+	}
+
+	size_t want = job_cap ? job_cap : 16;
+
+	while (want < need) {
+		if (want > (size_t)-1 / 2 / sizeof(pid_t)) {
+			return false;
+		}
+		want *= 2;
+	}
+
+	pid_t* p = realloc(job_pids, want * sizeof(pid_t));
+	if (!p) {
+		return false;
+	}
+
+	job_pids = p;
+	job_cap = want;
+	return true;
+}
 
 bool pur_job_add(const pid_t* pids, int count) {
 	if (!pids || count <= 0) {
 		return true;
 	}
 
-	if (job_count + count > PUR_JOB_MAX) {
+	if (!job_reserve((size_t)job_count + (size_t)count)) {
 		return false;
 	}
 

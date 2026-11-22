@@ -12,6 +12,7 @@
 #include <panuti/syscall/syscallsf.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define PUR_PATH "/cd/usr/bin/"
@@ -29,33 +30,129 @@ typedef struct {
 	int wfd;
 } pur_edge_t;
 
-static pur_edge_t edges[PUR_MAX_PIPES];
+static pur_edge_t* edges;
 static int nedges;
+static size_t edges_cap;
 
-static int in_count[PUR_MAX_LEAVES];
-static int out_count[PUR_MAX_LEAVES];
-static int in_fd[PUR_MAX_LEAVES][PUR_MAX_STREAMS];
-static int out_fd[PUR_MAX_LEAVES][PUR_MAX_STREAMS];
+static int* in_count;
+static int* out_count;
+static int* in_fd;
+static int* out_fd;
+static pid_t* pids;
+static bool* launched;
+static int* extra_fds;
+static int* scratch;
 
-static pid_t pids[PUR_MAX_LEAVES];
-static bool launched[PUR_MAX_LEAVES];
-
-static int extra_fds[PUR_MAX_LEAVES * 2];
 static int nextra_fds;
+static int state_leaves;
+
+#define IN_FD(leaf, stream) in_fd[(size_t)(leaf) * PUR_MAX_STREAMS + (stream)]
+#define OUT_FD(leaf, stream) out_fd[(size_t)(leaf) * PUR_MAX_STREAMS + (stream)]
+#define IN_FDS(leaf) (&in_fd[(size_t)(leaf) * PUR_MAX_STREAMS])
+#define OUT_FDS(leaf) (&out_fd[(size_t)(leaf) * PUR_MAX_STREAMS])
+
+static void state_free(void) {
+	free(edges);
+	free(in_count);
+	free(out_count);
+	free(in_fd);
+	free(out_fd);
+	free(pids);
+	free(launched);
+	free(extra_fds);
+	free(scratch);
+
+	edges = nullptr;
+	in_count = nullptr;
+	out_count = nullptr;
+	in_fd = nullptr;
+	out_fd = nullptr;
+	pids = nullptr;
+	launched = nullptr;
+	extra_fds = nullptr;
+	scratch = nullptr;
+
+	edges_cap = 0;
+	nedges = 0;
+	nextra_fds = 0;
+	state_leaves = 0;
+}
+
+static bool state_alloc(int leaves) {
+	state_free();
+
+	if (leaves <= 0) {
+		return true;
+	}
+
+	size_t n = (size_t)leaves;
+	if (n > (size_t)-1 / PUR_MAX_STREAMS / sizeof(int) ||
+	    n > (size_t)-1 / 2 / sizeof(int)) {
+		return false;
+	}
+
+	in_count = calloc(n, sizeof(int));
+	out_count = calloc(n, sizeof(int));
+	in_fd = calloc(n * PUR_MAX_STREAMS, sizeof(int));
+	out_fd = calloc(n * PUR_MAX_STREAMS, sizeof(int));
+	pids = malloc(n * sizeof(pid_t));
+	launched = calloc(n, sizeof(bool));
+	extra_fds = malloc(n * 2 * sizeof(int));
+	scratch = malloc(n * sizeof(int));
+
+	if (!in_count || !out_count || !in_fd || !out_fd || !pids || !launched ||
+	    !extra_fds || !scratch) {
+		state_free();
+		return false;
+	}
+
+	state_leaves = leaves;
+	for (int i = 0; i < leaves; i++) {
+		pids[i] = -1;
+		for (int j = 0; j < 2; j++) {
+			extra_fds[i * 2 + j] = -1;
+		}
+		for (int s = 0; s < PUR_MAX_STREAMS; s++) {
+			IN_FD(i, s) = -1;
+			OUT_FD(i, s) = -1;
+		}
+	}
+
+	return true;
+}
+
+static bool edges_reserve(size_t need) {
+	if (need <= edges_cap) {
+		return true;
+	}
+
+	size_t want = edges_cap ? edges_cap : PUR_MAX_PIPES;
+	while (want < need) {
+		if (want > (size_t)-1 / 2 / sizeof(pur_edge_t)) {
+			return false;
+		}
+		want *= 2;
+	}
+
+	pur_edge_t* p = realloc(edges, want * sizeof(pur_edge_t));
+	if (!p) {
+		return false;
+	}
+
+	edges = p;
+	edges_cap = want;
+	return true;
+}
 
 static void reset_state(void) {
 	nedges = 0;
 	nextra_fds = 0;
 
-	for (int i = 0; i < PUR_MAX_LEAVES; i++) {
+	for (int i = 0; i < state_leaves; i++) {
 		in_count[i] = 0;
 		out_count[i] = 0;
 		launched[i] = false;
 		pids[i] = -1;
-	}
-
-	for (int i = 0; i < PUR_MAX_LEAVES * 2; i++) {
-		extra_fds[i] = -1;
 	}
 }
 
@@ -70,8 +167,8 @@ static int add_edge(int src, int dst) {
 		}
 	}
 
-	if (nedges >= PUR_MAX_PIPES) {
-		return PUR_EXEC_ERR_PIPES;
+	if (!edges_reserve((size_t)nedges + 1)) {
+		return PUR_EXEC_ERR_MEMORY;
 	}
 
 	if (out_count[src] >= PUR_MAX_STREAMS || in_count[dst] >= PUR_MAX_STREAMS) {
@@ -94,7 +191,7 @@ static int outputs_collect(int node, int *out, int *n) {
 	pur_node_t *p = &pur_nodes[node];
 
 	if (p->kind == PUR_NODE_LEAF) {
-		if (*n >= PUR_MAX_LEAVES) {
+		if (*n >= state_leaves) {
 			return PUR_EXEC_ERR_STREAMS;
 		}
 		out[(*n)++] = p->first;
@@ -241,17 +338,16 @@ static int wire_internals(int node, bool wire_self) {
 		return PUR_EXEC_OK;
 	}
 
-	int outs[PUR_MAX_LEAVES];
 	int nouts = 0;
 
-	rc = outputs_collect(p->first, outs, &nouts);
+	rc = outputs_collect(p->first, scratch, &nouts);
 	if (rc != PUR_EXEC_OK) {
 		return rc;
 	}
 
 	// inside a compound the right hand side is downstream of the left, so
 	// the edge reaches through any group all the way down
-	return deliver_internal(outs, nouts, p->rhs);
+	return deliver_internal(scratch, nouts, p->rhs);
 }
 
 static bool is_builtin(const char* name) {
@@ -428,14 +524,14 @@ static int wire_defaults(bool background) {
 
 	for (int i = 0; i < pur_nleaves; i++) {
 		if (in_count[i] == 0) {
-			if (open_default(default_in, &in_fd[i][0]) != 0) {
+			if (open_default(default_in, &IN_FD(i, 0)) != 0) {
 				return -1;
 			}
 			in_count[i] = 1;
 		}
 
 		if (out_count[i] == 0) {
-			if (open_default(PUR_DEFAULT_OUT, &out_fd[i][0]) != 0) {
+			if (open_default(PUR_DEFAULT_OUT, &OUT_FD(i, 0)) != 0) {
 				return -1;
 			}
 			out_count[i] = 1;
@@ -457,8 +553,8 @@ static int create_pipes(void) {
 		edges[i].rfd = rfd;
 		edges[i].wfd = wfd;
 
-		out_fd[edges[i].src][edges[i].src_stream] = wfd;
-		in_fd[edges[i].dst][edges[i].dst_stream] = rfd;
+		OUT_FD(edges[i].src, edges[i].src_stream) = wfd;
+		IN_FD(edges[i].dst, edges[i].dst_stream) = rfd;
 	}
 
 	return 0;
@@ -485,6 +581,10 @@ static void close_all(void) {
 }
 
 static int wire_graph(void) {
+	if (!state_alloc(pur_nleaves)) {
+		return PUR_EXEC_ERR_MEMORY;
+	}
+
 	reset_state();
 
 	if (pur_nleaves == 0) {
@@ -500,15 +600,14 @@ static int wire_graph(void) {
 		return rc;
 	}
 
-	int outs[PUR_MAX_LEAVES];
 	int nouts = 0;
 
-	rc = outputs_collect(pur_nodes[pur_root].first, outs, &nouts);
+	rc = outputs_collect(pur_nodes[pur_root].first, scratch, &nouts);
 	if (rc != PUR_EXEC_OK) {
 		return rc;
 	}
 
-	return deliver_external(outs, nouts, pur_nodes[pur_root].rhs);
+	return deliver_external(scratch, nouts, pur_nodes[pur_root].rhs);
 }
 
 // -n: wire the statement, print the per command stream counts, run nothing
@@ -529,16 +628,19 @@ int pur_exec_plan(void) {
 	return PUR_EXEC_OK;
 }
 
-static int exec_start(bool background, int* status_out, pid_t* pids_out,
-		      int pids_cap, int* count_out) {
+static int exec_start(bool background, int* status_out, pid_t** bg_pids_out,
+		      int* count_out) {
 	if (status_out) {
 		*status_out = 0;
 	}
 	if (count_out) {
 		*count_out = 0;
 	}
+	if (bg_pids_out) {
+		*bg_pids_out = nullptr;
+	}
 
-	if (background && (!pids_out || !count_out || pur_nleaves > pids_cap)) {
+	if (background && (!bg_pids_out || !count_out)) {
 		return PUR_EXEC_ERR_JOBS;
 	}
 
@@ -596,15 +698,25 @@ static int exec_start(bool background, int* status_out, pid_t* pids_out,
 		return PUR_EXEC_ERR_PIPE_CREATE;
 	}
 
+	if (background && pur_nleaves > 0) {
+		*bg_pids_out = malloc((size_t)pur_nleaves * sizeof(pid_t));
+		if (!*bg_pids_out) {
+			close_all();
+			return PUR_EXEC_ERR_MEMORY;
+		}
+	}
+
 	for (int i = 0; i < pur_nleaves; i++) {
 		int argc = pur_leaf_argv(i, argv);
 		resolve_path(argv[0], path, sizeof(path));
 
-		pid_t pid = procreate(path, argv, argc, in_fd[i], in_count[i], out_fd[i],
-				      out_count[i]);
+		pid_t pid = procreate(path, argv, argc, IN_FDS(i), in_count[i],
+				      OUT_FDS(i), out_count[i]);
 
 		if ((int32_t)pid < 0) {
 			printf("pur: %s: could not start (error %d)\n", argv[0], (int)pid);
+			// children already launched are still returned so the caller
+			// can put them in the job table and reap them later
 			close_all();
 			return PUR_EXEC_ERR_PROCREATE;
 		}
@@ -613,7 +725,7 @@ static int exec_start(bool background, int* status_out, pid_t* pids_out,
 		launched[i] = true;
 
 		if (background) {
-			pids_out[(*count_out)++] = pid;
+			(*bg_pids_out)[(*count_out)++] = pid;
 		}
 	}
 
@@ -648,11 +760,11 @@ static int exec_start(bool background, int* status_out, pid_t* pids_out,
 }
 
 int pur_exec(int* status_out) {
-	return exec_start(false, status_out, NULL, 0, NULL);
+	return exec_start(false, status_out, NULL, NULL);
 }
 
-int pur_exec_background(pid_t* pids_out, int pids_cap, int* count_out) {
-	return exec_start(true, NULL, pids_out, pids_cap, count_out);
+int pur_exec_background(pid_t** pids_out, int* count_out) {
+	return exec_start(true, NULL, pids_out, count_out);
 }
 
 const char* pur_exec_strerror(int status) {
@@ -675,6 +787,8 @@ const char* pur_exec_strerror(int status) {
 			return "a built-in cannot run inside a pipeline";
 		case PUR_EXEC_ERR_JOBS:
 			return "too many background processes";
+		case PUR_EXEC_ERR_MEMORY:
+			return "out of memory";
 		default:
 			return "unknown error";
 	}

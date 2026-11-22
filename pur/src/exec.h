@@ -15,6 +15,7 @@ typedef enum {
 	PUR_EXEC_ERR_PROCREATE,
 	PUR_EXEC_ERR_BUILTIN,
 	PUR_EXEC_ERR_JOBS,
+	PUR_EXEC_ERR_MEMORY,
 } pur_exec_status_t;
 
 // Runs the parsed statement. Returns PUR_EXEC_OK, or one of the positive
@@ -23,11 +24,11 @@ typedef enum {
 // succeeded) is stored in *status_out.
 int pur_exec(int* status_out);
 
-// Launch the whole parsed expression without waiting for it. Every child pid
-// is written to pids_out (up to pids_cap) and the count is written to
-// count_out; the caller owns those pids and should reap them later. A built-in
-// expression runs synchronously and produces no pids.
-int pur_exec_background(pid_t* pids_out, int pids_cap, int* count_out);
+// Launch the whole parsed expression without waiting for it. *pids_out is set
+// to a freshly allocated array of child pids and *count_out to its length; the
+// caller owns that array and should reap the pids later. A built-in expression
+// runs synchronously and produces no pids.
+int pur_exec_background(pid_t** pids_out, int* count_out);
 
 int pur_exec_plan(void);
 int pur_builtin_help(void);

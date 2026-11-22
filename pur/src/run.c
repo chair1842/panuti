@@ -6,6 +6,7 @@
 #include "parse.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 // Walk a full command, one expression at a time. The operator before an
 // expression decides whether it runs; a skipped expression leaves the status
@@ -39,14 +40,15 @@ int pur_run_command(bool dry_run, int *status_out) {
 			bool background = pur_parse_op(i) == PUR_OP_BG;
 
 			if (background) {
-				pid_t pids[PUR_JOB_MAX];
+				pid_t* pids = nullptr;
 				int npids = 0;
 
-				xrc = pur_exec_background(pids, PUR_JOB_MAX, &npids);
-				if (xrc == PUR_EXEC_OK && !pur_job_add(pids, npids)) {
-					printf("pur: too many background jobs\n");
-					xrc = PUR_EXEC_ERR_JOBS;
+				xrc = pur_exec_background(&pids, &npids);
+				if (npids > 0 && !pur_job_add(pids, npids)) {
+					printf("pur: out of memory\n");
+					xrc = PUR_EXEC_ERR_MEMORY;
 				}
+				free(pids);
 
 				// a background expression has no foreground status
 				status = 0;

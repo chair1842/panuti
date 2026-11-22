@@ -3,11 +3,6 @@
 #ifndef PUR_PARSE_H
 #define PUR_PARSE_H
 
-// The most expressions one command may chain together. Each expression is
-// loaded and run on its own, so this only bounds how far a single line may
-// drive the shell before it is told no.
-#define PUR_MAX_EXPRS 64
-
 typedef enum {
 	PUR_PARSE_OK = 0,
 	PUR_PARSE_EMPTY = 1,

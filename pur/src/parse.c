@@ -54,8 +54,9 @@ static char *line;
 // start token of each expression and the operator after it need keeping: the
 // token pool stays put, so an expression is relodaded by parsing it again from
 // its start token rather than holding the whole AST for the command at once.
-static int expr_start[PUR_MAX_EXPRS];
-static pur_op_t expr_op[PUR_MAX_EXPRS];
+static int* expr_start;
+static pur_op_t* expr_op;
+static size_t exprs_cap;
 static int nexprs;
 
 // make room for one more token
@@ -83,13 +84,55 @@ static int toks_reserve(size_t need) {
 	return 0;
 }
 
+static int exprs_reserve(size_t need) {
+	if (need <= exprs_cap) {
+		return 0;
+	}
+
+	size_t cap = exprs_cap ? exprs_cap : PUR_AST_INIT;
+
+	while (cap < need) {
+		if (cap > (size_t)-1 / 2 / sizeof(int) ||
+		    cap > (size_t)-1 / 2 / sizeof(pur_op_t)) {
+			return -1;
+		}
+		cap *= 2;
+	}
+
+	int* starts = realloc(expr_start, cap * sizeof(int));
+	if (!starts) {
+		return -1;
+	}
+
+	pur_op_t* ops = realloc(expr_op, cap * sizeof(pur_op_t));
+	if (!ops) {
+		free(starts);
+		return -1;
+	}
+
+	expr_start = starts;
+	expr_op = ops;
+	exprs_cap = cap;
+	return 0;
+}
+
 static bool is_space(char c) {
 	return c == ' ' || c == '\t' || c == '\n' || c == '\r';
 }
 
+// '%' is only an operator when it is a word of its own. Written next to
+// other text it stays part of that word, so `100%` and `half%done` are
+// arguments rather than a background marker.
+static bool is_standalone_percent(const char* p) {
+	bool at_start = p == line;
+	bool after_space = !at_start && is_space(p[-1]);
+	bool before_space = p[1] == '\0' || is_space(p[1]);
+	return (at_start || after_space) && before_space;
+}
+
 static bool is_delim(char c) {
 	return is_space(c) || c == '(' || c == ')' || c == ';' || c == '>' ||
-	       c == '&' || c == '%' || c == '|' || c == '"';
+	       c == '&' || c == '|' || c == '"';
 }
 
 static int tokenize(void) {
@@ -107,7 +150,7 @@ static int tokenize(void) {
 		int len;
 
 		if (*p == '(' || *p == ')' || *p == ';' || *p == '>' || *p == '&' ||
-		    *p == '%' || *p == '|') {
+		    *p == '|' || (*p == '%' && is_standalone_percent(p))) {
 			if (*p == '(') {
 				type = PUR_T_LPAREN;
 				len = 1;
@@ -423,8 +466,8 @@ int pur_parse_command(char *text) {
 			return PUR_PARSE_ERR_OPERATOR;
 		}
 
-		if (nexprs >= PUR_MAX_EXPRS) {
-			return PUR_PARSE_ERR_EXPRS;
+		if (exprs_reserve((size_t)nexprs + 1) != 0) {
+			return PUR_PARSE_ERR_MEMORY;
 		}
 
 		expr_start[nexprs] = pos;
