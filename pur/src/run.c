@@ -2,6 +2,7 @@
 
 #include "run.h"
 #include "exec.h"
+#include "job.h"
 #include "parse.h"
 
 #include <stdio.h>
@@ -34,14 +35,31 @@ int pur_run_command(bool dry_run, int *status_out) {
 			}
 		} else {
 			int st = 0;
-			int xrc = pur_exec(&st);
+			int xrc = PUR_EXEC_OK;
+			bool background = pur_parse_op(i) == PUR_OP_BG;
+
+			if (background) {
+				pid_t pids[PUR_JOB_MAX];
+				int npids = 0;
+
+				xrc = pur_exec_background(pids, PUR_JOB_MAX, &npids);
+				if (xrc == PUR_EXEC_OK && !pur_job_add(pids, npids)) {
+					printf("pur: too many background jobs\n");
+					xrc = PUR_EXEC_ERR_JOBS;
+				}
+
+				// a background expression has no foreground status
+				status = 0;
+			} else {
+				xrc = pur_exec(&st);
+			}
 
 			// a command that never started is a failure too: say so, and
 			// keep the chain going so the next operator can see it
 			if (xrc != PUR_EXEC_OK) {
 				printf("pur: %s\n", pur_exec_strerror(xrc));
 				status = xrc == PUR_EXEC_ERR_NOTFOUND ? 127 : 1;
-			} else {
+			} else if (!background) {
 				status = st;
 			}
 		}

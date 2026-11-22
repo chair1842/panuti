@@ -16,6 +16,7 @@
 
 #define PUR_PATH "/cd/usr/bin/"
 #define PUR_DEFAULT_IN "/dvc/kbd/line"
+#define PUR_BACKGROUND_IN "/dvc/null"
 #define PUR_DEFAULT_OUT "/dvc/console"
 #define PUR_PATH_MAX 128
 
@@ -276,7 +277,9 @@ int pur_builtin_help(void) {
 	printf("  cmd && cmd       - run the next only if the status so far is 0\n");
 	printf("  cmd || cmd       - run the next only if the status is not 0\n");
 	printf("  cmd & cmd        - then run the next, whatever the status\n");
-	printf("  cmd %% cmd        - run cmd in the background, then the next\n\n");
+	printf("  cmd %% cmd        - run cmd in the background, then the next\n");
+	printf("                     background jobs read /dvc/null and are reaped\n");
+	printf("                     with waitp_many before the next prompt\n\n");
 	printf("  they share one precedence and are left associative. '|' is not\n");
 	printf("  used at all: pur pipes with '>'. a trailing '%%' is fine; a\n");
 	printf("  trailing '&', '&&' or '||' is an error.\n\n");
@@ -420,10 +423,12 @@ static int open_default(const char* path, int* dest) {
 	return 0;
 }
 
-static int wire_defaults(void) {
+static int wire_defaults(bool background) {
+	const char* default_in = background ? PUR_BACKGROUND_IN : PUR_DEFAULT_IN;
+
 	for (int i = 0; i < pur_nleaves; i++) {
 		if (in_count[i] == 0) {
-			if (open_default(PUR_DEFAULT_IN, &in_fd[i][0]) != 0) {
+			if (open_default(default_in, &in_fd[i][0]) != 0) {
 				return -1;
 			}
 			in_count[i] = 1;
@@ -524,9 +529,17 @@ int pur_exec_plan(void) {
 	return PUR_EXEC_OK;
 }
 
-int pur_exec(int* status_out) {
+static int exec_start(bool background, int* status_out, pid_t* pids_out,
+		      int pids_cap, int* count_out) {
 	if (status_out) {
 		*status_out = 0;
+	}
+	if (count_out) {
+		*count_out = 0;
+	}
+
+	if (background && (!pids_out || !count_out || pur_nleaves > pids_cap)) {
+		return PUR_EXEC_ERR_JOBS;
 	}
 
 	int rc = wire_graph();
@@ -573,7 +586,7 @@ int pur_exec(int* status_out) {
 		}
 	}
 
-	if (wire_defaults() != 0) {
+	if (wire_defaults(background) != 0) {
 		close_all();
 		return PUR_EXEC_ERR_PROCREATE;
 	}
@@ -598,12 +611,18 @@ int pur_exec(int* status_out) {
 
 		pids[i] = pid;
 		launched[i] = true;
+
+		if (background) {
+			pids_out[(*count_out)++] = pid;
+		}
 	}
 
 	close_all();
 
-	if (status_out) {
-		*status_out = 0;
+	// background jobs are handed to the caller; this shell reaps them at the
+	// next prompt instead of blocking here
+	if (background) {
+		return PUR_EXEC_OK;
 	}
 
 	int lowest = 0;
@@ -628,6 +647,14 @@ int pur_exec(int* status_out) {
 	return PUR_EXEC_OK;
 }
 
+int pur_exec(int* status_out) {
+	return exec_start(false, status_out, NULL, 0, NULL);
+}
+
+int pur_exec_background(pid_t* pids_out, int pids_cap, int* count_out) {
+	return exec_start(true, NULL, pids_out, pids_cap, count_out);
+}
+
 const char* pur_exec_strerror(int status) {
 	switch (status) {
 		case PUR_EXEC_OK:
@@ -646,6 +673,8 @@ const char* pur_exec_strerror(int status) {
 			return "could not start a command";
 		case PUR_EXEC_ERR_BUILTIN:
 			return "a built-in cannot run inside a pipeline";
+		case PUR_EXEC_ERR_JOBS:
+			return "too many background processes";
 		default:
 			return "unknown error";
 	}

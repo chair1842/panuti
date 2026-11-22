@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "exec.h"
+#include "job.h"
 #include "parse.h"
 #include "run.h"
 
@@ -253,6 +254,7 @@ int main(int argc, char** argv) {
 	}
 
 	while (1) {
+		pur_job_reap();
 		printf("# ");
 
 		if (line_reserve(PUR_LINE_INIT) != 0) {
