@@ -198,6 +198,16 @@ static inline int32_t panutisysf_mkpipe(const char* path) {
 	return panuti_syscall(SYSHANDLER_MKPIPE, (uint32_t)path, 0, 0, 0);
 }
 
+static inline int32_t panutisysf_hwait(const int* fds, uint32_t n, int32_t timeout_cs, uint32_t* which) {
+	return panuti_syscall(
+		SYSHANDLER_HWAIT,
+		(uint32_t)fds,
+		(uint32_t)which,
+		n,
+		(uint32_t)timeout_cs
+	);
+}
+
 #if defined(__cplusplus)
 }
 #endif

@@ -131,7 +131,9 @@ kernel/syscall/handlers/kill.o \
 kernel/drivers/pci/pci.o \
 kernel/syscall/handlers/waitp.o \
 kernel/syscall/handlers/pwerop.o \
-kernel/syscall/handlers/mkpipe.o
+kernel/syscall/handlers/mkpipe.o \
+kernel/handle/point.o \
+kernel/syscall/handlers/hwait.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \

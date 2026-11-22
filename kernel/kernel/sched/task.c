@@ -184,7 +184,6 @@ static task_t* task_alloc_common(void) {
 	t->state = TASK_READY;
 	t->exit_code = 0;
 	t->wake_at = 0;
-	t->wait_next = nullptr;
 	t->wait_pid_count = 0;
 	t->creator_pid = 0;
 	t->name[0] = '\0';
@@ -414,7 +413,6 @@ static void task_teardown(task_t* t) {
 	t->addr_space = nullptr;
 	task_set_cwd(t, nullptr);
 	t->next = nullptr;
-	t->wait_next = nullptr;
 	t->no_in_streams = 0;
 	t->no_out_streams = 0;
 	t->state = TASK_NONE;

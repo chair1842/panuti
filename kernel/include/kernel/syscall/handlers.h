@@ -114,6 +114,10 @@ int32_t syshandler_waitp(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // reboot or poweroff. power operations
 int32_t syshandler_pwerop(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// create a named pipe in the registry
 int32_t syshandler_mkpipe(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
+// wait on a handle
+int32_t syshandler_hwait(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
 #endif

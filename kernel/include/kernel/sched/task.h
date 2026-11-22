@@ -55,8 +55,6 @@ typedef struct task {
 	struct task* next;
 
 	struct task* task_next;
-
-	struct task* wait_next;
 	
 	fdtable_t fdtable;
 	

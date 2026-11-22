@@ -174,7 +174,9 @@ void ide_channel_acquire(ide_channel_t* ch) {
 		return;
 	}
 
-	wait_queue_add(&ch->lock_waiters, self);
+	wait_entry_t entry;
+	wait_entry_init(&entry, self);
+	wait_queue_add(&ch->lock_waiters, &entry);
 
 	while (ch->locked) {
 		task_block(self);
@@ -183,7 +185,7 @@ void ide_channel_acquire(ide_channel_t* ch) {
 		flags = irq_save_disable();
 	}
 
-	wait_queue_remove(&ch->lock_waiters, self);
+	wait_queue_remove(&ch->lock_waiters, &entry);
 	ch->locked = true;
 	irq_restore(flags);
 }

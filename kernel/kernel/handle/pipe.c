@@ -63,6 +63,7 @@ int pipe_read(void* impl, void* buf, size_t len) {
 	}
 
 	pipe_t* p = end->pipe;
+	wait_entry_t entry;
 
 	while (1) {
 		uint32_t flags = irq_save_disable();
@@ -85,9 +86,10 @@ int pipe_read(void* impl, void* buf, size_t len) {
 			return -1;
 		}
 
-		wait_queue_add(&p->readers_waiting, self);
+		wait_entry_init(&entry, self);
+		wait_queue_add(&p->readers_waiting, &entry);
 		task_block(self);
-		wait_queue_remove(&p->readers_waiting, self);
+		wait_queue_remove(&p->readers_waiting, &entry);
 
 		if (self->kill_pending) {
 			irq_restore(flags);
@@ -118,6 +120,7 @@ int pipe_write(void* impl, const void* buf, size_t len) {
 	}
 
 	size_t written = 0;
+	wait_entry_t entry;
 
 	while (written < len) {
 		size_t chunk = len - written;
@@ -146,9 +149,10 @@ int pipe_write(void* impl, const void* buf, size_t len) {
 			return written > 0 ? (int)written : -1;
 		}
 
-		wait_queue_add(&p->writers_waiting, self);
+		wait_entry_init(&entry, self);
+		wait_queue_add(&p->writers_waiting, &entry);
 		task_block(self);
-		wait_queue_remove(&p->writers_waiting, self);
+		wait_queue_remove(&p->writers_waiting, &entry);
 
 		if (self->kill_pending) {
 			irq_restore(flags);
@@ -249,8 +253,32 @@ static int pipe_activate(void* impl) {
 }
 
 static int pipe_ready(void* impl) {
-	(void)impl;
-	return -1;
+	pipe_end_t* end = impl;
+	if (!end) {
+		return -1;
+	}
+
+	pipe_t* p = end->pipe;
+	uint32_t flags = irq_save_disable();
+	int ready;
+
+	if (end->is_write_end) {
+		ready = (p->read_end_closed || p->capacity > p->count) ? 1 : 0;
+	} else {
+		ready = (p->count > 0 || p->write_end_closed) ? 1 : 0;
+	}
+
+	irq_restore(flags);
+	return ready;
+}
+
+static wait_queue_t* pipe_waitq(void* impl) {
+	pipe_end_t* end = impl;
+	if (!end) {
+		return nullptr;
+	}
+
+	return end->is_write_end ? &end->pipe->writers_waiting : &end->pipe->readers_waiting;
 }
 
 const handle_ops_t pipe_ops = {
@@ -258,6 +286,7 @@ const handle_ops_t pipe_ops = {
 	.write = pipe_write,
 	.activate = pipe_activate,
 	.ready = pipe_ready,
+	.waitq = pipe_waitq,
 	.close = pipe_close,
 };
 
@@ -369,5 +398,6 @@ const handle_ops_t fifo_ops = {
 	.write = pipe_write,
 	.activate = pipe_activate,
 	.ready = pipe_ready,
+	.waitq = pipe_waitq,
 	.close = fifo_close,
 };

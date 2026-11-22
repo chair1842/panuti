@@ -141,34 +141,35 @@ void task_wake(task_t* t) {
     }
 }
 
-void wait_queue_add(wait_queue_t* q, task_t* t) {
-    if (!q || !t) {
+void wait_queue_add(wait_queue_t* q, wait_entry_t* entry) {
+    if (!q || !entry) {
         return;
     }
 
-    for (task_t* n = q->head; n; n = n->wait_next) {
-        if (n == t) {
+    for (wait_entry_t* n = q->head; n; n = n->next) {
+        if (n == entry) {
             return;
         }
     }
 
-    t->wait_next = q->head;
-    q->head = t;
+    entry->next = q->head;
+    q->head = entry;
 }
 
-void wait_queue_remove(wait_queue_t* q, task_t* t) {
-    if (!q || !t) {
+void wait_queue_remove(wait_queue_t* q, wait_entry_t* entry) {
+    if (!q || !entry) {
         return;
     }
 
-    task_t** link = &q->head;
+    wait_entry_t** link = &q->head;
     while (*link) {
-        if (*link == t) {
-            *link = t->wait_next;
-            t->wait_next = nullptr;
+        if (*link == entry) {
+            *link = entry->next;
+            entry->next = nullptr;
             return;
         }
-        link = &(*link)->wait_next;
+
+        link = &(*link)->next;
     }
 }
 
@@ -178,10 +179,10 @@ void wait_queue_wake_all(wait_queue_t* q) {
     }
 
     while (q->head) {
-        task_t* t = q->head;
-        q->head = t->wait_next;
-        t->wait_next = nullptr;
-        task_wake(t);
+        wait_entry_t* entry = q->head;
+        q->head = entry->next;
+        entry->next = nullptr;
+        task_wake(entry->task);
     }
 }
 
@@ -190,17 +191,17 @@ void wait_queue_wake_one(wait_queue_t* q) {
         return;
     }
 
-    task_t** link = &q->head;
+    wait_entry_t** link = &q->head;
     while (*link) {
-        task_t* t = *link;
-        if (t->state != TASK_BLOCKED) {
-            link = &t->wait_next;
+        wait_entry_t* entry = *link;
+        if (entry->task->state != TASK_BLOCKED) {
+            link = &entry->next;
             continue;
         }
 
-        *link = t->wait_next;
-        t->wait_next = nullptr;
-        task_wake(t);
+        *link = entry->next;
+        entry->next = nullptr;
+        task_wake(entry->task);
         return;
     }
 }

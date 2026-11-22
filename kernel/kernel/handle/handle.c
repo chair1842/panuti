@@ -30,6 +30,11 @@ int op_not_supported_rdy(void* impl) {
 	return -1;
 }
 
+struct wait_queue* op_not_supported_waitq(void* impl) {
+	(void)impl;
+	return nullptr;
+}
+
 int op_not_supported_close(void* impl, struct task* self) {
 	(void)impl; (void)self;
 	return 0;

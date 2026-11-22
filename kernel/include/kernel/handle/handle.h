@@ -9,6 +9,7 @@
 
 struct task;
 struct inode;
+struct wait_queue;
 
 typedef struct {
 	int (*open)(void* impl, void** out_impl);
@@ -16,6 +17,7 @@ typedef struct {
 	int (*write)(void* impl, const void* buf, size_t len);
 	int (*activate)(void* impl);
 	int (*ready)(void* impl);
+	struct wait_queue* (*waitq)(void* impl);
 	int (*close)(void* impl, struct task* self);
 	int (*resize)(void* impl, uint64_t new_size);
 	int (*seek)(void* impl, int whence, int64_t offset);
@@ -34,6 +36,7 @@ int op_not_supported_rw(void* impl, void* buf, size_t len);
 int op_not_supported_w(void* impl, const void* buf, size_t len);
 int op_not_supported_act(void* impl);
 int op_not_supported_rdy(void* impl);
+struct wait_queue* op_not_supported_waitq(void* impl);
 int op_not_supported_close(void* impl, struct task* self);
 int op_not_supported_resize(void* impl, uint64_t new_size);
 int op_not_supported_seek(void* impl, int whence, int64_t offset);
