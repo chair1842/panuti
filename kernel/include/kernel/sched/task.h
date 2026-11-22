@@ -106,7 +106,6 @@ void task_switch_to(task_t* old, task_t* new);
 void task_init_stack(task_t* t, void (*entry)(void));
 void task_init_user_stack(task_t* t, void (*entry)(void), uint32_t user_esp);
 void task_activate(task_t* task);
-void task_destroy(task_t* task);
 int task_build_user_argv_stack(
 	const uint32_t* stack_pages,
 	uint32_t stack_page_count,

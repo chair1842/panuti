@@ -23,6 +23,7 @@
 #define ELF_READ_MAX (256 * 1024)
 
 static task_t* task_list = nullptr;
+static task_t* task_free_list = nullptr;
 
 static void task_list_push(task_t* t) {
 	t->task_next = task_list;
@@ -48,12 +49,6 @@ static void task_list_unlink(task_t* t) {
 static void task_teardown(task_t* t);
 
 static void task_init_default_streams(task_t* t) {
-	// a recycled slot still holds the handle_t copies the previous task left
-	// in its stream arrays. those ends were already released by
-	// task_destroy(), and install_stream() unrefs whatever it is handed
-	// before overwriting it -- so leaving them in place would release memory
-	// that the allocator may already have handed to somebody else. start the
-	// slot out with empty stream arrays.
 	for (int i = 0; i < MAX_STREAMS; i++) {
 		t->in_streams[i] = (handle_t){0};
 		t->out_streams[i] = (handle_t){0};
@@ -81,27 +76,12 @@ static bool task_waits_on(const task_t* t, pid_t pid) {
 	return false;
 }
 
-static bool task_has_waiter(pid_t pid) {
-	for (task_t* t = task_list; t; t = t->task_next) {
-		if (t->state != TASK_NONE && task_waits_on(t, pid)) {
-			return true;
-		}
-	}
-	return false;
-}
-
 static task_t* task_alloc_task(void) {
-	for (task_t* t = task_list; t; ) {
-		task_t* next = t->task_next;
-
-		if (t->state == TASK_TERMINATED && !task_has_waiter(t->pid)) {
-			sched_remove(t);
-			task_teardown(t);
-			task_list_unlink(t);
-			return t;
-		}
-
-		t = next;
+	if (task_free_list) {
+		task_t* t = task_free_list;
+		task_free_list = t->task_next;
+		t->task_next = nullptr;
+		return t;
 	}
 
 	return kmalloc(sizeof(task_t), alignof(task_t));
@@ -202,6 +182,7 @@ static task_t* task_alloc_common(void) {
 	}
 
 	t->state = TASK_READY;
+	t->exit_code = 0;
 	t->wake_at = 0;
 	t->wait_pid_count = 0;
 	t->creator_pid = 0;
@@ -437,14 +418,17 @@ static void task_teardown(task_t* t) {
 	t->state = TASK_NONE;
 }
 
-void task_destroy(task_t* t) {
+static void task_reap(task_t* t) {
 	if (!t || t->state != TASK_TERMINATED) {
 		return;
 	}
 
 	task_teardown(t);
 	task_list_unlink(t);
-	kfree(t);
+
+	// keep the cleaned-out slot for task_alloc_task instead of freeing it
+	t->task_next = task_free_list;
+	task_free_list = t;
 }
 
 static void procreate_cleanup(task_t* t) {
@@ -717,7 +701,7 @@ int task_wait_any(const pid_t* pids, uint32_t count, int* exit_code_out, pid_t* 
 				*exit_code_out = t->exit_code;
 				*exit_pid_out = t->pid;
 				sched_remove(t);
-				task_destroy(t);
+				task_reap(t);
 				return 0;
 			}
 
