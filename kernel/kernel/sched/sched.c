@@ -3,6 +3,7 @@
 #include "kernel/klog.h"
 #include <kernel/sched/sched.h>
 #include <kernel/sched/task.h>
+#include <kernel/sched/wait.h>
 #include <stddef.h>
 #include <kernel/kpanic.h>
 #include <kernel/irq.h>
@@ -137,5 +138,69 @@ void task_block(task_t* t) {
 void task_wake(task_t* t) {
     if (t->state == TASK_BLOCKED) {
         t->state = TASK_READY;
+    }
+}
+
+void wait_queue_add(wait_queue_t* q, task_t* t) {
+    if (!q || !t) {
+        return;
+    }
+
+    for (task_t* n = q->head; n; n = n->wait_next) {
+        if (n == t) {
+            return;
+        }
+    }
+
+    t->wait_next = q->head;
+    q->head = t;
+}
+
+void wait_queue_remove(wait_queue_t* q, task_t* t) {
+    if (!q || !t) {
+        return;
+    }
+
+    task_t** link = &q->head;
+    while (*link) {
+        if (*link == t) {
+            *link = t->wait_next;
+            t->wait_next = nullptr;
+            return;
+        }
+        link = &(*link)->wait_next;
+    }
+}
+
+void wait_queue_wake_all(wait_queue_t* q) {
+    if (!q) {
+        return;
+    }
+
+    while (q->head) {
+        task_t* t = q->head;
+        q->head = t->wait_next;
+        t->wait_next = nullptr;
+        task_wake(t);
+    }
+}
+
+void wait_queue_wake_one(wait_queue_t* q) {
+    if (!q) {
+        return;
+    }
+
+    task_t** link = &q->head;
+    while (*link) {
+        task_t* t = *link;
+        if (t->state != TASK_BLOCKED) {
+            link = &t->wait_next;
+            continue;
+        }
+
+        *link = t->wait_next;
+        t->wait_next = nullptr;
+        task_wake(t);
+        return;
     }
 }

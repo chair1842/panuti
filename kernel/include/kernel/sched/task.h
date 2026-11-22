@@ -53,8 +53,10 @@ typedef struct task {
 	char cmdline[TASK_CMDLINE_MAX];
 	
 	struct task* next;
-	
+
 	struct task* task_next;
+
+	struct task* wait_next;
 	
 	fdtable_t fdtable;
 	

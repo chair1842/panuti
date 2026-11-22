@@ -6,9 +6,10 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <kernel/sched/task.h>
+#include <kernel/sched/wait.h>
 
 #define PIPE_BUFFER_SIZE 4096
-#define PIPE_MAX_WAITERS 8
+#define PIPE_ATOMIC_WRITE 512
 
 typedef struct pipe {
 	uint8_t buffer[PIPE_BUFFER_SIZE];
@@ -20,11 +21,8 @@ typedef struct pipe {
 
 	int refcount;
 
-	task_t* readers_waiting[PIPE_MAX_WAITERS];
-	int no_readers_waiting;
-
-	task_t* writers_waiting[PIPE_MAX_WAITERS];
-	int no_writers_waiting;
+	wait_queue_t readers_waiting;
+	wait_queue_t writers_waiting;
 
 	bool write_end_closed;
 	bool read_end_closed;

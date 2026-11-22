@@ -6,6 +6,7 @@
 #include "../../intpt/handlers/main.h"
 #include <kernel/timer.h>
 #include <kernel/klog.h>
+#include <kernel/irq.h>
 #include <kernel/sched/sched.h>
 
 #define ATA_IRQ14_VECTOR 46
@@ -15,12 +16,16 @@ static ide_channel_t primary = {
 	.io_base = ATA_PRIMARY_IO,
 	.ctrl_base = ATA_PRIMARY_CTRL,
 	.control = ATA_DCR_NIEN, // NIEN 💔🫩
+	.locked = false,
+	.lock_waiters = { nullptr },
 };
 
 static ide_channel_t secondary = {
 	.io_base = ATA_SECONDARY_IO,
 	.ctrl_base = ATA_SECONDARY_CTRL,
 	.control = ATA_DCR_NIEN,
+	.locked = false,
+	.lock_waiters = { nullptr },
 };
 
 static void ide_dma_irq(ide_channel_t* ch) {
@@ -148,13 +153,48 @@ int ide_wait_drq(ide_channel_t* ch, uint32_t ticks) {
 }
 
 void ide_channel_acquire(ide_channel_t* ch) {
-	while (__sync_lock_test_and_set(&ch->busy, (uint32_t)1)) {
-		__asm__ __volatile__("hlt");
+	task_t* self = sched_current();
+	uint32_t flags = irq_save_disable();
+
+	if (!ch->locked) {
+		ch->locked = true;
+		irq_restore(flags);
+		return;
 	}
+
+	if (!self) {
+		while (ch->locked) {
+			irq_restore(flags);
+			__asm__ __volatile__("hlt");
+			flags = irq_save_disable();
+		}
+
+		ch->locked = true;
+		irq_restore(flags);
+		return;
+	}
+
+	wait_queue_add(&ch->lock_waiters, self);
+
+	while (ch->locked) {
+		task_block(self);
+
+		irq_restore(flags);
+		flags = irq_save_disable();
+	}
+
+	wait_queue_remove(&ch->lock_waiters, self);
+	ch->locked = true;
+	irq_restore(flags);
 }
 
 void ide_channel_release(ide_channel_t* ch) {
-	__sync_lock_release(&ch->busy);
+	uint32_t flags = irq_save_disable();
+
+	ch->locked = false;
+	wait_queue_wake_one(&ch->lock_waiters);
+
+	irq_restore(flags);
 }
 
 void ide_soft_reset(ide_channel_t* ch) {

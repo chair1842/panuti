@@ -39,88 +39,49 @@ static size_t pipe_write_raw(pipe_t* p, const void* buf, size_t len) {
 	return len;
 }
 
-static void pipe_wake_all(task_t** list, int* count) {
-	for (int i = 0; i < *count; i++) {
-		task_wake(list[i]);
-	}
-	
-	*count = 0;
-}
-
-static void pipe_register_waiter(task_t** list, int* count, task_t* t) {
-	for (int i = 0; i < *count; i++) {
-		if (list[i] == t) {
-			return;
-		}
-	}
-
-	if (*count < PIPE_MAX_WAITERS) {
-		list[(*count)++] = t;
-	}
-}
-
-static void pipe_unregister_waiter(task_t** list, int* count, task_t* t) {
-	for (int i = 0; i < *count; i++) {
-		if (list[i] == t) {
-			list[i] = list[--*count];
-			return;
-		}
-	}
-}
-
 int pipe_read(void* impl, void* buf, size_t len) {
 	pipe_end_t* end = impl;
 	if (end->is_write_end) {
 		return -1; // can't read from the write end
 	}
-	
+	if (len == 0) {
+		return 0;
+	}
+
 	pipe_t* p = end->pipe;
 
-	// register-then-block must be atomic w.r.t. the timer: a writer (or the
-	// writer closing the pipe) could otherwise add data and wake us between
-	// the emptiness check and task_block, and we'd block forever. Under IRQs
-	// off, no other task can be scheduled in that window.
 	while (1) {
 		uint32_t flags = irq_save_disable();
 
 		if (p->count > 0 || p->write_end_closed) {
+			if (p->count == 0) {
+				irq_restore(flags);
+				return 0;
+			}
+
+			size_t n = pipe_read_raw(p, buf, len);
+			wait_queue_wake_all(&p->writers_waiting);
 			irq_restore(flags);
-			break;
+			return (int)n;
 		}
 
 		task_t* self = sched_current();
-		if (!self) {
+		if (!self || self->kill_pending) {
 			irq_restore(flags);
 			return -1;
 		}
 
-		if (self->kill_pending) {
-			irq_restore(flags);
-			return -1;
-		}
-
-		pipe_register_waiter(p->readers_waiting, &p->no_readers_waiting, self);
-
+		wait_queue_add(&p->readers_waiting, self);
 		task_block(self);
+		wait_queue_remove(&p->readers_waiting, self);
 
-		// resumes here once task_wake() is called on us
 		if (self->kill_pending) {
-			pipe_unregister_waiter(p->readers_waiting, &p->no_readers_waiting, self);
 			irq_restore(flags);
 			return -1;
 		}
 
 		irq_restore(flags);
 	}
-
-	if (p->count == 0) {
-		return 0; // EOF, nothing more will ever arrive
-	}
-
-	size_t n = pipe_read_raw(p, buf, len);
-	pipe_wake_all(p->writers_waiting, &p->no_writers_waiting);
-
-	return (int)n;
 }
 
 int pipe_write(void* impl, const void* buf, size_t len) {
@@ -128,54 +89,62 @@ int pipe_write(void* impl, const void* buf, size_t len) {
 	if (!end->is_write_end) {
 		return -1; // can't write to the read end
 	}
-	
-	pipe_t* p = end->pipe;
+	if (len == 0) {
+		return 0;
+	}
 
+	pipe_t* p = end->pipe;
 	if (p->read_end_closed) {
 		return -1; // broken pipe
 	}
 
-	while (1) {
+	size_t atomic = p->capacity < PIPE_ATOMIC_WRITE ? p->capacity : PIPE_ATOMIC_WRITE;
+	if (atomic == 0) {
+		return -1;
+	}
+
+	size_t written = 0;
+
+	while (written < len) {
+		size_t chunk = len - written;
+		if (chunk > atomic) {
+			chunk = atomic;
+		}
+
 		uint32_t flags = irq_save_disable();
 
-		if (p->count < p->capacity || p->read_end_closed) {
+		if (p->read_end_closed) {
 			irq_restore(flags);
-			break;
+			return written > 0 ? (int)written : -1;
+		}
+
+		if (p->capacity - p->count >= chunk) {
+			size_t n = pipe_write_raw(p, (const uint8_t*)buf + written, chunk);
+			written += n;
+			wait_queue_wake_all(&p->readers_waiting);
+			irq_restore(flags);
+			continue;
 		}
 
 		task_t* self = sched_current();
-		if (!self) {
+		if (!self || self->kill_pending) {
 			irq_restore(flags);
-			return -1;
+			return written > 0 ? (int)written : -1;
 		}
 
-		if (self->kill_pending) {
-			irq_restore(flags);
-			return -1;
-		}
-
-		pipe_register_waiter(p->writers_waiting, &p->no_writers_waiting, self);
-
+		wait_queue_add(&p->writers_waiting, self);
 		task_block(self);
+		wait_queue_remove(&p->writers_waiting, self);
 
-		// resumes here once task_wake() is called on us
 		if (self->kill_pending) {
-			pipe_unregister_waiter(p->writers_waiting, &p->no_writers_waiting, self);
 			irq_restore(flags);
-			return -1;
+			return written > 0 ? (int)written : -1;
 		}
 
 		irq_restore(flags);
 	}
 
-	if (p->count == p->capacity) {
-		return -1; // broken pipe: reader disappeared while we waited
-	}
-
-	size_t n = pipe_write_raw(p, buf, len);
-	pipe_wake_all(p->readers_waiting, &p->no_readers_waiting);
-
-	return (int)n;
+	return (int)written;
 }
 
 int pipe_end_ref(pipe_end_t* end) {
@@ -187,17 +156,21 @@ int pipe_end_ref(pipe_end_t* end) {
 // the end and the pipe reference it was holding
 static void pipe_end_release(pipe_end_t* end) {
 	pipe_t* p = end->pipe;
+	uint32_t flags = irq_save_disable();
 
 	if (end->is_write_end) {
 		p->write_end_closed = true;
-		pipe_wake_all(p->readers_waiting, &p->no_readers_waiting);
+		wait_queue_wake_all(&p->readers_waiting);
 	} else {
 		p->read_end_closed = true;
-		pipe_wake_all(p->writers_waiting, &p->no_writers_waiting);
+		wait_queue_wake_all(&p->writers_waiting);
 	}
 
 	p->refcount--;
-	if (p->refcount == 0) {
+	bool free_pipe = p->refcount == 0;
+	irq_restore(flags);
+
+	if (free_pipe) {
 		kfree(p);
 	}
 
@@ -265,8 +238,8 @@ int pipe_create_pair(task_t* t, int* out_read, int* out_write) {
 	p->tail = 0;
 	p->count = 0;
 	p->refcount = 2;
-	p->no_readers_waiting = 0;
-	p->no_writers_waiting = 0;
+	wait_queue_init(&p->readers_waiting);
+	wait_queue_init(&p->writers_waiting);
 	p->write_end_closed = false;
 	p->read_end_closed = false;
 

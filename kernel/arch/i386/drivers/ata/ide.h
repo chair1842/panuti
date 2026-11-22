@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <kernel/sched/task.h>
+#include <kernel/sched/wait.h>
 
 // uwu contants : 3
 
@@ -137,7 +138,8 @@ struct ide_channel {
 	task_t* dma_waiter;
 	uint8_t control;
 
-	volatile uint32_t busy;
+	bool locked;
+	wait_queue_t lock_waiters;
 };
 
 uint8_t ide_read_reg(ide_channel_t* ch, uint8_t offset);
