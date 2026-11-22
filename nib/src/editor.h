@@ -39,6 +39,8 @@ typedef struct normalmode_state {
 	char pending_op;
 	bool pending_replace;
 	bool pending_g;
+	int count;
+	int operator_count;
 } normalmode_state_t;
 
 typedef struct motion {

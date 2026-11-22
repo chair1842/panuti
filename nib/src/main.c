@@ -529,6 +529,21 @@ void draw(void) {
 			buf[n++] = (c < 0x20 || c == 0x7F) ? '?' : (char)c;
 			slen++;
 		}
+	} else if (EGG.mode == EM_NORMAL &&
+		(EGG.nmstate.count > 0 || EGG.nmstate.operator_count > 0)) {
+		char digits[16];
+		int ndigits = 0;
+		int value = EGG.nmstate.count > 0 ? EGG.nmstate.count : EGG.nmstate.operator_count;
+
+		while (value > 0 && ndigits < 16) {
+			digits[ndigits++] = (char)('0' + value % 10);
+			value /= 10;
+		}
+
+		while (ndigits > 0 && slen < lim) {
+			buf[n++] = digits[--ndigits];
+			slen++;
+		}
 	} else if (EGG.show_errmsg) {
 		for (int i = 0; i < EGG.errormsg.len && slen < lim; i++) {
 			unsigned char c = (unsigned char)EGG.errormsg.string[i];
