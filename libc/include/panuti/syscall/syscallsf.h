@@ -194,6 +194,10 @@ static inline int32_t panutisysf_pwerop(uint32_t op, uint32_t magic) {
 	return panuti_syscall(SYSHANDLER_PWEROP, op, magic, 0, 0);
 }
 
+static inline int32_t panutisysf_mkpipe(const char* path) {
+	return panuti_syscall(SYSHANDLER_MKPIPE, (uint32_t)path, 0, 0, 0);
+}
+
 #if defined(__cplusplus)
 }
 #endif

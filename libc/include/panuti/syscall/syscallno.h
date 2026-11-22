@@ -43,6 +43,7 @@ extern "C" {
 #define SYSHANDLER_KILL 33
 #define SYSHANDLER_WAITP 34
 #define SYSHANDLER_PWEROP 35
+#define SYSHANDLER_MKPIPE 36
 
 #if defined(__cplusplus)
 }

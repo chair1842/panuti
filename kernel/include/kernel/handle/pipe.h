@@ -11,6 +11,8 @@
 #define PIPE_BUFFER_SIZE 4096
 #define PIPE_ATOMIC_WRITE 512
 
+typedef struct fifo_node fifo_node_t;
+
 typedef struct pipe {
 	uint8_t buffer[PIPE_BUFFER_SIZE];
 
@@ -26,6 +28,8 @@ typedef struct pipe {
 
 	bool write_end_closed;
 	bool read_end_closed;
+	bool reader_gone;
+	fifo_node_t* cookie;
 } pipe_t;
 
 typedef struct pipe_end {
@@ -34,9 +38,18 @@ typedef struct pipe_end {
 	int refcount;
 } pipe_end_t;
 
+struct fifo_node {
+	pipe_end_t* write_end;
+};
+
+void pipe_init(pipe_t* p);
 pipe_end_t* pipe_end_create(pipe_t* pipe, bool is_write_end);
 int pipe_end_ref(pipe_end_t* end);
 int pipe_end_unref(pipe_end_t* end);
 int pipe_create_pair(task_t* t, int* out_read, int* out_write);
+void fifo_destroy(void* impl);
+
+extern const handle_ops_t pipe_ops;
+extern const handle_ops_t fifo_ops;
 
 #endif

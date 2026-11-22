@@ -114,4 +114,6 @@ int32_t syshandler_waitp(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // reboot or poweroff. power operations
 int32_t syshandler_pwerop(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+int32_t syshandler_mkpipe(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

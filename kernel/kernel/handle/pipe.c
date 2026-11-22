@@ -39,6 +39,20 @@ static size_t pipe_write_raw(pipe_t* p, const void* buf, size_t len) {
 	return len;
 }
 
+void pipe_init(pipe_t* p) {
+	p->capacity = PIPE_BUFFER_SIZE;
+	p->head = 0;
+	p->tail = 0;
+	p->count = 0;
+	p->refcount = 2;
+	wait_queue_init(&p->readers_waiting);
+	wait_queue_init(&p->writers_waiting);
+	p->write_end_closed = false;
+	p->read_end_closed = false;
+	p->reader_gone = false;
+	p->cookie = nullptr;
+}
+
 int pipe_read(void* impl, void* buf, size_t len) {
 	pipe_end_t* end = impl;
 	if (end->is_write_end) {
@@ -156,13 +170,29 @@ int pipe_end_ref(pipe_end_t* end) {
 // the end and the pipe reference it was holding
 static void pipe_end_release(pipe_end_t* end) {
 	pipe_t* p = end->pipe;
+	pipe_end_t* fifo_write = nullptr;
 	uint32_t flags = irq_save_disable();
 
 	if (end->is_write_end) {
+		fifo_node_t* fifo = p->cookie;
+		if (fifo && fifo->write_end == end) {
+			fifo->write_end = nullptr;
+			p->cookie = nullptr;
+		}
+
 		p->write_end_closed = true;
 		wait_queue_wake_all(&p->readers_waiting);
 	} else {
 		p->read_end_closed = true;
+		p->reader_gone = true;
+
+		fifo_node_t* fifo = p->cookie;
+		p->cookie = nullptr;
+		if (fifo && fifo->write_end && fifo->write_end != end) {
+			fifo_write = fifo->write_end;
+			fifo->write_end = nullptr;
+		}
+
 		wait_queue_wake_all(&p->writers_waiting);
 	}
 
@@ -172,6 +202,10 @@ static void pipe_end_release(pipe_end_t* end) {
 
 	if (free_pipe) {
 		kfree(p);
+	}
+
+	if (fifo_write) {
+		pipe_end_unref(fifo_write);
 	}
 
 	kfree(end);
@@ -233,15 +267,7 @@ int pipe_create_pair(task_t* t, int* out_read, int* out_write) {
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	p->capacity = PIPE_BUFFER_SIZE;
-	p->head = 0;
-	p->tail = 0;
-	p->count = 0;
-	p->refcount = 2;
-	wait_queue_init(&p->readers_waiting);
-	wait_queue_init(&p->writers_waiting);
-	p->write_end_closed = false;
-	p->read_end_closed = false;
+	pipe_init(p);
 
 	pipe_end_t* read_end = pipe_end_create(p, false);
 	pipe_end_t* write_end = pipe_end_create(p, true);
@@ -296,3 +322,52 @@ int pipe_create_pair(task_t* t, int* out_read, int* out_write) {
 	*out_write = w_des;
 	return PANUTIERRNO_PLAINSUCCESS;
 }
+
+static int fifo_open(void* impl, void** out_impl) {
+	fifo_node_t* fifo = impl;
+	if (!fifo || !fifo->write_end) {
+		return -1;
+	}
+
+	pipe_t* p = fifo->write_end->pipe;
+	if (p->reader_gone) {
+		return -1;
+	}
+
+	pipe_end_ref(fifo->write_end);
+	*out_impl = fifo->write_end;
+	return 0;
+}
+
+static int fifo_close(void* impl, struct task* self) {
+	return pipe_close(impl, self);
+}
+
+void fifo_destroy(void* impl) {
+	fifo_node_t* fifo = impl;
+	if (!fifo) {
+		return;
+	}
+
+	pipe_end_t* write_end = fifo->write_end;
+	fifo->write_end = nullptr;
+	pipe_t* p = write_end ? write_end->pipe : nullptr;
+	if (p && p->cookie == fifo) {
+		p->cookie = nullptr;
+	}
+
+	if (write_end) {
+		pipe_end_unref(write_end);
+	}
+
+	kfree(fifo);
+}
+
+const handle_ops_t fifo_ops = {
+	.open = fifo_open,
+	.read = pipe_read,
+	.write = pipe_write,
+	.activate = pipe_activate,
+	.ready = pipe_ready,
+	.close = fifo_close,
+};

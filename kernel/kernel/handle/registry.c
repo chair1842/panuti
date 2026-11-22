@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 
 #include <kernel/handle/registry.h>
+#include <kernel/handle/pipe.h>
 #include <kernel/memman/slab.h>
 #include <kernel/klog.h>
 #include <panuti/errno.h>
@@ -520,6 +521,10 @@ static void registry_destroy(inode_t* inode) {
 		}
 		
 		inode->children = nullptr;
+	}
+
+	if (inode->type == INODE_PIPE && inode->ops == &fifo_ops) {
+		fifo_destroy(inode->impl);
 	}
 
 	inode_count--;
