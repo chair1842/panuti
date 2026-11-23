@@ -8,8 +8,9 @@ a unix-inspired hobbyist OS
 
 ## Features
 
-- Multitasking I386 kernel (no multiprocessing yet)
-- N-ary standard streams
+- Multitasking I386 kernel (no multiprocessing (SMP) yet)
+- Multiple standard streams assigned by the spawning proc
+- Emphasis on everything is a file
 - VGA text mode, PC Speaker, Serial UART supported
 - PATA and CD-ROM support (with DMA)
 - Shutdown and reboot using ACPI
@@ -53,17 +54,6 @@ pwerop doesnt unmount and kill processes and just coldy kills the system at your
 you can shutdown or restart using pwerop:  
 restart: `pwerop -r`  
 shutdown: `pwerop -s`
-
-## 0.3 Progress
-
-- ~~Free/used memory info exposed (`/sys/meminfo`)~~
-- ~~Processes exposed (`/sys/pid`)~~
-- ~~kill (terminate) syscall~~
-- ~~PCI enumeration (`/dvc/pci`)~~
-- ~~ACPI poweroff & reboot (with fallbacks)~~
-- ~~`sync` syscall and pcrutils~~
-
-all done :D
 
 ## Current limitations
 
