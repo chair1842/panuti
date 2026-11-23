@@ -67,6 +67,8 @@ panuti/handle/write.o \
 panuti/handle/read.o \
 panuti/handle/close.o \
 panuti/handle/open.o \
+panuti/handle/activate.o \
+panuti/handle/hwait.o \
 panuti/stat/stat.o \
 panuti/stat/nexist.o \
 panuti/stat/readdir.o \
@@ -83,6 +85,9 @@ panuti/process/kill.o \
 stdlib/abort.o \
 panuti/process/wait_many.o \
 panuti/process/waitp_many.o \
+panuti/event/ev_add.o \
+panuti/event/ev_del.o \
+panuti/event/ev_loop.o \
 panuti/pwerop/reboot.o \
 panuti/pwerop/shutdown.o
 

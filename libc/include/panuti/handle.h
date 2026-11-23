@@ -4,6 +4,7 @@
 #define _PANUTI_HANDLE_H
 
 #include <stddef.h>
+#include <stdint.h>
 #include <sys/types.h>
 
 #if defined(__cplusplus)
@@ -26,6 +27,12 @@ int handle_close(int fd);
 
 // change the current pos of the handle
 int handle_seek(int fd, off_t offset, int whence);
+
+// activate a point handle
+int activate(int fd);
+
+// wait on a set of handles
+int hwait(const int* fds, uint32_t n, int32_t timeout_cs, uint32_t* which);
 
 #if defined(__cplusplus)
 }
