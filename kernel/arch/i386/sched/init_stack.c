@@ -133,7 +133,7 @@ static int task_build_user_argv_stack_inner(
 
 	uint64_t total_u64 = header_size;
 	for (int i = 0; i < argc; i++) {
-		size_t sl = kernel_user_strlen(argv[i]);
+		size_t sl = kernel_arg_strlen(argv[i]);
 		if (sl == (size_t)-1) {
 			return -1;
 		}
@@ -165,7 +165,7 @@ static int task_build_user_argv_stack_inner(
 
 		// reuse the length kernel_user_strlen already validated rather than
 		// walking the user string again with an unbounded strlen
-		size_t len = kernel_user_strlen(argv[i]) + 1;
+		size_t len = kernel_arg_strlen(argv[i]) + 1;
 		if (rc == 0) {
 			rc = argv_writer_put(&w, string_cursor, argv[i], len);
 		}

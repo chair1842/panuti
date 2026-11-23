@@ -22,6 +22,7 @@
 
 #define MAX_ARGV_BYTES (TASK_USER_STACK_SIZE - TASK_USER_CONTEXT_BYTES)
 #define ELF_READ_MAX (256 * 1024)
+#define SHEBANG_TOKEN_MAX 256
 
 static task_t* task_list = nullptr;
 static task_t* task_free_list = nullptr;
@@ -139,7 +140,7 @@ static int task_set_cmdline(task_t* t, char** argv, int argc) {
 	t->cmdline[0] = '\0';
 
 	for (int i = 0; i < argc; i++) {
-		size_t len = kernel_user_strlen(argv[i]);
+		size_t len = kernel_arg_strlen(argv[i]);
 		if (len == (size_t)-1) {
 			return -1;
 		}
@@ -576,6 +577,77 @@ static int install_stream(task_t* caller, int fd, handle_t* dest) {
 	return 0;
 }
 
+static bool shebang_space(uint8_t c) {
+	return c == ' ' || c == '\t';
+}
+
+static int shebang_parse(const void* data, size_t size, char** interp_out, char** arg_out) {
+	const uint8_t* p = data;
+	if (size < 2 || p[0] != '#' || p[1] != '!') {
+		return 0;
+	}
+
+	size_t i = 2;
+	while (i < size && shebang_space(p[i])) {
+		i++;
+	}
+
+	size_t interp_start = i;
+	while (i < size && !shebang_space(p[i]) && p[i] != '\n' && p[i] != '\r' && p[i] != '\0') {
+		i++;
+	}
+
+	size_t interp_len = i - interp_start;
+	if (interp_len == 0 || interp_len > SHEBANG_TOKEN_MAX) {
+		return -1;
+	}
+
+	while (i < size && shebang_space(p[i])) {
+		i++;
+	}
+
+	size_t arg_start = i;
+	while (i < size && p[i] != '\n' && p[i] != '\r' && p[i] != '\0') {
+		i++;
+	}
+
+	if (i < size && p[i] == '\0') {
+		return -1;
+	}
+
+	size_t arg_end = i;
+	while (arg_end > arg_start && shebang_space(p[arg_end - 1])) {
+		arg_end--;
+	}
+
+	size_t arg_len = arg_end - arg_start;
+	if (arg_len > SHEBANG_TOKEN_MAX) {
+		return -1;
+	}
+
+	char* interp = kmalloc(interp_len + 1, 1);
+	if (!interp) {
+		return -1;
+	}
+	memcpy(interp, p + interp_start, interp_len);
+	interp[interp_len] = '\0';
+
+	char* arg = nullptr;
+	if (arg_len != 0) {
+		arg = kmalloc(arg_len + 1, 1);
+		if (!arg) {
+			kfree(interp);
+			return -1;
+		}
+		memcpy(arg, p + arg_start, arg_len);
+		arg[arg_len] = '\0';
+	}
+
+	*interp_out = interp;
+	*arg_out = arg;
+	return 1;
+}
+
 pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 	inode_t* bin = registry_resolve(caller->cwd, args->path);
 	if (!bin) {
@@ -586,97 +658,175 @@ pid_t task_procreate(task_t* caller, const procreate_args_t* args) {
 		return PANUTIERRNO_UNSUPPORTEDOP;
 	}
 
-	void* elf_data;
-	size_t elf_size;
+	int rc = PANUTIERRNO_PLAINERR;
+	void* elf_data = nullptr;
+	size_t elf_size = 0;
+	char* shebang_interp = nullptr;
+	char* shebang_arg = nullptr;
+	task_t* t = nullptr;
+	char** exec_argv = nullptr;
+	char* synth_argv[1];
+	bool exec_argv_owned = false;
+	int exec_argc = 0;
+	uint64_t entry = 0;
+	elf_loadable_segment_t segs[16];
+	int nsegs = 0;
+
 	if (elf_read_whole_file(bin, &elf_data, &elf_size) != 0) {
 		return PANUTIERRNO_PLAINERR;
 	}
 
-	elf_loadable_segment_t segs[16];
-	int nsegs;
-	uint64_t entry;
-	if (elf32_parse(elf_data, elf_size, segs, 16, &nsegs, &entry) != ELF_OK) {
-		kfree(elf_data);
-		return PANUTIERRNO_PLAINERR;
+	int has_shebang = shebang_parse(elf_data, elf_size, &shebang_interp, &shebang_arg);
+	if (has_shebang < 0) {
+		goto fail_data;
 	}
 
-	task_t* t = task_alloc_common();
-	if (!t) {
+	if (has_shebang > 0) {
+		inode_t* interp = registry_resolve(caller->cwd, shebang_interp);
+		if (!interp) {
+			rc = PANUTIERRNO_NOTFOUND;
+			goto fail_data;
+		}
+
+		if (interp->type != INODE_FILE) {
+			rc = PANUTIERRNO_UNSUPPORTEDOP;
+			goto fail_data;
+		}
+
 		kfree(elf_data);
-		return PANUTIERRNO_NOMEM;
+		elf_data = nullptr;
+
+		if (elf_read_whole_file(interp, &elf_data, &elf_size) != 0) {
+			goto fail_data;
+		}
+	}
+
+	if (elf32_parse(elf_data, elf_size, segs, 16, &nsegs, &entry) != ELF_OK) {
+		goto fail_data;
+	}
+
+	t = task_alloc_common();
+	if (!t) {
+		rc = PANUTIERRNO_NOMEM;
+		goto fail_data;
 	}
 
 	task_set_cwd(t, caller->cwd);
 	t->creator_pid = caller->pid;
 
 	if (elf_load_segments(t->addr_space, elf_data, segs, nsegs) != 0) {
-		kfree(elf_data);
-		procreate_cleanup(t);
-		return PANUTIERRNO_PLAINERR;
+		goto fail_task;
 	}
-	
+
 	kfree(elf_data);
+	elf_data = nullptr;
 
 	user_stack_t us;
 	if (user_stack_setup(t->addr_space, &us) != 0) {
-		procreate_cleanup(t);
-		return PANUTIERRNO_PLAINERR;
+		goto fail_task;
 	}
 
-	char* synth_argv[1];
-	char** real_argv = args->argv;
-	int real_argc = args->argc;
-	if (real_argc == 0) {
+	if (has_shebang > 0) {
+		exec_argc = 2 + (shebang_arg ? 1 : 0) + (args->argc > 0 ? args->argc - 1 : 0);
+
+		if (exec_argc > MAX_ARGV_COUNT) {
+			goto fail_task;
+		}
+
+		char** new_argv = kmalloc(sizeof(*new_argv) * (size_t)exec_argc, 1);
+		if (!new_argv) {
+			rc = PANUTIERRNO_NOMEM;
+			goto fail_task;
+		}
+
+		int k = 0;
+		new_argv[k++] = shebang_interp;
+		if (shebang_arg) {
+			new_argv[k++] = shebang_arg;
+		}
+		
+		new_argv[k++] = (char*)args->path;
+		for (int i = 1; i < args->argc; i++) {
+			new_argv[k++] = args->argv[i];
+		}
+
+		exec_argv = new_argv;
+		exec_argv_owned = true;
+	} else if (args->argc == 0) {
 		synth_argv[0] = (char*)args->path;
-		real_argv = synth_argv;
-		real_argc = 1;
+		exec_argv = synth_argv;
+		exec_argc = 1;
+	} else {
+		exec_argv = args->argv;
+		exec_argc = args->argc;
 	}
 
 	uint32_t user_esp;
-	if (task_build_user_argv_stack(us.pages, TASK_USER_STACK_PAGES, USER_STACK_VIRT_TOP, real_argv, real_argc, MAX_ARGV_BYTES, &user_esp) != 0) {
-		procreate_cleanup(t);
-		return PANUTIERRNO_PLAINERR;
+	if (task_build_user_argv_stack(us.pages, TASK_USER_STACK_PAGES, USER_STACK_VIRT_TOP, exec_argv, exec_argc, MAX_ARGV_BYTES, &user_esp) != 0) {
+		goto fail_task;
 	}
 
-	size_t name_len = kernel_user_strlen(real_argv[0]);
+	size_t name_len = kernel_arg_strlen(exec_argv[0]);
 	if (name_len == (size_t)-1) {
-		procreate_cleanup(t);
-		return PANUTIERRNO_INVALIDADDR;
+		rc = PANUTIERRNO_INVALIDADDR;
+		goto fail_task;
 	}
 
 	if (name_len >= TASK_NAME_MAX) {
 		name_len = TASK_NAME_MAX - 1;
 	}
 
-	memcpy(t->name, real_argv[0], name_len);
+	memcpy(t->name, exec_argv[0], name_len);
 	t->name[name_len] = '\0';
 
-	if (task_set_cmdline(t, real_argv, real_argc) != 0) {
-		procreate_cleanup(t);
-		return PANUTIERRNO_INVALIDADDR;
+	if (task_set_cmdline(t, exec_argv, exec_argc) != 0) {
+		rc = PANUTIERRNO_INVALIDADDR;
+		goto fail_task;
 	}
 
 	for (int i = 0; i < args->no_in_streams; i++) {
 		if (install_stream(caller, args->in_streams[i], &t->in_streams[i]) != 0) {
-			procreate_cleanup(t);
-			return PANUTIERRNO_BADFD;
+			rc = PANUTIERRNO_BADFD;
+			goto fail_task;
 		}
 		t->no_in_streams = i + 1;
 	}
 
 	for (int i = 0; i < args->no_out_streams; i++) {
 		if (install_stream(caller, args->out_streams[i], &t->out_streams[i]) != 0) {
-			procreate_cleanup(t);
-			return PANUTIERRNO_BADFD;
+			rc = PANUTIERRNO_BADFD;
+			goto fail_task;
 		}
 		t->no_out_streams = i + 1;
 	}
+
+	if (exec_argv_owned) {
+		kfree(exec_argv);
+	}
+	kfree(shebang_interp);
+	kfree(shebang_arg);
 
 	task_init_user_stack(t, (void (*)(void))(uint32_t)entry, user_esp);
 	task_list_push(t);
 	sched_add(t);
 
 	return t->pid;
+
+fail_task:
+	kfree(elf_data);
+	if (exec_argv_owned) {
+		kfree(exec_argv);
+	}
+	kfree(shebang_interp);
+	kfree(shebang_arg);
+	procreate_cleanup(t);
+	return rc;
+
+fail_data:
+	kfree(elf_data);
+	kfree(shebang_interp);
+	kfree(shebang_arg);
+	return rc;
 }
 
 task_t* task_find(pid_t pid) {

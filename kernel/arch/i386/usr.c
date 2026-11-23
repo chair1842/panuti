@@ -3,6 +3,7 @@
 #include <kernel/mem/usr.h>
 #include <kernel/memman/memman.h>
 #include <stdint.h>
+#include <string.h>
 
 bool kernel_is_user_ptr(const void* ptr) {
 	uint32_t addr = (uint32_t)ptr;
@@ -73,4 +74,16 @@ size_t kernel_user_strlen(const void* ptr) {
 	}
 
 	return (size_t)-1;
+}
+
+size_t kernel_arg_strlen(const void* ptr) {
+	if (!ptr) {
+		return (size_t)-1;
+	}
+
+	if (kernel_is_user_ptr(ptr)) {
+		return kernel_user_strlen(ptr);
+	}
+
+	return strlen(ptr);
 }
