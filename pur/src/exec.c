@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define PUR_PATH "/cd/usr/bin/"
+#define PUR_PATH "/dkr/usr/bin/"
 #define PUR_DEFAULT_IN "/dvc/kbd/line"
 #define PUR_BACKGROUND_IN "/dvc/null"
 #define PUR_DEFAULT_OUT "/dvc/console"

@@ -54,9 +54,12 @@ void purtarg_run() {
 			if (delay < 6000) {
 				delay *= 2;
 			}
+
+			continue;
 		}
 
-		sleep(100); // try and try forever, until death does us part
+		int ec = 0;
+		wait(pid, &ec);
 	}
 }
 
