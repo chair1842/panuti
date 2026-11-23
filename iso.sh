@@ -6,6 +6,7 @@ mkdir -p isodir
 mkdir -p isodir/boot
 mkdir -p isodir/boot/grub
 mkdir -p isodir/usr/bin
+mkdir -p isodir/pda/pint/targets
 
 cp sysroot/boot/panuti_kern isodir/boot/panuti_kern
 cp sysroot/boot/pint isodir/boot/pint
