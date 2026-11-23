@@ -1,17 +1,18 @@
-# Pint
+# Nib
 
-**Panuti Init**
+Nib is Panuti's very own vim/vi clone
 
-Pint is panuti's init system.
+## Differences from vi/vim
 
-## What it does rn
-
-1. makedir /cd
-2. mount /dvc/cdrom/0 as isofs into /cd
-3. then launch pur and if it quits, restart it.
+- the enter key in normal mode makes a new line without entering insert mode
 
 ---
 
-Pint is nowhere near its intended design, but pint will be reworked once the first service is being worked on.
+As with all of the projects in panuti, nib is not in it's planned full state and might not have all of
+vim/vi's functional features and quality of life features.
 
-This current state is only temporary, and as such any further work based on the current design is discouraged.
+- Only the `d` and `c` operators are supported so far.
+- Supported motions: `h`, `j`, `k`, `l`, `w`, `b`, `e`, `0`, `^`, `$`, `gg`, `G`.
+- No counts or undo yet.
+- No visual mode.
+- Arrow keys are not used

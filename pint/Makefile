@@ -17,34 +17,30 @@ INCLUDEDIR?=$(PREFIX)/include
 
 CFLAGS:=$(CFLAGS) -Wall -Wextra -Wa,--noexecstack
 
-OBJS=\
-main.o \
+NAME=pint
+SRCS:=$(wildcard src/*.c)
+OBJS:=$(SRCS:.c=.o)
+DEPS:=$(OBJS:.o=.d)
 
-BINARY=pint
+BINARY=$(NAME)
 
 .PHONY: all clean install install-pint
-.SUFFIXES: .o .c .S
 
 all: $(BINARY)
+
+src/%.o: src/%.c
+	$(CC) -MD -std=gnu23 $(CFLAGS) $(CPPFLAGS) -c $< -o $@
 
 $(BINARY): $(OBJS)
 	$(CC) -o $@ $(LDFLAGS) $(OBJS)
 
-.c.o:
-	$(CC) -MD -c $< -o $@ -std=gnu23 $(CFLAGS) $(CPPFLAGS)
-
-.S.o:
-	$(CC) -MD -c $< -o $@ $(CFLAGS) $(CPPFLAGS)
-
 clean:
-	rm -f $(BINARY)
-	rm -f $(OBJS)
-	rm -f $(OBJS:.o=.d)
+	rm -f $(BINARY) $(OBJS) $(DEPS)
 
 install: install-pint
 
 install-pint: $(BINARY)
 	mkdir -p $(DESTDIR)$(BOOTDIR)
-	cp $(BINARY) $(DESTDIR)$(BOOTDIR)/$(BINARY)
+	cp $(BINARY) $(DESTDIR)$(BOOTDIR)/$(NAME)
 
--include $(OBJS:.o=.d)
+-include $(DEPS)
