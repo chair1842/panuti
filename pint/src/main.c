@@ -48,7 +48,7 @@ void purtarg_run() {
 	int delay = 100;
 	while (true) {
 		char* argv = "pur"; // "name" of the program
-		pid_t pid = procreate("/cd/usr/bin/pur", &argv, 1, NULL, 0, NULL, 0);
+		pid_t pid = procreate("/dkr/usr/bin/pur", &argv, 1, NULL, 0, NULL, 0);
 		if ((int32_t)pid < 0) {
 			sleep(delay);
 			if (delay < 6000) {
