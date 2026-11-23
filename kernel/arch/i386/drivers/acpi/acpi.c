@@ -2,11 +2,14 @@
 
 #include "../../io.h"
 #include <kernel/acpi.h>
+#include <kernel/handle/point.h>
+#include <kernel/handle/registry.h>
 #include <kernel/klog.h>
 #include <kernel/memman/tempmap.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <uacpi/event.h>
 #include <uacpi/kernel_api.h>
 #include <uacpi/sleep.h>
 #include <uacpi/status.h>
@@ -25,6 +28,13 @@
 
 static uint32_t rsdp_phys;
 static bool acpi_ready;
+static point_t power_button_point;
+
+static uacpi_interrupt_ret power_button_handler(uacpi_handle user) {
+	(void)user;
+	point_fire(&power_button_point);
+	return UACPI_INTERRUPT_HANDLED;
+}
 
 static bool rsdp_signature(const uint8_t* p) {
 	return p[0] == 'R' && p[1] == 'S' && p[2] == 'D' && p[3] == ' ' && p[4] == 'P' && p[5] == 'T' && p[6] == 'R' && p[7] == ' ';
@@ -141,6 +151,21 @@ void acpi_init(void) {
 	if (status != UACPI_STATUS_OK) {
 		klog(KLOG_WARN, "acpi: namespace init failed: %s\n", uacpi_status_to_string(status));
 		return;
+	}
+
+	point_init(&power_button_point, false, false);
+	registry_mkdir("/dvc/acpi");
+	if (registry_add("/dvc/acpi/powerbtn", INODE_POINT, &power_button_point, &point_ops) != 0) {
+		klog(KLOG_WARN, "acpi: failed to register power button point\n");
+	}
+
+	status = uacpi_install_fixed_event_handler(
+		UACPI_FIXED_EVENT_POWER_BUTTON,
+		power_button_handler,
+		nullptr
+	);
+	if (status != UACPI_STATUS_OK) {
+		klog(KLOG_WARN, "acpi: failed to install power button handler: %s\n", uacpi_status_to_string(status));
 	}
 
 	klog(KLOG_INFO, "acpi: initialized\n");

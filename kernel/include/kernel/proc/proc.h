@@ -6,7 +6,7 @@
 #include <kernel/sched/task.h>
 
 void proc_init(void);
-void proc_task_add(const task_t* task);
+void proc_task_add(task_t* task);
 void proc_task_remove(pid_t pid);
 
 #endif

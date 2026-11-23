@@ -3,6 +3,7 @@
 #include "kernel/handle/registry.h"
 #include <kernel/handle/fs.h>
 #include <kernel/handle/pipe.h>
+#include <kernel/handle/point.h>
 #include <kernel/proc/proc.h>
 #include <kernel/sched/task.h>
 #include <kernel/klog.h>
@@ -184,6 +185,7 @@ static task_t* task_alloc_common(void) {
 	t->state = TASK_READY;
 	t->exit_code = 0;
 	t->wake_at = 0;
+	t->exit_point = nullptr;
 	t->wait_pid_count = 0;
 	t->creator_pid = 0;
 	t->name[0] = '\0';
@@ -413,6 +415,7 @@ static void task_teardown(task_t* t) {
 	t->addr_space = nullptr;
 	task_set_cwd(t, nullptr);
 	t->next = nullptr;
+	t->exit_point = nullptr;
 	t->no_in_streams = 0;
 	t->no_out_streams = 0;
 	t->state = TASK_NONE;
@@ -554,6 +557,10 @@ static int elf_read_whole_file(inode_t* n, void** out_data, size_t* out_size) {
 static int install_stream(task_t* caller, int fd, handle_t* dest) {
 	handle_t* h = task_return_hslot((uint32_t)fd, caller);
 	if (!h) {
+		return -1;
+	}
+
+	if (h->type == INODE_POINT) {
 		return -1;
 	}
 
@@ -742,6 +749,11 @@ void task_do_exit(uint32_t exit_code) {
 	current->exit_code = exit_code;
 	current->kill_pending = false;
 	current->state = TASK_TERMINATED;
+
+	if (current->exit_point) {
+		point_fire(current->exit_point);
+		current->exit_point = nullptr;
+	}
 	
 	task_wake_waiters(current->pid);
 	sched_schedule();

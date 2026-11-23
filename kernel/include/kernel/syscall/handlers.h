@@ -120,4 +120,7 @@ int32_t syshandler_mkpipe(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 // wait on a handle
 int32_t syshandler_hwait(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
 
+// creates a user-activatable point
+int32_t syshandler_mkpoint(uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4);
+
 #endif

@@ -9,6 +9,8 @@
 #include <kernel/handle/registry.h>
 #include <panuti/syscall/procreate.h>
 
+struct point;
+
 #define TASK_KERNEL_STACK_PAGES 4
 #define TASK_KERNEL_STACK_SIZE (TASK_KERNEL_STACK_PAGES * 4096)
 #define TASK_USER_STACK_PAGES 4
@@ -59,6 +61,8 @@ typedef struct task {
 	fdtable_t fdtable;
 	
 	inode_t* cwd;
+
+	struct point* exit_point;
 
 	handle_t in_streams[MAX_STREAMS];
 	int no_in_streams;

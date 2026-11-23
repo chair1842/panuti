@@ -208,6 +208,10 @@ static inline int32_t panutisysf_hwait(const int* fds, uint32_t n, int32_t timeo
 	);
 }
 
+static inline int32_t panutisysf_mkpoint(const char* path) {
+	return panuti_syscall(SYSHANDLER_MKPOINT, (uint32_t)path, 0, 0, 0);
+}
+
 #if defined(__cplusplus)
 }
 #endif

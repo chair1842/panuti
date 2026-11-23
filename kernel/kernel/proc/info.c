@@ -2,6 +2,7 @@
 
 #include <kernel/proc/proc.h>
 #include <kernel/handle/handle.h>
+#include <kernel/handle/point.h>
 #include <kernel/handle/registry.h>
 #include <kernel/memman/slab.h>
 #include <kernel/sched/task.h>
@@ -215,7 +216,7 @@ void proc_init(void) {
 	registry_mkdir("/sys/pid");
 }
 
-void proc_task_add(const task_t* task) {
+void proc_task_add(task_t* task) {
 	if (!task || task->pid == 0) {
 		return;
 	}
@@ -232,6 +233,20 @@ void proc_task_add(const task_t* task) {
 		proc_format(path, sizeof(path), "/sys/pid/%u/%s", task->pid, proc_files[i].name);
 		registry_add(path, INODE_DVC, (void*)(uintptr_t)task->pid, proc_files[i].ops);
 	}
+
+	point_t* point = point_create(false);
+	if (!point) {
+		return;
+	}
+
+	char path[80];
+	proc_format(path, sizeof(path), "/sys/pid/%u/exit", task->pid);
+
+	if (registry_add(path, INODE_POINT, point, &point_ops) == 0) {
+		task->exit_point = point;
+	} else {
+		point_destroy(point);
+	}
 }
 
 void proc_task_remove(pid_t pid) {
@@ -247,6 +262,8 @@ void proc_task_remove(pid_t pid) {
 		for (size_t i = 0; i < sizeof(proc_files) / sizeof(proc_files[0]); i++) {
 			registry_unlink(node, proc_files[i].name, strlen(proc_files[i].name));
 		}
+
+		registry_unlink(node, "exit", 4);
 	}
 
 	inode_t* parent;

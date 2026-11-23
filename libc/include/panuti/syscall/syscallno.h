@@ -45,6 +45,7 @@ extern "C" {
 #define SYSHANDLER_PWEROP 35
 #define SYSHANDLER_MKPIPE 36
 #define SYSHANDLER_HWAIT 37
+#define SYSHANDLER_MKPOINT 38
 
 #if defined(__cplusplus)
 }

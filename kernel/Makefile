@@ -133,7 +133,9 @@ kernel/syscall/handlers/waitp.o \
 kernel/syscall/handlers/pwerop.o \
 kernel/syscall/handlers/mkpipe.o \
 kernel/handle/point.o \
-kernel/syscall/handlers/hwait.o
+kernel/syscall/handlers/hwait.o \
+kernel/syscall/handlers/mkpoint.o \
+kernel/syscall/leaf.o
 
 OBJS=\
 $(ARCHDIR)/crti.o \
