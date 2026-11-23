@@ -57,9 +57,6 @@ shutdown: `pwerop -s`
 
 ## Current limitations
 
-- Pur and Pint both assume unconditionally that the OS is being booted from a cd:
-  - Pint always mounts `/dvc/cdrom/0` to `/cd` and launches pur from there
-  - Pur hardcodes its PATH at `/cd/usr/bin`
 - mounting at places that alr have registry nodes (such as root) will hide those registry nodes
 - mounting at root will hide `/dvc` which,,, yk.
 - mounting on a subdir of a mount is not allowed. so no `/mnt1/mnt2`
