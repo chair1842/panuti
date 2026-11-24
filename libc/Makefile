@@ -34,20 +34,36 @@ $(ARCH_FREEOBJS) \
 stdio/printf.o \
 stdio/putchar.o \
 stdio/puts.o \
+string/memchr.o \
 string/memcmp.o \
 string/memcpy.o \
 string/memmove.o \
+string/mempcpy.o \
 string/memset.o \
+string/stpcpy.o \
+string/stpncpy.o \
+string/strcasecmp.o \
+string/strcat.o \
+string/strchr.o \
+string/strcmp.o \
+string/strcpy.o \
+string/strcspn.o \
 string/strlen.o \
+string/strncasecmp.o \
+string/strncat.o \
+string/strncmp.o \
+string/strncpy.o \
+string/strnlen.o \
+string/strpbrk.o \
+string/strrchr.o \
+string/strspn.o \
+string/strstr.o \
+string/strtok.o \
+string/strtok_r.o \
 stdio/putchar_.o \
 stdio/printf_.o \
 stdio/vprintf.o \
 stdlib/errno.o \
-string/strncpy.o \
-string/strcmp.o \
-string/strncmp.o \
-string/memchr.o \
-string/strcpy.o \
 panuti/kbd/kpktasc.o
 
 HOSTEDOBJS=\
@@ -57,6 +73,7 @@ stdlib/calloc.o \
 stdlib/free.o \
 stdlib/realloc.o \
 stdlib/malloc_util.o \
+string/strdup.o \
 panuti/process/procreate.o \
 panuti/mount/mount.o \
 panuti/registry/mkdir.o \
