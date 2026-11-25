@@ -42,14 +42,14 @@ string/mempcpy.o \
 string/memset.o \
 string/stpcpy.o \
 string/stpncpy.o \
-string/strcasecmp.o \
+strings/strcasecmp.o \
 string/strcat.o \
 string/strchr.o \
 string/strcmp.o \
 string/strcpy.o \
 string/strcspn.o \
 string/strlen.o \
-string/strncasecmp.o \
+strings/strncasecmp.o \
 string/strncat.o \
 string/strncmp.o \
 string/strncpy.o \
