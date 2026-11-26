@@ -103,6 +103,66 @@ static long parse_factor(calc_parser_t* ps) {
 		return r;
 	}
 
+    // ye want some powers
+    long base;
+	if (c == '(') {
+		ps->p++;
+		ps->depth++;
+		
+        // parse expression
+		base = parse_expr(ps);
+		ps->depth--;
+
+		if (ps->err) {
+			return 0;
+		}
+
+		skip_ws(ps);
+		if (*ps->p != ')') {
+			ps->err = CALC_ERR_SYNTAX;
+			return 0;
+		}
+
+		ps->p++;
+	} else {
+		base = parse_number(ps);
+		if (ps->err) {
+			return 0;
+		}
+	}
+
+    // skip my dad
+	skip_ws(ps);
+	if (*ps->p == '^') {
+		ps->p++;
+		ps->depth++;
+		long exp = parse_factor(ps);
+		ps->depth--;
+
+		if (ps->err) {
+			return 0;
+		}
+		if (exp < 0) {
+			ps->err = CALC_ERR_SYNTAX;
+			return 0;
+		}
+
+		long res = 1;
+		while (exp > 0) {
+			if ((exp & 1) && __builtin_mul_overflow(res, base, &res)) {
+				ps->err = CALC_ERR_OVERFLOW;
+				return 0;
+			}
+			exp >>= 1;
+			if (exp > 0 && __builtin_mul_overflow(base, base, &base)) {
+				ps->err = CALC_ERR_OVERFLOW;
+				return 0;
+			}
+		}
+		return res;
+	}
+
+	return base;
 	return parse_number(ps);
 }
 
